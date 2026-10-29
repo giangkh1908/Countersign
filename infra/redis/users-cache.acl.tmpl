@@ -1,0 +1,7 @@
+# infra/redis/users-cache.acl.tmpl  (docs/design/04 §2.4)
+# Đã xác minh (M0, redis:8 = 8.10.3): KHÔNG có ACL category @search và image KHÔNG nạp Query Engine
+# (không có lệnh FT.*; chỉ có module vectorset). TODO(M4): chọn image có Query Engine hoặc dùng
+# Vector Sets (VADD/VSIM) cho semantic cache, rồi thêm quyền lệnh tương ứng ở đây.
+user default off nopass -@all
+user gateway on #@@REDIS_GATEWAY@@ ~gwc:* +@read +@write +@scripting -@dangerous
+user health on #@@REDIS_HEALTH@@ resetkeys +ping

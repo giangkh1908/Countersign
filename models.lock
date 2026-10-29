@@ -1,0 +1,32 @@
+# models.lock — supply chain cho model của policy-sidecar (docs/design/00-contracts.md §7.1, D3).
+# Review như code. Thiếu mục hoặc lệch sha256 -> build/CI thất bại và policy-sidecar TỪ CHỐI khởi động.
+# TODO(M0-spike): mọi `revision` và `sha256` dưới đây là placeholder. Điền bằng commit sha 40 ký tự
+# (không dùng tên nhánh) và hash file đã convert/quantize do CI tạo; chạy `make models` để tải theo lock.
+# Quy tắc: tải bằng huggingface_hub (revision cố định, trust_remote_code=False), chỉ nhận *.safetensors/*.onnx.
+
+[[model]]
+name     = "bge-m3"
+repo     = "BAAI/bge-m3"
+revision = "TODO-commit-sha-40-chars"
+license  = "MIT"
+files    = [
+  { path = "onnx/model_int8.onnx", sha256 = "TODO-64-hex" },   # TODO: file int8 do CI convert/quantize
+]
+
+[[model]]
+name     = "prompt-guard-2"
+repo     = "meta-llama/Llama-Prompt-Guard-2-86M"   # TODO(M0-spike): xác nhận repo/biến thể
+revision = "TODO-commit-sha-40-chars"
+license  = "Llama 4 Community License (model gated trên HF; ngưỡng 700M MAU, Acceptable Use Policy; kèm notice khi phân phối)"
+files    = [
+  { path = "model.safetensors", sha256 = "TODO-64-hex" },   # TODO: hoặc bản ONNX đã convert
+]
+
+[[model]]
+name     = "underthesea"
+repo     = "undertheseanlp/underthesea"   # TODO: xác nhận nguồn model CRF (không phải repo HF chuẩn)
+revision = "TODO-commit-sha-or-version"
+license  = "Apache-2.0 (underthesea 9.5.0, underthesea_core 3.3.2); TODO: giấy phép trọng số NER deep (undertheseanlp/vietnamese-ner-*) chưa xác minh"
+files    = [
+  { path = "ner/crf.model", sha256 = "TODO-64-hex" },   # TODO: đường dẫn/hash thật
+]

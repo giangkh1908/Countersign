@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "acme-approval-signer"
+version = "0.0.0"
+description = "Approval signer (ký approval token ES256)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pyjwt",
+    "cryptography",
+    "pydantic-settings",
+    "acme-common",
+    # RÀNG BUỘC (contracts §1, §9.3): service nhỏ <= ~300 dòng; chỉ phụ thuộc fastapi, uvicorn, pyjwt, cryptography, pydantic-settings, acme-common. Không Redis, không DB, không egress.
+]
+
+[tool.uv.sources]
+acme-common = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/approval_signer"]

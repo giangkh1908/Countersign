@@ -1,0 +1,778 @@
+{
+  "realm": "acme",
+  "displayName": "ACME",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "bruteForceProtected": true,
+  "revokeRefreshToken": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "employee"
+      },
+      {
+        "name": "team_lead"
+      },
+      {
+        "name": "dept_manager"
+      },
+      {
+        "name": "management"
+      },
+      {
+        "name": "admin"
+      },
+      {
+        "name": "auditor"
+      }
+    ]
+  },
+  "clientScopes": [
+    {
+      "name": "acme-claims",
+      "description": "dept/clearance/roles claims",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true",
+            "lightweight.claim": "false"
+          }
+        },
+        {
+          "name": "dept",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "department",
+            "claim.name": "dept",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "clearance",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "clearance",
+            "claim.name": "clearance",
+            "jsonType.label": "int",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        },
+        {
+          "name": "roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "claim.name": "roles",
+            "multivalued": "true",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "aud-chat-ui",
+      "description": "aud=chat-ui (D15)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-chat-ui",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "chat-ui",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "agent:invoke",
+      "description": "exchange chat-ui -> agent-service",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-agent-service",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "agent-service",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "signer:approve",
+      "description": "exchange chat-ui -> approval-signer",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-approval-signer",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "approval-signer",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "llm:invoke",
+      "description": "",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-llm-gateway",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "llm-gateway",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "docs:read",
+      "description": "",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-docs-mcp",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "docs-mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tickets:read",
+      "description": "",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-tickets-mcp",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "tickets-mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tickets:write",
+      "description": "",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-tickets-mcp",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "tickets-mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "analytics:read",
+      "description": "",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-analytics-mcp",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "analytics-mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "chat-ui",
+      "name": "chat-ui (BFF)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${BFF_OIDC_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [
+        "http://localhost:8300/auth/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "standard.token.exchange.enabled": "true",
+        "post.logout.redirect.uris": "http://localhost:8300/*"
+      },
+      "defaultClientScopes": [
+        "acme-claims",
+        "aud-chat-ui"
+      ],
+      "optionalClientScopes": [
+        "agent:invoke",
+        "signer:approve"
+      ]
+    },
+    {
+      "clientId": "agent-service",
+      "name": "agent-service",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${AGENT_KC_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "attributes": {
+        "standard.token.exchange.enabled": "true",
+        "access.token.lifespan": "300"
+      },
+      "defaultClientScopes": [
+        "acme-claims"
+      ],
+      "optionalClientScopes": [
+        "llm:invoke",
+        "docs:read",
+        "tickets:read",
+        "tickets:write",
+        "analytics:read"
+      ]
+    },
+    {
+      "clientId": "llm-gateway",
+      "name": "llm-gateway",
+      "description": "resource server: LLM Gateway",
+      "enabled": true,
+      "bearerOnly": true,
+      "fullScopeAllowed": false,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "docs-mcp",
+      "name": "docs-mcp",
+      "description": "resource server: docs MCP",
+      "enabled": true,
+      "bearerOnly": true,
+      "fullScopeAllowed": false,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "tickets-mcp",
+      "name": "tickets-mcp",
+      "description": "resource server: tickets MCP",
+      "enabled": true,
+      "bearerOnly": true,
+      "fullScopeAllowed": false,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "analytics-mcp",
+      "name": "analytics-mcp",
+      "description": "resource server: analytics MCP",
+      "enabled": true,
+      "bearerOnly": true,
+      "fullScopeAllowed": false,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "approval-signer",
+      "name": "approval-signer",
+      "description": "resource server: approval-signer (D15)",
+      "enabled": true,
+      "bearerOnly": true,
+      "fullScopeAllowed": false,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
+    }
+  ],
+  "users": [
+    {
+      "username": "an.nguyen",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Văn An",
+      "lastName": "Nguyễn",
+      "email": "an.nguyen@acme.local",
+      "attributes": {
+        "department": [
+          "SALES"
+        ],
+        "clearance": [
+          "1"
+        ],
+        "employee_id": [
+          "ACME-0001"
+        ]
+      },
+      "realmRoles": [
+        "employee"
+      ]
+    },
+    {
+      "username": "binh.tran",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Thị Bình",
+      "lastName": "Trần",
+      "email": "binh.tran@acme.local",
+      "attributes": {
+        "department": [
+          "SALES"
+        ],
+        "clearance": [
+          "2"
+        ],
+        "employee_id": [
+          "ACME-0002"
+        ]
+      },
+      "realmRoles": [
+        "employee",
+        "team_lead"
+      ]
+    },
+    {
+      "username": "chi.le",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Minh Chi",
+      "lastName": "Lê",
+      "email": "chi.le@acme.local",
+      "attributes": {
+        "department": [
+          "SALES"
+        ],
+        "clearance": [
+          "3"
+        ],
+        "employee_id": [
+          "ACME-0003"
+        ]
+      },
+      "realmRoles": [
+        "employee",
+        "dept_manager"
+      ]
+    },
+    {
+      "username": "tam.vu",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Thanh Tâm",
+      "lastName": "Vũ",
+      "email": "tam.vu@acme.local",
+      "attributes": {
+        "department": [
+          "SALES"
+        ],
+        "clearance": [
+          "0"
+        ],
+        "employee_id": [
+          "ACME-0004"
+        ]
+      },
+      "realmRoles": [
+        "employee"
+      ]
+    },
+    {
+      "username": "dung.pham",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Quốc Dũng",
+      "lastName": "Phạm",
+      "email": "dung.pham@acme.local",
+      "attributes": {
+        "department": [
+          "ENG"
+        ],
+        "clearance": [
+          "1"
+        ],
+        "employee_id": [
+          "ACME-0005"
+        ]
+      },
+      "realmRoles": [
+        "employee"
+      ]
+    },
+    {
+      "username": "hieu.vo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Trung Hiếu",
+      "lastName": "Võ",
+      "email": "hieu.vo@acme.local",
+      "attributes": {
+        "department": [
+          "ENG"
+        ],
+        "clearance": [
+          "2"
+        ],
+        "employee_id": [
+          "ACME-0006"
+        ]
+      },
+      "realmRoles": [
+        "employee",
+        "team_lead"
+      ]
+    },
+    {
+      "username": "giang.do",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Thu Giang",
+      "lastName": "Đỗ",
+      "email": "giang.do@acme.local",
+      "attributes": {
+        "department": [
+          "ENG"
+        ],
+        "clearance": [
+          "3"
+        ],
+        "employee_id": [
+          "ACME-0007"
+        ]
+      },
+      "realmRoles": [
+        "employee",
+        "dept_manager"
+      ]
+    },
+    {
+      "username": "hoa.ngo",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Thị Hoa",
+      "lastName": "Ngô",
+      "email": "hoa.ngo@acme.local",
+      "attributes": {
+        "department": [
+          "HR"
+        ],
+        "clearance": [
+          "2"
+        ],
+        "employee_id": [
+          "ACME-0008"
+        ]
+      },
+      "realmRoles": [
+        "employee"
+      ]
+    },
+    {
+      "username": "khanh.bui",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Gia Khánh",
+      "lastName": "Bùi",
+      "email": "khanh.bui@acme.local",
+      "attributes": {
+        "department": [
+          "HR"
+        ],
+        "clearance": [
+          "3"
+        ],
+        "employee_id": [
+          "ACME-0009"
+        ]
+      },
+      "realmRoles": [
+        "employee",
+        "dept_manager"
+      ]
+    },
+    {
+      "username": "lan.dang",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Ngọc Lan",
+      "lastName": "Đặng",
+      "email": "lan.dang@acme.local",
+      "attributes": {
+        "department": [
+          "CS"
+        ],
+        "clearance": [
+          "1"
+        ],
+        "employee_id": [
+          "ACME-0010"
+        ]
+      },
+      "realmRoles": [
+        "employee"
+      ]
+    },
+    {
+      "username": "minh.huynh",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Đức Minh",
+      "lastName": "Huỳnh",
+      "email": "minh.huynh@acme.local",
+      "attributes": {
+        "department": [
+          "CS"
+        ],
+        "clearance": [
+          "1"
+        ],
+        "employee_id": [
+          "ACME-0011"
+        ]
+      },
+      "realmRoles": [
+        "employee",
+        "team_lead"
+      ]
+    },
+    {
+      "username": "nam.truong",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Hải Nam",
+      "lastName": "Trương",
+      "email": "nam.truong@acme.local",
+      "attributes": {
+        "department": [
+          "IT"
+        ],
+        "clearance": [
+          "1"
+        ],
+        "employee_id": [
+          "ACME-0012"
+        ]
+      },
+      "realmRoles": [
+        "employee"
+      ]
+    },
+    {
+      "username": "oanh.ly",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Kim Oanh",
+      "lastName": "Lý",
+      "email": "oanh.ly@acme.local",
+      "attributes": {
+        "department": [
+          "IT"
+        ],
+        "clearance": [
+          "2"
+        ],
+        "employee_id": [
+          "ACME-0013"
+        ]
+      },
+      "realmRoles": [
+        "employee",
+        "admin"
+      ]
+    },
+    {
+      "username": "phuc.cao",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Hoàng Phúc",
+      "lastName": "Cao",
+      "email": "phuc.cao@acme.local",
+      "attributes": {
+        "department": [
+          "SALES",
+          "ENG",
+          "HR",
+          "CS",
+          "IT"
+        ],
+        "clearance": [
+          "3"
+        ],
+        "employee_id": [
+          "ACME-0014"
+        ]
+      },
+      "realmRoles": [
+        "management"
+      ]
+    },
+    {
+      "username": "quynh.dinh",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Như Quỳnh",
+      "lastName": "Đinh",
+      "email": "quynh.dinh@acme.local",
+      "attributes": {
+        "department": [
+          "IT"
+        ],
+        "clearance": [
+          "2"
+        ],
+        "employee_id": [
+          "ACME-0015"
+        ]
+      },
+      "realmRoles": [
+        "auditor"
+      ]
+    },
+    {
+      "username": "son.mai",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Văn Sơn",
+      "lastName": "Mai",
+      "email": "son.mai@acme.local",
+      "attributes": {
+        "department": [
+          "CS",
+          "IT"
+        ],
+        "clearance": [
+          "1"
+        ],
+        "employee_id": [
+          "ACME-0016"
+        ]
+      },
+      "realmRoles": [
+        "employee"
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "config": {
+          "kc.user.profile.config": [
+            "{\"unmanagedAttributePolicy\": \"ADMIN_VIEW\", \"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}}, {\"name\": \"email\", \"displayName\": \"${email}\", \"validations\": {\"email\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}}, {\"name\": \"department\", \"displayName\": \"department\", \"multivalued\": true, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}}, {\"name\": \"clearance\", \"displayName\": \"clearance\", \"validations\": {\"integer\": {\"min\": 0, \"max\": 3}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}}, {\"name\": \"employee_id\", \"displayName\": \"employee_id\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}}]}"
+          ]
+        }
+      }
+    ]
+  }
+}

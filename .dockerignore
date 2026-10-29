@@ -1,0 +1,49 @@
+.git
+.gitignore
+.github
+.claude
+.idea
+.vscode
+
+# Python
+**/__pycache__
+**/*.py[cod]
+.venv
+**/.venv
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+**/*.egg-info
+
+# Node / web
+**/node_modules
+web/dist
+web/.vite
+web/playwright-report
+web/test-results
+
+# Tài liệu, dữ liệu, kết quả (không đưa vào image)
+docs
+*.md
+!packages/**/README.md
+data/generated
+data/.llm_cache
+eval/results
+models
+backups
+audit-anchors
+
+# Secrets & env: KHÔNG bao giờ vào image
+secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# Hạ tầng chạy bằng compose (không cần trong image)
+docker-compose*.yml
+infra

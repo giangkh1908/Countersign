@@ -1,0 +1,5 @@
+# Glob theo tên file (một dòng một mẫu). Thêm có chủ đích, kèm lý do trong PR.
+_virtualenv.pth
+# venv dev (uv sync, workspace editable). Image Docker cài --no-editable nên không có file này.
+_editable_impl_acme_*.pth
+__editable__*

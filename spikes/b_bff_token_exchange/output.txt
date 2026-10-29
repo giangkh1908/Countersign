@@ -1,0 +1,127 @@
+versions: {"fastapi": "0.162.0", "uvicorn": "0.54.0", "httpx": "0.28.1", "PyJWT": "2.15.1", "langgraph": "1.2.18", "cryptography": "50.0.2"} python 3.12.14
+keycloak.acme.local resolves on host? no -> HostRewrite transport (Host header giu nguyen)
+== kc_setup setup ==
+added redirect URI http://localhost:8310/auth/callback at index 1
+password (non-temporary) set for an.nguyen
+requiredActions(an.nguyen) = {"requiredActions":[]}
+password (non-temporary) set for binh.tran
+requiredActions(binh.tran) = {"requiredActions":[]}
+  login token claims: {"aud": "chat-ui", "azp": "chat-ui", "scope": "openid acme-claims aud-chat-ui", "sub": "d6afa1fc-db1a-445f-917a-a6275e593cc3", "dept": ["SALES"], "clearance": 1, "act": "<absent>", "may_act": "<absent>", "sid": "1a566686-8e78-30f8-104d-3af7904eb2a0", "typ": "Bearer", "exp-iat": 300, "iss": "http://keycloak.acme.local:8080/realms/acme", "has_sid": true}
+  callback status 302 location / Set-Cookie: ['set-cookie: sid=<sid-value-redacted>; HttpOnly; Path=/; SameSite=strict']
+[C1] login qua BFF (code+PKCE S256, scope=openid), aud login token -> aud=chat-ui azp=chat-ui cookie HttpOnly+SameSite=Strict=True  <PASS>
+  /api/me keys: ['csrf_token', 'preferred_username', 'sub']
+[C1-scan] quet 3 response BFF->trinh duyet (body+header), regex JWT + 1 token that trong session -> 0 hit   <PASS>
+  C2a claims: {"aud": "agent-service", "azp": "chat-ui", "scope": "acme-claims aud-chat-ui agent:invoke", "sub": "d6afa1fc-db1a-445f-917a-a6275e593cc3", "dept": ["SALES"], "clearance": 1, "act": "<absent>", "may_act": "<absent>", "sid": "1a566686-8e78-30f8-104d-3af7904eb2a0", "typ": "Bearer", "exp-iat": 300}
+[C2a] exchange audience=agent-service scope=agent:invoke -> azp thuc te=chat-ui aud=agent-service chat-ui_in_aud=False act=False  <PASS>
+  C2b claims: {"aud": "approval-signer", "azp": "chat-ui", "scope": "signer:approve acme-claims aud-chat-ui", "sub": "d6afa1fc-db1a-445f-917a-a6275e593cc3", "dept": ["SALES"], "clearance": 1, "act": "<absent>", "may_act": "<absent>", "sid": "1a566686-8e78-30f8-104d-3af7904eb2a0", "typ": "Bearer", "exp-iat": 300}
+[C2b] exchange audience=approval-signer scope=signer:approve -> azp thuc te=chat-ui aud=approval-signer chat-ui_in_aud=False act=False  <PASS>
+[C2c] exchange audience=approval-signer KHONG scope (tham khao) -> HTTP 400 {"error": "invalid_request", "error_description": "Requested audience not available: approval-signer"}  <INFO>
+[C2d] exchange gop 2 audience + 2 scope (tham khao) -> HTTP 200 claims={"aud": ["approval-signer", "agent-service"], "azp": "chat-ui", "scope": "signer:approve acme-claims aud-chat-ui agent:invoke", "sub": "d6afa1fc-db1a-445f-917a-a6275e593cc3", "dept": ["SALES"], "clearance": 1, "act": "<absent>", "may_act": "<absent>", "sid": "1a566686-8e78-30f8-104d-3af7904eb2a0", "typ": "Bearer", "exp-iat": 300}  <INFO>
+== C2e: kc_setup export ==
+== client chat-ui ==
+{
+  "clientId" : "chat-ui",
+  "redirectUris" : [ "http://localhost:8300/auth/callback", "http://localhost:8310/auth/callback" ],
+  "attributes" : {
+    "realm_client" : "false",
+    "standard.token.exchange.enabled" : "true",
+    "post.logout.redirect.uris" : "http://localhost:8300/*",
+    "pkce.code.challenge.method" : "S256"
+  },
+  "defaultClientScopes" : [ "aud-chat-ui", "acme-claims" ],
+  "optionalClientScopes" : [ "signer:approve", "agent:invoke" ]
+}== client agent-service ==
+{
+  "clientId" : "agent-service",
+  "redirectUris" : [ ],
+  "attributes" : {
+    "realm_client" : "false",
+    "standard.token.exchange.enabled" : "true",
+    "post.logout.redirect.uris" : "+"
+  },
+  "defaultClientScopes" : [ "acme-claims" ],
+  "optionalClientScopes" : [ "tickets:write", "tickets:read", "llm:invoke", "analytics:read", "docs:read" ]
+}
+  partial-export attributes: {"agent-service": {"realm_client": "false", "standard.token.exchange.enabled": "true", "post.logout.redirect.uris": "+"}, "chat-ui": {"realm_client": "false", "standard.token.exchange.enabled": "true", "post.logout.redirect.uris": "http://localhost:8300/*", "pkce.code.challenge.method": "S256"}}
+  grep token.exchange trong admin-ui jar (khong co unzip trong container -> docker cp + python zipfile tren host):
+    attributes.standard.token.exchange.enabled x 3
+    standard-token-exchange-enabled x 2
+    standardTokenExchangeEnabled x 2
+    x.StandardTokenExchangeV2 x 1
+    kc-standard-token-exchange-enabled x 1
+    standardTokenExchangeEnabledHelp x 1
+    e.StandardTokenExchangeV2 x 1
+    TOKEN_EXCHANGE_STANDARD_V2 x 1
+    Gt.StandardTokenExchangeV2 x 1
+    attributes.standard.token.exchange.enableRefreshRequestedTokenType x 1
+== probe-attr ==
+  before enable: subject=chat-ui login token audience=agent-service -> HTTP 400 invalid_request: Standard token exchange is not enabled for the requested client
+  before enable: subject=probe own client_credentials token audience=agent-service -> HTTP 400 invalid_request: Standard token exchange is not enabled for the requested client
+  kc_setup probe-enable: enabled
+  after enable: subject=chat-ui login token audience=agent-service -> HTTP 403 access_denied: Client is not within the token audience
+  after enable: subject=probe own client_credentials token audience=agent-service -> HTTP 400 invalid_request: Requested audience not available: agent-service
+  kc_setup probe-delete: ['deleted spike-b-probe']
+[C2e] ten attribute that duoc server ton trong (probe spike-b-probe) -> xem '== probe-attr ==' o tren  <PASS>
+[C3i] signer: token (b) cua an + intent sub=an -> HTTP 200  <PASS>
+[C3ii] signer: token (a) aud=agent-service -> HTTP 401 {"error":"invalid_audience","detail":"aud=agent-service khong chua approval-signer"}  <PASS>
+[C3iii] signer: token dang nhap aud=chat-ui -> HTTP 401 {"error":"invalid_audience","detail":"aud=chat-ui khong chua approval-signer"}  <PASS>
+[C3iv] signer: binh.tran (token b cua binh) ky intent cua an -> HTTP 403 {"error":"sub_mismatch","detail":"token.sub != intent.sub"}  <PASS>
+[C5a-1] POST /api/chat -> interrupt payload -> HTTP 200 intent={"intent_id": "2e43208d94404813b1ded1762ebcb713", "sub": "d6afa1fc-db1a-445f-917a-a6275e593cc3", "op": "tickets.close", "target": "TCK-1001", "args": {"resolution": "fixed", "note": "dong ticket TCK-1001"}, "exp": 1793292427}  <PASS>
+[C5a] approve -> executed -> HTTP 200 {"thread_id":"c87f4311436b49e98b4aefcf15e994cb","status":"executed","reason":null}  <PASS>
+[C5b] reject -> rejected (khong thuc thi) -> HTTP 200 {"thread_id":"be117ea6849d441b9e873701287f0ccc","status":"rejected","reason":null}  <PASS>
+[C5c] resume truc tiep bang JWS bi sua (reject->approve, giu chu ky) -> HTTP 200 {"thread_id":"fcd5a71220864600afe43f248590b405","status":"refused","reason":"InvalidSignatureError: Signature verification failed"}  <PASS>
+[C5d] resume bang JWS hop le cua intent KHAC (hash lech) -> HTTP 200 {"thread_id":"7236062ad0514b4291690fc06ca9dbe2","status":"refused","reason":"ValueError: intent_sha256 lech"}  <PASS>
+[C5e] POST /api/approvals thieu X-CSRF-Token -> HTTP 403  <PASS>
+[C5f] (them) binh.tran approve thread cua an qua BFF cua binh -> HTTP 404 {"error":"unknown_thread_or_intent"}  <PASS>
+  token agent da nhan/luu: {"aud": "agent-service", "azp": "chat-ui", "scope": "acme-claims aud-chat-ui agent:invoke", "sub": "d6afa1fc-db1a-445f-917a-a6275e593cc3", "dept": ["SALES"], "clearance": 1, "act": "<absent>", "may_act": "<absent>", "sid": "1a566686-8e78-30f8-104d-3af7904eb2a0", "typ": "Bearer", "exp-iat": 300} == token (a) cua session: True
+[C4i] agent-service exchange audience=approval-signer scope=signer:approve -> tu choi: HTTP 400 {"error": "invalid_scope", "error_description": "Invalid scopes: signer:approve"}  <PASS>
+[C4ii] agent-service exchange audience=approval-signer (khong scope) -> tu choi: HTTP 400 {"error": "invalid_request", "error_description": "Requested audience not available: approval-signer"}  <PASS>
+[C4iii] agent-service exchange scope=signer:approve (khong audience) -> tu choi: HTTP 400 {"error": "invalid_scope", "error_description": "Invalid scopes: signer:approve"}  <PASS>
+[C4c] doi chung: agent-service exchange audience=llm-gateway scope=llm:invoke -> HTTP 200 claims={"aud": "llm-gateway", "azp": "agent-service", "scope": "acme-claims llm:invoke", "sub": "d6afa1fc-db1a-445f-917a-a6275e593cc3", "dept": ["SALES"], "clearance": 1, "act": "<absent>", "may_act": "<absent>", "sid": "1a566686-8e78-30f8-104d-3af7904eb2a0", "typ": "Bearer", "exp-iat": 300}  <PASS>
+  token llm-gateway goi signer -> 401 {"error":"invalid_audience","detail":"aud=llm-gateway khong chua approval-signer"}
+[C1b] quet 25 response BFF->trinh duyet (body+header), regex JWT + 5 token that trong session -> 0 hit   <PASS>
+== kc_setup cleanup ==
+redirectUris restored -> ["http://localhost:8300/auth/callback"]
+deleted password credential of an.nguyen (khong khoi phuc duoc mat khau cu neu truoc do co)
+cleared brute-force lockout of an.nguyen
+deleted password credential of binh.tran (khong khoi phuc duoc mat khau cu neu truoc do co)
+cleared brute-force lockout of binh.tran
+== STATE AFTER CLEANUP ==
+{
+"chat-ui": {  "clientId" : "chat-ui",  "redirectUris" : [ "http://localhost:8300/auth/callback" ],  "attributes" : {    "realm_client" : "false",    "standard.token.exchange.enabled" : "true",    "post.logout.redirect.uris" : "http://localhost:8300/*",    "pkce.code.challenge.method" : "S256"  }},
+"approval-signer": {  "clientId" : "approval-signer",  "enabled" : true,  "bearerOnly" : true,  "standardFlowEnabled" : false,  "serviceAccountsEnabled" : false,  "publicClient" : false,  "attributes" : {    "realm_client" : "false",    "post.logout.redirect.uris" : "+"  },  "defaultClientScopes" : [ ],  "optionalClientScopes" : [ ]},
+"an.nguyen": {"id": "d6afa1fc-db1a-445f-917a-a6275e593cc3",
+"user": {  "username" : "an.nguyen",  "emailVerified" : true,  "enabled" : true,  "requiredActions" : [ ]},
+"credentials": [ ]}
+,
+"binh.tran": {"id": "3d1d7eef-f56b-4ba1-af45-b89370c96adf",
+"user": {  "username" : "binh.tran",  "emailVerified" : true,  "enabled" : true,  "requiredActions" : [ ]},
+"credentials": [ ]}
+,
+"spike_b_clients": ""
+}
+SUMMARY
+  C1: PASS
+  C1-scan: PASS
+  C2a: PASS
+  C2b: PASS
+  C2c: INFO
+  C2d: INFO
+  C2e: PASS
+  C3i: PASS
+  C3ii: PASS
+  C3iii: PASS
+  C3iv: PASS
+  C5a-1: PASS
+  C5a: PASS
+  C5b: PASS
+  C5c: PASS
+  C5d: PASS
+  C5e: PASS
+  C5f: PASS
+  C4i: PASS
+  C4ii: PASS
+  C4iii: PASS
+  C4c: PASS
+  C1b: PASS
+ALL PASS

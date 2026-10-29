@@ -41,3 +41,6 @@ eval/results/
 Thumbs.db
 .idea/
 .vscode/
+
+# Audit anchor (dev, bind mount)
+audit-anchors/

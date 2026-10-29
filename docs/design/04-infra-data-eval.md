@@ -225,7 +225,7 @@ services:
     deploy: { resources: { limits: { cpus: "0.5", memory: 384m } } }
 
   redis-cache:
-    image: redis:8@sha256:<pin>             # redis:8 đã gộp Query Engine (FT.*); [cần xác minh] khi pin digest
+    image: redis:8@sha256:<pin>             # redis:8 (8.10.3) KHÔNG có Query Engine/@search (chạy thật M0); TODO(M4): chọn image có Query Engine hoặc dùng Vector Sets
     <<: *hardened
     entrypoint: ["/bin/sh", "/etc/redis/entrypoint.sh"]
     command: ["redis-server", "/etc/redis/redis-cache.conf"]
@@ -244,7 +244,7 @@ services:
 
   # ───────────── danh tính ─────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4@sha256:<pin>      # phiên bản cần xác minh, mục 4.3
+    image: quay.io/keycloak/keycloak:26.8.1@sha256:<pin>    # 26.8.1 vá CVE-2026-97846, mục 4.3
     <<: *hardened
     read_only: false                        # dev mode ghi vào /opt/keycloak/data
     entrypoint: ["/bin/bash", "-c"]
@@ -264,7 +264,6 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
-      KC_FEATURES: token-exchange-standard                  # [cần xác minh] tên feature theo bản Keycloak
     secrets: [kc_app_password, kc_admin_password, kc_agent_client_secret, bff_oidc_client_secret]
     volumes:
       - ./infra/keycloak/realm-acme.json:/opt/keycloak/data/import/realm-acme.json:ro
@@ -753,7 +752,7 @@ Kiểm `.pth` nhằm phát hiện kiểu tấn công trong research/01 (wheel nh
 |---|---|---|
 | Hậu quả khi đầy bộ nhớ | Phải **báo lỗi** (`noeviction`); xoá counter rate-limit/budget/thu hồi key trong lặng lẽ là lỗi an ninh và tài chính | Phải **tự xoá** entry cũ (`allkeys-lru`) |
 | Persistence | AOF `everysec` (mất ≤ 1s) để breaker/jti/budget sống sót khi restart | Không; mất cache chỉ mất hit |
-| Module | Không cần | Query Engine (`FT.*`) cho semantic cache |
+| Module | Không cần | Semantic cache (M4): `redis:8` (8.10.3) không có Query Engine (`FT.*`, `@search`); TODO(M4) chọn image có Query Engine hoặc dùng Vector Sets (`VADD`/`VSIM`) |
 | ACL | `~gw:*`, `~mcp:*` (taint: `docs`/`analytics`/`tickets`; intent: chỉ `tickets`), `~bff:sess:*` (gồm `bff:sess:{sid}:rej` và bộ đếm thẻ) | `~gwc:*` + quyền FT |
 | Tải | Lua nhỏ, latency ổn định cần cho overhead p99 | KNN HNSW tốn CPU, có thể gây đột biến |
 | Blast radius | Tấn công làm đầy cache (spam prompt khác nhau) **không** được đẩy counter budget ra khỏi bộ nhớ | |
@@ -873,10 +872,10 @@ slowlog-log-slower-than 10000
 ```conf
 # infra/redis/users-cache.acl.tmpl
 user default off nopass -@all
-user gateway on #@@REDIS_GATEWAY@@ ~gwc:* +@read +@write +@scripting +@search -@dangerous
+user gateway on #@@REDIS_GATEWAY@@ ~gwc:* +@read +@write +@scripting -@dangerous
 user health  on #@@REDIS_HEALTH@@  resetkeys +ping
 ```
-(`+@search` là category của Query Engine; contracts ghi `+FT.*`. Nếu category không tồn tại ở bản pin thì liệt kê `+FT.CREATE +FT.SEARCH +FT.INFO +FT.DROPINDEX` **[cần xác minh]**.) `FT.CREATE` gọi một lần khi gateway khởi động (`ResponseCache.ensure_index()` của adapter `redis_semantic`).
+(Đã chạy thật M0: `redis:8` = 8.10.3 không có category `@search`, `MODULE LIST` chỉ có `vectorset`, và file ACL có `+@search` làm Redis từ chối khởi động nên đã gỡ. **TODO(M4):** trước khi làm semantic cache, chọn image có Query Engine (khi đó thêm `+@search` hoặc liệt kê `+FT.CREATE +FT.SEARCH +FT.INFO`, và chặn `-FT.DROPINDEX -FT.ALTER` vì từ Redis 8 `+@read`/`+@write` gồm cả lệnh Search/JSON) hoặc dùng Vector Sets (`VADD`/`VSIM`) có sẵn trong `redis:8`; ghi ADR khi chốt.) `FT.CREATE` gọi một lần khi gateway khởi động (`ResponseCache.ensure_index()` của adapter `redis_semantic`).
 
 ### 2.5 Ước tính bộ nhớ
 
@@ -1069,7 +1068,8 @@ ls -1t backups/globals-*.sql | tail -n +8 | xargs -r rm -f      # giữ 7 bản
 | Client | Cấu hình chính |
 |---|---|
 | `chat-ui` | confidential, `standardFlowEnabled`, `directAccessGrantsEnabled: false`, `pkce.code.challenge.method: S256`, redirect `http://localhost:8300/auth/callback`; token đăng nhập có `aud=chat-ui` (audience mapper `aud-chat-ui` trên chính client, D15) và **không** gửi cho agent/MCP. BFF dùng client này để token-exchange: (a) → `aud=agent-service`, (b) → `aud=approval-signer` (giữ server-side). Quyền exchange tới `agent-service` và `approval-signer` **chỉ cấp cho `chat-ui`**. Token đăng nhập không có audience `agent-service`/`approval-signer` |
-| `agent-service` | confidential + service account, `standard.token.exchange.enabled=true` **[cần xác minh tên thuộc tính]**; chỉ được exchange (từ token `aud=agent-service` của nó) tới `llm-gateway`, `docs-mcp`, `tickets-mcp`, `analytics-mcp` (D15: **không** tới `approval-signer`); optional scopes: `llm:invoke docs:read tickets:read tickets:write analytics:read` |
+| `agent-service` | confidential, **tắt service account** (`serviceAccountsEnabled=false`, ADR-005 mục 6), `access.token.lifespan=300`, `standard.token.exchange.enabled=true` (tên thuộc tính đã xác minh bằng export realm, Spike B); chỉ được exchange (từ token `aud=agent-service` của nó) tới `llm-gateway`, `docs-mcp`, `tickets-mcp`, `analytics-mcp` (D15: **không** tới `approval-signer`); optional scopes: `llm:invoke docs:read tickets:read tickets:write analytics:read` |
+| `agent-maintenance` (ADR-005 mục 7) | confidential, chỉ `client_credentials` (service account bật, không standard flow, không exchange), `aud=docs-mcp`, scope duy nhất `docs:forget`; dùng cho job retention D17 gọi `/internal/taint/forget` theo `thread_id`, ghi audit. Không "thay mặt `sub`" (V2 không hỗ trợ impersonation). Chi tiết làm khi tới việc retention |
 | `llm-gateway`, `docs-mcp`, `tickets-mcp`, `analytics-mcp` | `bearerOnly: true`, `fullScopeAllowed: false` |
 
 Mappers (gắn vào client scope dùng chung `acme-claims`, default scope của `chat-ui` và `agent-service`):
@@ -1119,8 +1119,8 @@ JSON minh hoạ (rút gọn):
                             "config":{"included.client.audience":"tickets-mcp","access.token.claim":"true"} } ] }
   ],
   "clients": [
-    { "clientId":"agent-service","secret":"${AGENT_KC_CLIENT_SECRET}","serviceAccountsEnabled":true,
-      "standardFlowEnabled":false,"attributes":{"standard.token.exchange.enabled":"true"},
+    { "clientId":"agent-service","secret":"${AGENT_KC_CLIENT_SECRET}","serviceAccountsEnabled":false,
+      "standardFlowEnabled":false,"attributes":{"standard.token.exchange.enabled":"true","access.token.lifespan":"300"},
       "defaultClientScopes":["acme-claims"],
       "optionalClientScopes":["llm:invoke","docs:read","tickets:read","tickets:write","analytics:read"] },
     { "clientId":"chat-ui","secret":"${BFF_OIDC_CLIENT_SECRET}","standardFlowEnabled":true,
@@ -1136,17 +1136,18 @@ JSON minh hoạ (rút gọn):
 ```
 (`${...}` là cú pháp thay biến môi trường khi import realm; secret không nằm trong git.) Port `TokenBroker` (contracts §9.2) có adapter `oauth_token_exchange` dùng cấu hình này, và `self_signed_sts` cho phương án B.
 
-### 4.3 Token exchange — phiên bản và feature flag **[cần xác minh]**
+### 4.3 Token exchange — phiên bản và feature flag
 
 | Nội dung | Ghi chú |
 |---|---|
-| Phiên bản tối thiểu | **Keycloak ≥ 26.2** có "Standard token exchange" (RFC 8693, internal-to-internal) chính thức. Các bản trước chỉ có "Legacy token exchange" (preview, `--features=token-exchange`). Giả định pin `26.4`; **đối chiếu release notes bản mới nhất lúc triển khai** (SOLUTION §11 mục 3). |
-| Feature flag | Bật rõ `--features=token-exchange-standard` (tên có thể đổi). Legacy: `token-exchange,admin-fine-grained-authz` (không dùng nếu không bắt buộc). |
-| Bật cho client | Tab Advanced của `agent-service` và `chat-ui` (D15): "Standard token exchange" ⇒ `standard.token.exchange.enabled=true`. |
+| Phiên bản tối thiểu | **Keycloak ≥ 26.2** có "Standard token exchange" (RFC 8693, internal-to-internal) chính thức. Các bản trước chỉ có "Legacy token exchange" (preview, `--features=token-exchange`). Repo pin **`26.8.1`** (chạy thật, 2026-10-29): bản này vá **CVE-2026-97846** (V2 không ép ràng buộc mTLS; fix ở 26.6.8/26.8.1/27.0.0, nhánh 26.4 không được backport). Spike B/C chạy trên 26.4.7. |
+| Feature flag | **Không cần** `KC_FEATURES`: `token-exchange-standard:v2` bật mặc định từ 26.2. Legacy (`token-exchange`) là Preview, không dùng. |
+| Bật cho client | Tab Advanced của `agent-service` và `chat-ui` (D15): "Standard token exchange" ⇒ `standard.token.exchange.enabled=true` (đã xác minh bằng export realm). |
 | Hạn chế đã biết | Không impersonation/external-to-internal; không phát `act`; audience đích phải là client tồn tại và scope được phép; mặc định không trả refresh token. |
 | Kiểm thử | `eval/security/test_token_exchange.py` (D15, sửa theo N02; các ca về signer dùng **đúng token mà `agent-service` đang cầm**, không dùng token đăng nhập): (1) BFF (`chat-ui`) exchange token đăng nhập `aud=chat-ui` → `audience=agent-service` thành công, và → `audience=approval-signer` thành công (TTL ≤ 5 phút); (2) token agent cầm (`aud=agent-service`) gọi `approval-signer /v1/approvals` và `/v1/intents/verify` ⇒ **401/403**, không ký; (3) `agent-service` exchange `subject_token=<token aud=agent-service>` với `audience=approval-signer` ⇒ Keycloak **từ chối**; (4) token đăng nhập `aud=chat-ui` đưa trực tiếp vào agent, gateway hoặc `docs/tickets/analytics-mcp` ⇒ **401** (sai `aud`); (5) agent exchange → `tickets-mcp, scope=tickets:read` thành công, `analytics-mcp` khi user thiếu scope ⇒ 403; (6) exchange bởi client khác `agent-service`/`chat-ui` ⇒ 403; (7) `chat-ui` exchange thẳng tới MCP/gateway ⇒ từ chối. |
 | Exchange tới `approval-signer` (D15) | Chỉ `chat-ui` (BFF) được exchange `subject_token=<token đăng nhập aud=chat-ui>` → `audience=approval-signer`; token giữ **server-side** theo `session_id`, không rời BFF. `agent-service` và mọi client khác: Keycloak từ chối. Signer kiểm `aud ∋ approval-signer`, `azp == chat-ui`, `sub == intent.sub`. |
-| Phương án B | Nếu không chạy được: `agent` ký token audience-specific bằng khoá riêng (mô phỏng STS), MCP tin JWKS của agent. Ghi là giới hạn. |
+| Phương án B | **Không dùng** (ADR-005: Spike B/C đạt). Giữ ghi chú dự phòng: `agent` ký token audience-specific bằng khoá riêng, MCP tin JWKS của agent. |
+| Quy tắc đã xác minh (ADR-005) | Mỗi request exchange đúng **một** `audience` (nhiều audience ⇒ Keycloak cấp token nhiều `aud`, không chặn); scope của đích khác vẫn lọt vào `scope`, `exp` không bị chặn bởi `exp` của subject ⇒ adapter `TokenBroker` kiểm hậu điều kiện `aud == [audience]`, `scope ⊆ đã xin`; dùng `azp` thay `act`; lỗi là 400/403 tuỳ ca. |
 
 ### 4.4 Issuer thống nhất
 Contracts v1.1 đặt issuer cố định `http://keycloak.acme.local:8080/realms/acme` (dev). Compose gán network alias `keycloak.acme.local` cho `keycloak` trên cả `edge` và `core`, `KC_HOSTNAME=http://keycloak.acme.local:8080`; máy dev thêm dòng `127.0.0.1 keycloak.acme.local` vào `hosts` để trình duyệt thấy cùng hostname (nếu không `iss` khác issuer kỳ vọng). **Giới hạn dev:** không TLS; production dùng HTTPS và hostname thật. Mọi ví dụ dùng `https` đã bỏ.

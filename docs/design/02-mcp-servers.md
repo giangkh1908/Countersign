@@ -36,7 +36,7 @@
 | # | Quyết định | Lý do ngắn |
 |---|---|---|
 | D1 | Bộ lọc quyền **không bao giờ** dựa vào tham số tool; danh tính chỉ lấy từ JWT đã verify, đưa vào `contextvar CallerContext` (= `Principal`) | Chặn confused deputy; LLM không thể "đổi người dùng" |
-| D2 | Auth, rate limit, giới hạn output, audit, pinning nằm ở `packages/common`, phụ thuộc **port** (`TokenVerifier`, `ToolServerHost`, `RateLimiter`, `EventSink`), không phụ thuộc SDK | Chốt `mcp` 2.3 hay `fastmcp` 4.1 sau spike bằng cách đổi adapter, không đụng bảo mật |
+| D2 | Auth, rate limit, giới hạn output, audit, pinning nằm ở `packages/common`, phụ thuộc **port** (`TokenVerifier`, `ToolServerHost`, `RateLimiter`, `EventSink`), không phụ thuộc SDK | `mcp` 2.3 (`MCPServer`) mặc định, `fastmcp` 4.1 thay thế; đổi bằng adapter, không đụng bảo mật (ADR-003) |
 | D3 | Mỗi tool call = **1 transaction**, `set_config(..., true)` có tham số | Không rò context giữa các request dùng chung connection pool |
 | D4 | docs-mcp: embedding của **cả ingest và query** đi qua gateway alias `acme-embed` (gateway chuyển tới `policy-sidecar /v1/embed`, một runtime duy nhất); bỏ `sentence-transformers` fp32 | Tránh lệch vector giữa hai đường (v1.1 dùng fp32 local cho ingest); ảnh docs-mcp nhẹ |
 | D5 | tickets-mcp: **mọi** thao tác ghi đi qua `prepare_<op>` (MCP tự tính và ký intent) rồi `commit_intent(intent_id, approval_token)`; approval do `approval-signer` ký trên `intent_sha256`, dùng một lần (`jti`). Chi tiết `05-approval-flow.md` | Người duyệt thấy đúng hiệu ứng sẽ ghi (WYSIWYS); agent không dựng preview, không giữ args |
@@ -59,8 +59,8 @@ packages/common/src/acme_common/
     errors.py           # ToolError + mã lỗi (mục 1.5)
   adapters/
     oidc_jwks.py        # TokenVerifier: JWKS Keycloak (PyJWT)
-    mcp_sdk.py          # ToolServerHost: SDK `mcp` 2.3
-    fastmcp_host.py     # ToolServerHost: `fastmcp` 4.1 (một trong hai được chốt sau spike; cùng bộ test hợp đồng)
+    mcp_sdk.py          # ToolServerHost: SDK `mcp` 2.3 `MCPServer` (mặc định, ADR-003)
+    fastmcp_host.py     # ToolServerHost: `fastmcp` 4.1.4 (adapter thay thế, đã chứng minh ở Spike A; cùng bộ test hợp đồng)
     redis_rate_limiter.py  in_memory_rate_limiter.py
     json_log_sink.py       pg_event_sink.py
   decorators.py         # AuditedHost, RateLimitedHost... (cùng port)
@@ -87,7 +87,7 @@ Kiểm tra CI (contracts §9.1.8): leak-grep tên vendor trong `packages/*/src` 
 ### 1.1 SDK, transport, spec
 
 - **Spec 2026-07-28**, transport **Streamable HTTP** tại `POST /mcp` (cổng 8101/8102/8103 theo contracts §1). Stateless: không `initialize`, không `Mcp-Session-Id`, không SSE resumability; mỗi request mang `protocolVersion` trong `_meta`; hỗ trợ `server/discover`. `GET /mcp` trả `405`. Không dùng Roots/Sampling/Logging (deprecated); không dùng DCR.
-- **SDK: chưa chốt.** Hai ứng viên: `mcp` 2.3.0 (`from mcp.server import MCPServer`, `@mcp.tool()`) và `fastmcp` 4.1.4. research/02 ghi rõ **chưa xác minh** API trên 4.x/2.x. **Chốt sau spike tuần 1** theo checklist:
+- **SDK (ADR-003):** SDK **chỉ host giao thức** (`stateless_http=True`), không dùng auth của SDK. Adapter `mcp_sdk` (`mcp` 2.3.0, `MCPServer.streamable_http_app(stateless_http=True)`) là **mặc định** (ít dependency hơn); `fastmcp` 4.1.4 là adapter thay thế (đã chạy thật ở Spike A, đã xác minh M0). Điều kiện: việc đầu tiên của M1 (≤ 0,5 ngày) là chạy thử `mcp` 2.3 stateless và lấy được ASGI app để bọc middleware; không đạt thì đổi mặc định sang `fastmcp` và cập nhật ADR-003. Checklist kiểm adapter:
 
 | Tiêu chí spike | Cần |
 |---|---|
@@ -140,11 +140,12 @@ Mọi `handler` được bọc bởi `ToolInvoker` (`services/tool_invoker.py`):
 ```
 MCP_AUDIENCE=docs-mcp|tickets-mcp|analytics-mcp     # contracts
 KEYCLOAK_ISSUER=http://keycloak.acme.local:8080/realms/acme    # contracts v1.1 (cố định); so khớp CHÍNH XÁC chuỗi với claim iss
+KEYCLOAK_JWKS_URI=                                  # URL lấy khoá; mặc định suy ra từ issuer; tách vì dev thấy Keycloak qua hai tên khác nhau (ADR-003)
 MCP_DATABASE_URL  MCP_REDIS_URL                     # contracts (MCP_REDIS_URL: một user Redis cho mỗi service: docs / tickets / analytics)
 # contracts v1.1 §7 (bảng theo service):
 METRICS_TOKEN                                       # bearer cho /metrics
 MCP_PORT=8101|8102|8103
-MCP_HOST=mcp_sdk|fastmcp                            # chọn adapter ToolServerHost
+MCP_HOST=mcp_sdk|fastmcp                            # chọn adapter ToolServerHost (mặc định mcp_sdk)
 MCP_PUBLIC_URL=http://docs-mcp:8101                 # dùng cho PRM và WWW-Authenticate
 MCP_ALLOWED_AZP=agent-service                       # danh sách client được phép gọi
 MCP_ALLOWED_ORIGINS=                                # rỗng = chỉ chấp nhận request không có Origin
@@ -211,13 +212,15 @@ def principal_from_claims(c: dict, request_id: str) -> Principal:
 
 ### 1.4 Auth middleware ASGI
 
+Xác thực **không dùng auth của SDK** (ADR-003): `AuthMiddleware` riêng bọc `ToolServerHost.asgi_app()`, dùng port `TokenVerifier` (adapter `oidc_jwks`); SDK chỉ host giao thức với `stateless_http=True`. `Principal` đặt vào contextvar cho handler đọc. Token vào phải có `sub`, `dept`, `clearance`; thiếu ⇒ `401 malformed` (ADR-005). `azp` là client gửi request exchange (Keycloak V2 không phát `act`), nên bước 5 là cơ chế duy nhất biết bên gọi.
+
 Thứ tự xử lý (mọi nhánh lỗi dừng sớm, không gọi SDK):
 
 1. `Host`/`Origin`: nếu có `Origin` mà không nằm trong `MCP_ALLOWED_ORIGINS` → `403` (chống DNS rebinding). `Host` phải thuộc `{docs-mcp:8101, localhost:8101}`.
 2. Đường dẫn công khai (không cần token): `GET /.well-known/oauth-protected-resource[/mcp]`, `GET /healthz`, `GET /metrics` (chỉ trong mạng `core`). Chỉ `POST /mcp` được chuyển tiếp.
 3. Lấy `Authorization: Bearer <jwt>`; thiếu → `401` + `WWW-Authenticate`.
 4. `TokenVerifier.verify` (1.4.2). Lỗi → `401 invalid_token`.
-5. `azp ∈ MCP_ALLOWED_AZP` (nếu cấu hình) → không thì `403`.
+5. `azp ∈ MCP_ALLOWED_AZP` (`agent-service`; ADR-005) → không thì `403`.
 6. Đọc body (tối đa 256 KiB, bắt buộc là **một** JSON-RPC object, mảng batch bị từ chối), phát lại body cho SDK qua `receive` bọc.
 7. Nếu `method == "tools/call"`: tra `ToolSpec` theo `params.name`; thiếu `required_scopes` → `403 insufficient_scope`. Tool lạ → SDK trả lỗi JSON-RPC.
 8. Rate limit (mục 3.1) → `429 Retry-After`.
@@ -302,7 +305,7 @@ class OidcJwksVerifier(TokenVerifier):               # adapters/oidc_jwks.py
             raise TokenInvalid(type(e).__name__) from None      # message không chứa token/URL
         return principal_from_claims(claims, request_id="")
 ```
-- JWKS tại `{KEYCLOAK_ISSUER}/protocol/openid-connect/certs`, cache 10 phút + khi gặp `kid` lạ. Keycloak sập mà cache còn → vẫn verify được (stale-while-error tối đa 1 giờ).
+- JWKS tại `KEYCLOAK_JWKS_URI` (mặc định `{KEYCLOAK_ISSUER}/protocol/openid-connect/certs`), cache 10 phút + khi gặp `kid` lạ. Keycloak sập mà cache còn → vẫn verify được (stale-while-error tối đa 1 giờ).
 - `iss` so khớp **chuỗi chính xác** với `KEYCLOAK_ISSUER`; `aud` (chuỗi hoặc list) phải **chứa** `MCP_AUDIENCE`; `exp` bắt buộc; leeway 5s.
 - **Cấm token passthrough:** server không bao giờ forward token nhận được; truy cập DB/Redis/Jira dùng credential của chính server. Token có `aud=agent-service` hoặc `aud=llm-gateway` bị từ chối vì sai `aud`.
 
@@ -846,7 +849,7 @@ async def raise_taint(redis, sub: str, thread_id: str | None, max_class: int, de
 async def get_taint(redis, sub: str, thread_id: str | None) -> TaintView | None:
     """None = lỗi hạ tầng (=> taint_unknown). Trả (thread, recent); mỗi phần có thể rỗng (chưa có khoá = max_class 0, dept_set rỗng)."""
 ```
-- **Xoá thread (D17):** agent gọi `POST /internal/taint/forget {thread_id}` của **docs-mcp** bằng token user (`aud=docs-mcp`); docs-mcp kiểm `sub` từ JWT và `DEL mcp:taint:{sub}:{thread_id}` (không bao giờ nhận `sub` từ body). Không đụng `:recent` (hết hạn tự nhiên sau 24h). Endpoint này không nằm trong `tools/list` (không phải tool, không đổi digest pinning); khoá không tồn tại vẫn trả `204` (không dò được thread).
+- **Xoá thread (D17):** agent gọi `POST /internal/taint/forget {thread_id}` của **docs-mcp** bằng token user (`aud=docs-mcp`); docs-mcp kiểm `sub` từ JWT và `DEL mcp:taint:{sub}:{thread_id}` (không bao giờ nhận `sub` từ body). **Job retention nền** (không có người dùng) dùng client `agent-maintenance` (client-credentials, `aud=docs-mcp`, scope duy nhất `docs:forget`; ADR-005 mục 7): endpoint cũng nhận token này, xoá theo `thread_id` (body có thêm `sub` của chủ thread, chỉ chấp nhận khi `azp=agent-maintenance`), ghi audit. Không đụng `:recent` (hết hạn tự nhiên sau 24h). Endpoint này không nằm trong `tools/list` (không phải tool, không đổi digest pinning); khoá không tồn tại vẫn trả `204` (không dò được thread).
 - **Registry tool analytics (7.4):** mỗi `ToolSpec` của analytics-mcp khai `taint=TaintSource(classification=…, dept_from="owning_dept")`; `AnalyticsService` ghi taint với `dept` = tập `owning_dept` của các dòng thực sự trả về cho principal (không phải toàn bộ dept của người dùng) và `classification` theo registry. Việc thêm tool mới mà thiếu khai `taint` làm `test_no_tool_without_taint_decl` đỏ.
 
 - **Best-effort cho classification 0:** lỗi Redis khi ghi taint không làm hỏng tìm kiếm, chỉ tăng metric `docs_taint_write_fail_total` (tickets-mcp sẽ thấy "không có khoá" = 0, nhưng khi Redis lỗi lúc đọc thì gắn `taint_unknown`).

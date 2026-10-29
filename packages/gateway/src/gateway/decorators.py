@@ -1,0 +1,1 @@
+"""Decorator cross-cutting cùng port ChatProvider: RetryingProvider, CircuitBreakingProvider, FallbackProvider, MeteredProvider (chỉ metadata). Milestone: M1. Xem docs/design/00-contracts.md §9.1 mục 6."""

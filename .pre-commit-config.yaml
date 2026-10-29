@@ -1,0 +1,21 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: leak-grep
+        name: leak-grep (contracts §9.1 mục 8)
+        entry: bash scripts/leak-grep.sh
+        language: system
+        pass_filenames: false
+        files: ^(packages/.*\.py|web/src/.*\.tsx?)$

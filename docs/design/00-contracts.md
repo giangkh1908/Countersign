@@ -36,7 +36,7 @@ Tham chiếu: `Dn` = mục n trong `design/DECISIONS-v1.2.md`; `Rnn` = phát hi�
 - **D4 Cache (R08, R09):** exact cache `scope_hash` có `sub`; semantic cache chỉ populate từ nguồn tin cậy; `x-acme-cache`/`x_acme.cache` chỉ cho key admin/EVAL (§2.2, §6.2).
 - **D5 Degraded mode Redis (R20):** hạn mức in-memory chia theo số worker/instance, chỉ alias rẻ, TTL L1 ≤ 30s, metric `gw_degraded_overspend_max_usd`, hết 600s -> 503 (§2.3).
 - **D6 Audit (R15):** hash chain dùng HMAC-SHA256 với khoá ngoài DB (`AUDIT_HMAC_KEY`), anchor mỗi giờ ra kho append-only ngoài DB; audit tool ghi của tickets-mcp ghi đồng bộ cùng transaction (§3.1, §3.6).
-- **D7 PII nội bộ (R12):** checkpoint LangGraph mã hoá mặc định, retention 30 ngày (§3.5, §7).
+- **D7 PII nội bộ (R12):** checkpoint LangGraph mã hoá bằng `EncryptedSerializer` dựng tường minh (không mặc định; ADR-004), retention 30 ngày (§3.5, §7).
 - **D8 Taint (R16):** `mcp:taint:{sub}` do docs-mcp ghi *(v1.4/D17 thay bằng khoá theo thread)*; `risk_flags:["possible_downgrade"]` trong intent (§2.1, §4).
 - **D9 Analytics (R19):** MVP chỉ tool tham số hoá; `run_readonly_sql` + HMAC ctx chuyển sang mục "Tuỳ chọn sau v1.0" (§3.4).
 - **D10 Đánh giá:** benchmark + security regression + user study; adapter `permissive` vẫn chỉ ở `ACME_ENV=eval`.
@@ -354,7 +354,7 @@ CREATE TABLE tool_audit (...);   -- hash-chain HMAC, cùng format audit_log (§3
 
 ### 3.5 `agent`
 Bảng checkpoint của `langgraph-checkpoint-postgres` (tự tạo khi `setup()`), cộng bảng `conversations(thread_id uuid PK, user_sub, title, created_at, last_active_at, total_cost_micro_usd bigint DEFAULT 0, deleted_at timestamptz)` với index `(user_sub, last_active_at DESC)`. `ag_owner` chạy `setup()` của checkpointer; `ag_app` chỉ DML.
-**Bảo vệ PII nội bộ (D7):** checkpoint được **mã hoá mặc định** bằng serializer mã hoá (`AGENT_CHECKPOINT_ENCRYPTION_KEY`; API chính xác xác minh ở spike M0); **retention** thread 30 ngày (`AGENT_THREAD_RETENTION_DAYS`, job xoá định kỳ) và API xoá thread theo yêu cầu user. Langfuse (nếu bật) chỉ nhận metadata hoặc nội dung đã mask; log không chứa nội dung hội thoại.
+**Bảo vệ PII nội bộ (D7):** checkpoint **không** mã hoá mặc định: agent dựng saver tường minh với `EncryptedSerializer` (`AGENT_CHECKPOINT_ENCRYPTION_KEY` = base64 của 32 byte; thêm `pycryptodome`; JSONB `checkpoint`/`metadata` vẫn plaintext với channel kiểu đơn giản và `configurable` — quy tắc state ở `03` §6.1) (ADR-004); **retention** thread 30 ngày (`AGENT_THREAD_RETENTION_DAYS`, job xoá định kỳ) và API xoá thread theo yêu cầu user. Langfuse (nếu bật) chỉ nhận metadata hoặc nội dung đã mask; log không chứa nội dung hội thoại.
 
 ### 3.6 Audit của MCP
 Mỗi DB MCP (hoặc DB `mcp_audit` dùng chung khi runtime role chỉ đọc) có bảng `tool_audit` cùng format hash-chain HMAC với `gateway.audit_log` (`id`, `ts` do app gán trước khi băm, `hmac_kid`, `prev_hash`, `hash` = HMAC bằng `AUDIT_HMAC_KEY`; chỉ INSERT, trigger chặn UPDATE/DELETE). Mã dùng chung ở `packages/common/audit` (cùng job anchor hằng giờ như §3.1).
@@ -369,8 +369,9 @@ Cột `intent_id uuid NULL` (D14) có trong `tool_audit` (null với tool đọc
 
 | Client | Loại | Dùng cho |
 |---|---|---|
-| `chat-ui` | confidential, Authorization Code + PKCE; **client của BFF** (D15; không có client `bff` riêng) | Người dùng đăng nhập qua BFF. Token đăng nhập `aud=chat-ui` (audience mapper trên chính client; **không** có `agent-service` hay `approval-signer`), không gửi cho agent. Được phép token-exchange tới `agent-service` (xin scope `agent:invoke`) và `approval-signer` (xin scope `signer:approve`); luật exchange V2: client gọi exchange phải nằm trong `aud` của subject token (xác minh ở spike M0). `agent:invoke` và `signer:approve` là *optional* client scope của `chat-ui`, không có trong token đăng nhập. Bật *Revoke Refresh Token* (refresh xoay vòng) và đăng ký `post_logout_redirect_uri = BFF_PUBLIC_URL`. M6: exchange thứ ba tới `llm-gateway` (scope `llm:invoke`) **chỉ cho người có role `admin`** (proxy admin API) |
-| `agent-service` | confidential, service account, **được phép token-exchange**; cũng là audience | Đổi token `aud=agent-service` của user lấy token theo audience, **chỉ tới `docs-mcp`, `tickets-mcp`, `analytics-mcp` và `llm-gateway`**; **không** được exchange tới `approval-signer` (D13/D15). **Kiểm scope `agent:invoke`** trên token vào (cùng `aud=agent-service`, `azp=chat-ui`); thiếu ⇒ `403 forbidden` |
+| `chat-ui` | confidential, Authorization Code + PKCE; **client của BFF** (D15; không có client `bff` riêng) | Người dùng đăng nhập qua BFF. Token đăng nhập `aud=chat-ui` (audience mapper trên chính client; **không** có `agent-service` hay `approval-signer`), không gửi cho agent. Được phép token-exchange tới `agent-service` (xin scope `agent:invoke`) và `approval-signer` (xin scope `signer:approve`); luật exchange V2: client gọi exchange phải nằm trong `aud` của subject token (đã xác minh M0, ADR-005). `agent:invoke` và `signer:approve` là *optional* client scope của `chat-ui`, không có trong token đăng nhập. Bật *Revoke Refresh Token* (refresh xoay vòng) và đăng ký `post_logout_redirect_uri = BFF_PUBLIC_URL`. M6: exchange thứ ba tới `llm-gateway` (scope `llm:invoke`) **chỉ cho người có role `admin`** (proxy admin API) |
+| `agent-service` | confidential, **không** service account (`serviceAccountsEnabled=false`, `access.token.lifespan=300`), **được phép token-exchange**; cũng là audience (ADR-005) | Đổi token `aud=agent-service` của user lấy token theo audience, mỗi request đúng một audience, **chỉ tới `docs-mcp`, `tickets-mcp`, `analytics-mcp` và `llm-gateway`**; **không** được exchange tới `approval-signer` (D13/D15). **Kiểm token vào**: `aud=agent-service`, `azp=chat-ui`, scope `agent:invoke`; thiếu ⇒ `403 forbidden` |
+| `agent-maintenance` | confidential, chỉ client-credentials (không exchange, không user); `aud=docs-mcp`, scope duy nhất `docs:forget` | Job nền retention (D17) gọi `/internal/taint/forget` của docs-mcp theo `thread_id`; không "thay mặt `sub`" vì V2 không hỗ trợ impersonation (ADR-005 mục 7) |
 | `llm-gateway` | bearer-only (audience) | Gateway xác minh danh tính user |
 | `docs-mcp`, `tickets-mcp`, `analytics-mcp` | bearer-only (audience) | Resource server |
 | `approval-signer` | bearer-only (audience) | Resource server của signer: xác minh token (JWKS, iss, exp) và kiểm `aud` chứa `approval-signer`, scope chứa `signer:approve`, `azp == chat-ui`, `sub == intent.sub` (D13/D15/D16); ngược lại `403 forbidden` |
@@ -388,16 +389,16 @@ Cả hai resource server kiểm scope **ngoài** `aud`/`azp` (D16); khớp realm
 **Luồng token (D15, thay D13 phần Keycloak; sửa N01/N02):**
 1. **Token đăng nhập** (BFF nhận qua Authorization Code + PKCE, client `chat-ui`): `aud=chat-ui`, sống 5 phút, refresh 30 phút (refresh token mã hoá AES-GCM trong session BFF). **Không** gửi cho agent; trình duyệt chỉ có cookie phiên `HttpOnly`.
 2. **BFF token-exchange** (RFC 8693, `azp=chat-ui`): (a) -> `aud=agent-service` + scope `agent:invoke`, gửi cho agent trong mỗi request; (b) -> `aud=approval-signer` + scope `signer:approve` (TTL ≤ 300s), chỉ nằm trong **session phía server**, không bao giờ gửi cho agent hay trình duyệt, không cache sang session khác.
-3. **`agent-service` exchange** token `aud=agent-service` của nó -> `llm-gateway` + `docs-mcp`/`tickets-mcp`/`analytics-mcp`. **Không** tới `approval-signer` (Keycloak từ chối).
+3. **`agent-service` exchange** token `aud=agent-service` của nó -> `llm-gateway` + `docs-mcp`/`tickets-mcp`/`analytics-mcp`. **Không** tới `approval-signer`: Keycloak từ chối bằng `400` (`invalid_scope`/`invalid_request`), không phải 403 (ADR-005).
 4. **Test bắt buộc (N02):** dùng **chính token agent cầm** (`aud=agent-service`) gọi `approval-signer` -> 401/403; assert token đăng nhập không có `aud ∋ {agent-service, approval-signer}`; `agent-service` exchange tới signer -> Keycloak từ chối.
 5. **Mã dùng chung (D16):** `TokenBroker` (adapter `oauth_token_exchange`, `static`) và `TokenVerifier` (adapter `oidc_jwks`) nằm trong `acme_common`; agent, approval-signer, BFF, gateway và MCP dùng chung (§9.2).
-**Issuer cố định (dev):** `http://keycloak.acme.local:8080/realms/acme` (so khớp chuỗi chính xác ở mọi resource server). **Token đã exchange** (RFC 8693, agent-service thực hiện cho gateway và 3 MCP, mỗi request lấy một token cho mỗi audience; cache in-process theo khoá `(sub, aud, sorted scopes)`, TTL = `exp − 30s`):
+**Issuer cố định (dev):** `http://keycloak.acme.local:8080/realms/acme` (so khớp chuỗi chính xác ở mọi resource server). **Token đã exchange** (RFC 8693, agent-service thực hiện cho gateway và 3 MCP, mỗi request lấy một token cho mỗi audience; cache in-process theo khoá `(sub, sid, aud, sorted scopes)`, TTL = `min(exp, exp_subject) − 30s`):
 ```json
 { "iss": "http://keycloak.acme.local:8080/realms/acme", "sub": "<user uuid>", "aud": "tickets-mcp",
   "azp": "agent-service", "exp": "<= 300s", "scope": "tickets:read tickets:write",
-  "dept": ["CS"], "clearance": 1, "roles": ["employee"], "act": {"sub": "agent-service"} }
+  "dept": ["CS"], "clearance": 1, "roles": ["employee"] }
 ```
-(Nếu Keycloak không phát claim `act` thì dùng `azp` để biết bên nào đang gọi; ghi lại như một giới hạn.)
+Keycloak Standard Token Exchange V2 **không phát `act`/`may_act`** (đã xác minh M0). `azp` = client gửi request exchange (ở đây `agent-service`); resource server kiểm `azp` theo allowlist (MCP `agent-service`, gateway `agent-service`, signer `chat-ui`) và không dựa vào `act` (ADR-005 mục 4). Resource server **bắt buộc** có `sub`, `dept`, `clearance`; thiếu ⇒ `401 malformed` (ADR-005 mục 6).
 
 ### 4.1 Phê duyệt ràng buộc giao dịch (D1) — "What You See Is What You Sign"
 
@@ -734,12 +735,12 @@ Nhánh phụ: **Sửa** -> UI gửi tham số mới cho agent -> agent gọi l�
 | tickets-mcp | **`ApprovalVerifier`** | `verify(token, principal, intent_record)` | `es256_jwt`, `permissive` (**chỉ `ACME_ENV=eval`**, ablation; WARNING mỗi lần dùng) | kms | — |
 | tickets-mcp | `ReplayGuard` | `consume(jti, ttl) -> bool` | `redis`, `in_memory` | — | — |
 | analytics-mcp | `AnalyticsRepository` | `sales_summary`, `top_customers`, `customer_lookup`, ... (*tuỳ chọn sau v1.0:* `run_readonly(safe_query)`) | `postgres` | clickhouse, bigquery | — |
-| mcp (all) | `ToolServerHost` | `register(tool_spec, handler)`, `asgi_app()` | `mcp_sdk` **hoặc** `fastmcp` (chốt sau spike M0; phương án B: FastAPI tool server) | — | — |
-| common (agent, bff) | `TokenBroker` (D16: ở `acme_common`, không còn ở `agent/ports`) | `token_for(user_token, audience, scopes)` | `oauth_token_exchange` (RFC 8693) | `static` (test), `client_credentials_with_user_token` (phương án B) | Caching(inner; khoá `(sub, aud, sorted scopes)`, TTL `exp-30s`, in-process) |
+| mcp (all) | `ToolServerHost` | `register(tool_spec, handler)`, `asgi_app()` | `mcp_sdk` (`mcp` 2.3 `MCPServer`, mặc định) / `fastmcp` (thay thế); auth ở `AuthMiddleware` riêng bọc `asgi_app()` (ADR-003) | — | — |
+| common (agent, bff) | `TokenBroker` (D16: ở `acme_common`, không còn ở `agent/ports`) | `token_for(principal, user_token, audience, scopes) -> AccessToken` (`principal` đã verify, dùng làm khoá cache; mỗi lần gọi đúng một audience; lỗi `TokenExchangeDenied`) | `oauth_token_exchange` (RFC 8693) | `static` (test); `client_credentials_with_user_token` (phương án B): **dự phòng, chưa cài** | Caching(inner; khoá `(sub, sid, audience, sorted scopes)`, TTL `min(exp, exp_subject) − 30s`, in-process); Metered. **Hậu điều kiện bắt buộc:** `aud` đúng một phần tử `== [audience]`, `scope` ⊆ scope đã xin; sai ⇒ lỗi, không dùng token (ADR-005) |
 | agent | `ToolProvider` | `tools_for(agent_name, principal)` | `mcp_http` | — | — |
 | bff | `AgentClient` (D15: class HTTP thường, một implementation, không phải port) | `run(...)`, `resume(...)`, `history(...)` | `http_sse` | — | — |
 | bff | `SignerClient` (class HTTP thường, một implementation) | `verify_intent(...)`, `approve(...)` | — | — | — |
-| bff | `TokenBroker` (dùng port của `acme_common`, cùng dòng trên) | `token_for(subject_token, audience, scopes)` | `oauth_token_exchange` | `static` (test) | Caching theo session |
+| bff | `TokenBroker` (dùng port của `acme_common`, cùng dòng trên) | `token_for(principal, user_token, audience, scopes)` | `oauth_token_exchange` | `static` (test) | Caching theo session |
 
 **Đã bỏ khỏi bảng v1.1 (D11):** `UsageSink`, `AuditSink` (-> `EventSink`); `ToolAuditSink` (-> `EventSink`); `ToolRateLimiter` (dùng lại `RateLimiter`); `ChatModelFactory` (-> hàm thường `make_chat_model(role)` trong agent); `Chunker` (module thường `chunking.py`); `SqlValidator` (module thường, chỉ tồn tại khi bật raw SQL tuỳ chọn); `ToolInvoker` (class cụ thể bọc handler: schema -> scope -> rate limit -> timeout -> cắt output -> audit; không phải port). `ApprovalSigner` chuyển từ UI sang `approval-signer`. `Pseudonymizer` vẫn là service cụ thể dùng `PiiDetector`.
 
