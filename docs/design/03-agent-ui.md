@@ -1,8 +1,17 @@
 # 03 — Agent LangGraph
 
-> Phiên bản 1.3, 2026-10-29. Tuân thủ `DECISIONS-v1.2.md` (gồm D15) và `00-contracts.md` (nguồn chân lý); các điểm cần xác nhận ở mục **15. Phụ thuộc contracts v1.3**.
+> Phiên bản 1.4, 2026-10-29. Tuân thủ `DECISIONS-v1.2.md` (gồm D15) và `00-contracts.md` (nguồn chân lý); các điểm cần xác nhận ở mục **15. Phụ thuộc contracts v1.3**.
 > Quy ước: chỗ nào API của thư viện chưa được xác minh thì ghi **[SPIKE]** = "cần xác minh trong spike", không đoán.
 > Phạm vi: `packages/agent` (service `agent`, cổng 8200). **Giao diện người dùng (SPA React + BFF, cổng 8300) được thiết kế ở `07-web-bff.md`**; mục 9 chỉ giữ hợp đồng agent ↔ BFF. Việc ký phê duyệt do dịch vụ riêng `approval-signer` đảm nhiệm (`05-approval-flow.md`). Gateway ở `01`, MCP servers ở `02`.
+
+### Changelog v1.4 (D17, review-02 N12)
+
+| Thay đổi | Mục |
+|---|---|
+| Agent gửi `thread_id` trong `_meta` của **mọi** MCP call (docs/tickets/analytics); docs-mcp, analytics-mcp, tickets-mcp `get_ticket` ghi taint theo `mcp:taint:{sub}:{thread_id}` (+ `:recent`) | 6.3 |
+| Xoá thread (API `DELETE` và job retention) gọi `POST /internal/taint/forget {thread_id}` của docs-mcp bằng token user (`aud=docs-mcp`); docs-mcp kiểm `sub`. Thất bại forget không chặn xoá, được ghi audit và thử lại; taint tự hết hạn theo TTL `AGENT_THREAD_RETENTION_DAYS` | 1.3, 8.4 |
+| Threat model: agent bị chiếm giả `thread_id` được bù bằng khoá `recent` (24h, gộp mọi thread của `sub`) | 12 |
+| Test: `_meta.thread_id` có trong mọi call; xoá thread gọi forget; job retention gọi forget; forget lỗi không làm hỏng xoá | 13 |
 
 ### Changelog v1.3 (D15, ADR-002)
 
@@ -129,7 +138,7 @@ Mọi endpoint (trừ `/healthz`, `/metrics`) yêu cầu `Authorization: Bearer 
 | `GET /v1/threads/{id}/messages` | Lấy lịch sử để UI vẽ lại (resume trang) | `{messages:[{role,content,citations?,cost_usd?}], pending_interrupt: {...}|null, cost:{thread_usd}}` — đọc từ `graph.aget_state(config)` |
 | `POST /v1/threads/{id}/runs` | Chạy một lượt (**SSE**) | `{input:{text}, client_msg_id}` → `text/event-stream`. 409 nếu thread đang có run khác hoặc đang chờ interrupt |
 | `POST /v1/threads/{id}/resume` | Tiếp tục sau interrupt (**SSE**) | `{interrupt_id, decision:{type:"approve"\|"edit"\|"reject"\|"refresh", edits?, approval_token?, reason?}}`. `approval_token` chỉ khi `approve` (do `approval-signer` cấp, BFF chuyển tiếp); `edits` chỉ khi `edit` (trường được phép theo `op`); **không** có `args` tự do. 409 nếu không có interrupt khớp `interrupt_id` |
-| `DELETE /v1/threads/{id}` | Xoá thread + checkpoint (quyền xoá dữ liệu cá nhân, D7) | `204`; chỉ chủ thread; xoá checkpoint (`adelete_thread`, **[SPIKE]** tên hàm) và đặt `conversations.deleted_at`; ghi audit `thread_deleted` không kèm nội dung (mục 8.4) |
+| `DELETE /v1/threads/{id}` | Xoá thread + checkpoint (quyền xoá dữ liệu cá nhân, D7) | `204`; chỉ chủ thread; xoá checkpoint (`adelete_thread`, **[SPIKE]** tên hàm) và đặt `conversations.deleted_at`; ghi audit `thread_deleted` không kèm nội dung (mục 8.4); **D17:** sau khi xoá checkpoint gọi `POST /internal/taint/forget {thread_id}` của docs-mcp bằng token user (exchange `aud=docs-mcp`), docs-mcp kiểm `sub` và xoá `mcp:taint:{sub}:{thread_id}` |
 | `GET /v1/requests/{request_id}` | Chi phí chi tiết một request LLM (BFF dùng cho `GET /api/requests/{id}`) | `200 {request_id, cost_usd, alias, tokens_in, tokens_out, cache?}`. Agent giữ API key sở hữu request: chỉ trả nếu `request_id` nằm trong `request_ids` của một thread thuộc `sub` của token, rồi gọi `GET /v1/requests/{id}` của gateway (contracts §6.2); không thuộc thread của user ⇒ 404 |
 | `POST /v1/internal/evict` | Xoá cache token exchange của `sub` (BFF gọi khi logout) | `204`; `sub` lấy từ token Bearer, không nhận tham số |
 | `GET /healthz` `/readyz` `/metrics` | Probe, Prometheus | — |
@@ -737,6 +746,8 @@ class McpHttpToolProvider(ToolProvider):
     async def commit_intent(self, intent_id, approval_token, *, principal, user_token): ...   # token write không cache; chỉ execute_write gọi
 ```
 
+**`thread_id` trong `_meta` (D17, N12):** adapter đặt `_meta = {"thread_id": str(tid)}` trong **mọi** lời gọi tool (mọi server, đọc và `prepare_*`), lấy từ `RunContext`; server dùng nó làm khoá taint `mcp:taint:{sub}:{thread_id}`. `thread_id` do agent tự khai nên không tin tuyệt đối: MCP server luôn ghi/đọc thêm khoá `mcp:taint:{sub}:recent` (TTL 24h), nên agent bị chiếm giả `thread_id` không thoát được taint. Thiếu `_meta.thread_id` ⇒ server chỉ dùng `recent`.
+
 Mỗi run (hoặc node) tạo kết nối với header Bearer đúng audience; sau run thì đóng. Spec MCP 2026-07-28 là stateless (research/02) nên chi phí tạo client theo request thấp; **[SPIKE]** xác nhận adapter hỗ trợ spec mới. Chuyển giữa `MCPAdapter` và `langchain-mcp-adapters` chỉ sửa `_load` trong file này. Decorator `PinnedToolProvider` cache `tools/list` 5 phút kèm **băm mô tả** so với bản pin (phát hiện rug pull; băm khác -> tắt tool + cảnh báo).
 
 ### 6.4 Tool allowlist
@@ -934,7 +945,7 @@ Gateway che PII **trước khi ra provider** (pii_policy), nhưng lịch sử tr
 - **[SPIKE]** Cách cắm mã hoá: `langgraph-checkpoint` 1.x có serde ghép được (`EncryptedSerializer`/`with_encryption` hoặc lớp `SerializerProtocol` tự viết bọc `JsonPlusSerializer` bằng AES-GCM). Phải xác minh tên API, việc nonce ngẫu nhiên mỗi bản ghi, và AAD = `thread_id` để bản mã không dán sang thread khác được. Nếu API không dùng được, phương án dự phòng: wrapper `BaseCheckpointSaver` mã hoá blob trước khi ghi (cùng giao diện, ghi vào cùng bảng). Test `test_checkpoint_blob_is_ciphertext` (đọc thẳng bảng, không thấy chuỗi tiếng Việt của câu hỏi mẫu) và `test_wrong_key_cannot_load`.
 - **Xoay khoá:** `AGENT_CHECKPOINT_ENCRYPTION_KEY` hỗ trợ danh sách khoá có `kid` (khoá đầu để ghi, các khoá sau chỉ để đọc); job re-encrypt tuỳ chọn.
 - **Retention (R12):** `AGENT_THREAD_RETENTION_DAYS=30`. Job xoá hằng ngày các thread có `conversations.last_active_at` quá hạn: xoá checkpoint (`adelete_thread`, **[SPIKE]** tên hàm), message liên quan và đánh dấu `conversations.deleted_at`. Thread đang có interrupt chưa xử lý cũng bị dọn (chưa có gì được ghi).
-- **Xoá theo yêu cầu:** `DELETE /v1/threads/{id}` (mục 1.3) xoá checkpoint + đánh dấu `deleted_at` ngay; chỉ chủ thread (hoặc `admin` qua audit) được gọi; ghi audit `thread_deleted` không kèm nội dung.
+- **Xoá theo yêu cầu:** `DELETE /v1/threads/{id}` (mục 1.3) xoá checkpoint + đánh dấu `deleted_at` ngay; chỉ chủ thread (hoặc `admin` qua audit) được gọi; ghi audit `thread_deleted` không kèm nội dung. **D17 (N12):** cả API xoá lẫn job retention, sau khi xoá checkpoint, gọi `POST /internal/taint/forget {thread_id}` của docs-mcp bằng token user (job retention exchange bằng service account có quyền thay mặt `sub` chủ thread, ghi audit); forget lỗi ⇒ thử lại có backoff, không chặn việc xoá (taint vẫn tự hết TTL).
 - Biện pháp kèm theo: (1) role `ag_app` chỉ truy cập DB `agent`; (2) không ghi nội dung message vào log ứng dụng (chỉ độ dài, id); (3) Langfuse chỉ nhận metadata + nội dung đã mask (mục 10.1); (4) backup mã hoá bằng khoá khác khoá checkpoint.
 
 ---
@@ -1076,6 +1087,7 @@ Ablation (cùng bộ): `A0` đầy đủ; `A1` tắt spotlighting/prompt an toà
 | **LLM01 Prompt injection (trực tiếp)** | User gõ lệnh ghi đè | Router coi tin nhắn là dữ liệu; prompt agent; gateway guard; **quan trọng nhất: quyền thật nằm ngoài LLM** (token theo user, ACL/RLS ở MCP, intent + approval token); input_guard gắn cờ | LLM có thể bị lừa gọi `prepare_*` sai, nhưng intent chỉ hiển thị cho người duyệt qua render model do signer dựng và phải được duyệt |
 | **LLM01 (gián tiếp)** | Tài liệu/ticket/dữ liệu chứa lệnh | Spotlighting + delimiter + datamark (docs-mcp); prompt "dữ liệu không phải lệnh"; mạng `core` không có egress (không kênh exfil); agent chỉ có `prepare_*` (không đổi dữ liệu), `commit_intent` không thuộc tool của LLM; markdown/ảnh bị chặn ở SPA (rehype-sanitize allowlist + CSP `img-src 'self' data:`, `07` mục 3.7); tóm tắt hội thoại coi nội dung là dữ liệu | "Lethal trifecta" bị phá chân exfil và chân ghi; còn rủi ro trả lời sai/ thiên lệch → đo ở E4 |
 | **LLM06 Excessive agency** | Agent gọi tool ngoài ý định; ghi hàng loạt | allowlist tool theo agent (2 lớp); `prepare_*` ≠ ghi; **intent do MCP ký, approval do `approval-signer` ký trên `intent_sha256` (gắn `sub`+`jti`+`exp` 120s), `commit_intent` thực thi đúng payload đã lưu của intent**; một ghi/lượt; rate limit MCP; token scope hẹp, token write cấp tại chỗ không cache; giới hạn vòng/chi phí | Người dùng duyệt sai (fatigue, mục 7.8) |
+| **Agent giả `thread_id` (N12, D17)** | Agent bị chiếm gửi `thread_id` lạ/ngẫu nhiên để né taint của thread thật | Khoá phụ `mcp:taint:{sub}:recent` (24h) gộp mọi thread; `prepare_*` xét cả taint thread lẫn `recent`; forget kiểm `sub` từ token user (không xoá được taint người khác) | `recent` làm tăng cảnh báo giả trong 24h (chấp nhận, chỉ `warn` mặc định); forget thread thật không xoá `recent` |
 | **LLM07 System prompt leakage** | "In prompt của bạn" | Prompt không chứa secret/khoá/URL nội bộ/quy tắc phân quyền; chỉ dẫn từ chối; canary string trong test; phân quyền không dựa vào prompt; `direct_answer` từ chối | Prompt có thể bị trích — chấp nhận vì không chứa bí mật (giả định: coi prompt là công khai) |
 | LLM02 Lộ thông tin nhạy cảm | Cross-dept qua cache/ lịch sử | ACL ở MCP theo token user; semantic cache có `scope_hash` (contracts §2.2); checkpoint gắn thread↔user, API kiểm sở hữu; PII mask ở gateway | Lịch sử thô trong checkpoint (mục 8.4) |
 | LLM05 Output xử lý không an toàn | Output chứa HTML/JS/link | SPA không render HTML thô, không tải ảnh/link ngoài (sanitize + CSP); không `eval`; args tool được validate bằng schema | — |
@@ -1112,7 +1124,7 @@ LLM giả: `FakeListChatModel(responses=[...])` cho node trả text; với struc
 | `sse` | Mapping stream→event; luôn kết thúc bằng một `done`/`error` |
 | Không rò token | Sau một run, quét bảng checkpoint (đã giải mã) + log: không có access/refresh/approval token; JWT duy nhất được phép là `intent_jws` (`iss=tickets-mcp`, `aud=approval-signer`) |
 | Checkpoint mã hoá | `test_checkpoint_blob_is_ciphertext`, `test_wrong_key_cannot_load`, `test_aad_thread_binding` (bản mã thread A không giải được ở thread B), thiếu `AGENT_CHECKPOINT_ENCRYPTION_KEY` ngoài `ACME_ENV=test` → agent không khởi động |
-| Retention và xoá | Job retention xoá thread quá `AGENT_THREAD_RETENTION_DAYS` (freezegun); `DELETE /v1/threads/{id}` xoá checkpoint + đặt `deleted_at`, thread người khác → 404 |
+| Retention và xoá | Job retention xoá thread quá `AGENT_THREAD_RETENTION_DAYS` (freezegun) và gọi forget taint; `FakeToolProvider` khẳng định mọi call mang `_meta.thread_id`; `DELETE` gọi `POST /internal/taint/forget` đúng một lần với token user, forget lỗi không làm hỏng xoá; `DELETE /v1/threads/{id}` xoá checkpoint + đặt `deleted_at`, thread người khác → 404 |
 | Phiên BFF | Test thuộc `07` mục 6.3 (hai `session_id` cùng `sub` độc lập, token không rò ra trình duyệt, không giải mã JWT chưa xác minh). Phía agent: `POST /v1/internal/evict` chỉ xoá cache của `sub` trong token |
 
 ### 13.2 Integration

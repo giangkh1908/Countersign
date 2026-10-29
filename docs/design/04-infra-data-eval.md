@@ -1,8 +1,17 @@
 # 04 — Hạ tầng, dữ liệu giả lập và bộ đánh giá
 
-> Tài liệu thiết kế chi tiết, **phiên bản 1.3**, 2026-10-29. Tuân thủ `00-contracts.md` (nguồn chân lý, gồm §9 Ports & Adapters) và `DECISIONS-v1.2.md` (thắng khi mâu thuẫn; D15 thắng cả phần Keycloak của D13). Chỗ nào cần sửa contracts thì ghi ở mục 23 chứ không sửa ngầm trong tài liệu này.
+> Tài liệu thiết kế chi tiết, **phiên bản 1.4**, 2026-10-29. Tuân thủ `00-contracts.md` (nguồn chân lý, gồm §9 Ports & Adapters) và `DECISIONS-v1.2.md` (thắng khi mâu thuẫn; D15 thắng cả phần Keycloak của D13). Chỗ nào cần sửa contracts thì ghi ở mục 23 chứ không sửa ngầm trong tài liệu này.
 > Phạm vi: (A) hạ tầng `docker compose`, Redis, Postgres, Keycloak, supply-chain, CI, quan sát; (B) dữ liệu "ACME Việt Nam", corpus độc cho E4 và các tập test viết tay; (C) bộ đánh giá gồm benchmark, security regression suite và user study; (D) production hardening (M7).
 > Đây là dự án sản phẩm (nền tảng trợ lý AI nội bộ self-host). Các đoạn YAML/SQL/Python là **mẫu để worker hiện thực hoá**, chưa được chạy thử.
+
+## Changelog v1.4 (D17, review-02 N12/N13/N15)
+
+| # | Thay đổi | Nguồn |
+|---|---|---|
+| 1 | Compose: `GW_GUARD_TOOL_FAIL_POLICY` (mặc định `redact`), `GW_GUARD_USER_FAIL_POLICY` (`open`), `GW_NER_EXTERNAL_FAIL_POLICY` (`closed`) thay `GW_GUARD_FAIL_POLICY`; sidecar `SIDECAR_POOL_*`/`SIDECAR_MAXINFLIGHT_*` (3 lớp ưu tiên, `06 §4.1`); `MCP_TAINT_RECENT_TTL_S`, `BFF_MAX_CARDS_PER_THREAD_HOUR`, `BFF_REJECTED_TTL_S` | N15, N12, N13 |
+| 2 | Alert `PolicySkipped`: `increase(gw_policy_skipped_total[5m]) > 0` | N15 |
+| 3 | Security regression: ca sidecar quá tải (không đoạn tool/RAG chưa kiểm, không tên người tới provider ngoài); máy trạng thái intent (2 commit song song, crash ở `committing`); taint HR→IT qua ngày; agent giả `thread_id`; BFF `:rej`/giới hạn thẻ | N15, N06/N07, N12, N13 |
+| 4 | Redis ACL: `tickets`, `analytics` ghi `~mcp:taint:*` (tickets `get_ticket` và analytics ghi taint theo D17); `docs` giữ `~mcp:taint:*`; `bff` `~bff:sess:*` đã phủ `:rej` và bộ đếm thẻ | N12, N13 |
 
 ## Changelog v1.3 (so với v1.2)
 
@@ -308,7 +317,9 @@ services:
       GW_SIDECAR_URL: http://policy-sidecar:8010                # gateway KHÔNG nạp model; gọi sidecar qua HTTP nội bộ (D2)
       SIDECAR_TOKEN_FILE: /run/secrets/sidecar_token
       GW_SIDECAR_TIMEOUT_MS: ${GW_SIDECAR_TIMEOUT_MS:-150}
-      GW_GUARD_FAIL_POLICY: ${GW_GUARD_FAIL_POLICY:-fail_open}  # fail_open|fail_closed (prod khuyến nghị fail_closed cho nguồn tool/RAG)
+      GW_GUARD_TOOL_FAIL_POLICY: ${GW_GUARD_TOOL_FAIL_POLICY:-redact}   # D17: nội dung tool/RAG: redact|closed (không có open)
+      GW_GUARD_USER_FAIL_POLICY: ${GW_GUARD_USER_FAIL_POLICY:-open}     # D17: prompt của chính user: open|redact|closed
+      GW_NER_EXTERNAL_FAIL_POLICY: ${GW_NER_EXTERNAL_FAIL_POLICY:-closed} # D17: provider ngoài => 503 policy_unavailable / alias self-host
       GW_NER_FAIL_POLICY: skip_on_error
       GW_INSTANCES: ${GW_INSTANCES:-1}                          # N_instance cho degraded mode (D5)
       GW_WORKERS: ${GW_WORKERS:-2}
@@ -351,7 +362,12 @@ services:
       SIDECAR_EMBED_ENABLED: "true"
       SIDECAR_GUARD_ENABLED: "true"
       SIDECAR_NER_ENABLED: "true"
-      SIDECAR_WORKERS: "1"
+      SIDECAR_POOL_ONLINE_GUARD_NER: "2"                       # D17: kích thước pool lớp online (guard/NER)
+      SIDECAR_POOL_EMBED_QUERY: "2"                            # pool embed truy vấn
+      SIDECAR_POOL_EMBED_INGEST: "1"                           # pool embed ingest, không làm đói online
+      SIDECAR_MAXINFLIGHT_ONLINE_GUARD_NER: "16"
+      SIDECAR_MAXINFLIGHT_EMBED_QUERY: "8"
+      SIDECAR_MAXINFLIGHT_EMBED_INGEST: "4"
     secrets: [sidecar_token, metrics_token]
     volumes:
       - ./models:/models:ro                       # tải bằng `make models` (infra/scripts/fetch-models.sh) theo models.lock; chỉ đọc
@@ -428,7 +444,9 @@ services:
       DOCS_GATEWAY_KEY_FILE: /run/secrets/docs_gateway_key     # key owner_type=service, allowed_models={acme-embed}
       MCP_HOST: ${MCP_HOST:-mcp_sdk}
       MCP_PORT: "8101"
-      MCP_TAINT_TTL_S: "1800"                                  # ghi mcp:taint:{sub} (Lua taint_max; user Redis `docs` rw ~mcp:taint:*)
+      MCP_TAINT_RETENTION_DAYS: "30"                           # D17: TTL mcp:taint:{sub}:{thread_id} = AGENT_THREAD_RETENTION_DAYS, xoá cùng thread (POST /internal/taint/forget)
+      MCP_TAINT_RECENT_TTL_S: "86400"                          # D17: khoá phụ mcp:taint:{sub}:recent (24h) gộp mọi thread
+                                                               # Lua taint_max; user Redis `docs` rw ~mcp:taint:*
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key
     secrets: [kn_app_password, redis_docs_password, docs_gateway_key, audit_hmac_key, metrics_token]
     networks: [core]
@@ -459,6 +477,8 @@ services:
       INTENT_KEY_ID: ${INTENT_KEY_ID:-in-1}
       INTENT_TTL_S: "300"
       TAINT_POLICY: ${TAINT_POLICY:-warn}                            # warn|block (D8)
+      MCP_TAINT_RETENTION_DAYS: "30"                                 # D17: get_ticket ghi taint theo thread; prepare_* xét thread + recent
+      MCP_TAINT_RECENT_TTL_S: "86400"
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key
       AUDIT_ANCHOR_DIR: /anchors
     secrets: [tk_app_password, redis_tickets_password, approval_public_key, intent_private_key, audit_hmac_key, metrics_token]
@@ -486,6 +506,8 @@ services:
       MCP_DATABASE_URL_FILE: /run/secrets/an_reader_password
       MCP_REDIS_URL: redis://analytics@redis-state:6379/0
       MCP_REDIS_PASSWORD_FILE: /run/secrets/redis_analytics_password
+      MCP_TAINT_RETENTION_DAYS: "30"                                 # D17: tool gắn classification/dept ghi taint
+      MCP_TAINT_RECENT_TTL_S: "86400"
     secrets: [an_reader_password, redis_analytics_password]
     networks: [core]
     depends_on:
@@ -546,6 +568,8 @@ services:
       BFF_SESSION_IDLE_S: "1800"                                # D15/D16: idle 30 phút
       BFF_SESSION_ABS_S: "28800"                                # tuyệt đối 8 giờ
       BFF_SIGNER_TOKEN_TTL_S: "300"                             # token signer ≤ 5 phút
+      BFF_REJECTED_TTL_S: "600"                                 # D17/N13: bff:sess:{sid}:rej, chặn trình lại intent_id/sha256 đã từ chối
+      BFF_MAX_CARDS_PER_THREAD_HOUR: "10"                       # D17/N13: vượt => 429 rate_limited
       BFF_AGENT_URL: http://agent:8200
       BFF_SIGNER_URL: http://approval-signer:8310               # BFF exchange token sang aud=approval-signer, giữ server-side; BFF KHÔNG giữ khoá ký (D1)
     secrets: [bff_oidc_client_secret, bff_session_key, redis_bff_password]
@@ -730,7 +754,7 @@ Kiểm `.pth` nhằm phát hiện kiểu tấn công trong research/01 (wheel nh
 | Hậu quả khi đầy bộ nhớ | Phải **báo lỗi** (`noeviction`); xoá counter rate-limit/budget/thu hồi key trong lặng lẽ là lỗi an ninh và tài chính | Phải **tự xoá** entry cũ (`allkeys-lru`) |
 | Persistence | AOF `everysec` (mất ≤ 1s) để breaker/jti/budget sống sót khi restart | Không; mất cache chỉ mất hit |
 | Module | Không cần | Query Engine (`FT.*`) cho semantic cache |
-| ACL | `~gw:*`, `~mcp:*`, `~bff:sess:*` | `~gwc:*` + quyền FT |
+| ACL | `~gw:*`, `~mcp:*` (taint: `docs`/`analytics`/`tickets`; intent: chỉ `tickets`), `~bff:sess:*` (gồm `bff:sess:{sid}:rej` và bộ đếm thẻ) | `~gwc:*` + quyền FT |
 | Tải | Lua nhỏ, latency ổn định cần cho overhead p99 | KNN HNSW tốn CPU, có thể gây đột biến |
 | Blast radius | Tấn công làm đầy cache (spam prompt khác nhau) **không** được đẩy counter budget ra khỏi bộ nhớ | |
 
@@ -792,9 +816,9 @@ Contracts v1.1 §2 đã chốt ACL (mỗi service một user bao trùm prefix c�
 # infra/redis/users-state.acl.tmpl
 user default off nopass -@all
 user gateway   on #@@REDIS_GATEWAY@@  ~gw:*          &gw:events  +@read +@write +@scripting +@pubsub -@dangerous
-user tickets   on #@@REDIS_TICKETS@@   ~mcp:tickets:* ~mcp:rl:tickets-mcp:* %R~mcp:taint:*   +@read +@write +@scripting -@dangerous   # ~mcp:tickets:* gồm intent:{id} và jti:{jti}; taint chỉ ĐỌC
-user docs      on #@@REDIS_DOCS@@      ~mcp:rl:docs-mcp:* ~mcp:taint:*           +@read +@write +@scripting -@dangerous   # đọc+ghi taint (Lua taint_max gộp max)
-user analytics on #@@REDIS_ANALYTICS@@ ~mcp:rl:analytics-mcp:*                   +@read +@write +@scripting -@dangerous
+user tickets   on #@@REDIS_TICKETS@@   ~mcp:tickets:* ~mcp:rl:tickets-mcp:* ~mcp:taint:*   +@read +@write +@scripting -@dangerous   # D17: ~mcp:tickets:* gồm intent:{id} (HASH {jws,sha256,sub,status,owner_jti,updated_at}) và jti:{jti}; taint: đọc (prepare_*) + GHI (get_ticket, N12). Chỉ user này có ~mcp:tickets:intent:*
+user docs      on #@@REDIS_DOCS@@      ~mcp:rl:docs-mcp:* ~mcp:taint:*           +@read +@write +@scripting -@dangerous   # D17: đọc+ghi taint (Lua taint_max gộp max) gồm {thread_id} và :recent; forget xoá key thread
+user analytics on #@@REDIS_ANALYTICS@@ ~mcp:rl:analytics-mcp:* ~mcp:taint:*     +@read +@write +@scripting -@dangerous   # D17: ghi taint (mcp:taint:{sub}:{thread_id} và :recent); không có ~mcp:tickets:*
 user bff       on #@@REDIS_BFF@@       ~bff:sess:*                                  +@read +@write -@dangerous   # D15/D16: phiên BFF; không chạm gw:*/mcp:*; không MULTI/WATCH/EVAL (chỉ lệnh đơn)
 user ops       on #@@REDIS_OPS@@      ~*             +@read +info +ping -@dangerous
 user health    on #@@REDIS_HEALTH@@   resetkeys +ping
@@ -870,7 +894,7 @@ Overhead mỗi key ~60–100 B; HASH nhỏ dùng listpack nên gọn. Số liệ
 | `gw:idem:*` (TTL 1h, chỉ khi client gửi header) | 1 req/s × 3.600 × ~150 B | **0,5 MB** (demo); bench 200 RPS × 600 s × 150 B = **18 MB** |
 | `mcp:tickets:jti:*` (TTL ≥ `exp` approval 120 s) | ≤ 1 approval/s × 180 × 120 B | 22 KB |
 | `mcp:tickets:intent:*` (HASH, TTL 330 s = intent exp + 30 s, D14) | ≤ 1 intent/s × 300 × ~250 B | 75 KB |
-| `mcp:taint:{sub}` (TTL 1800 s) | 200 user × ~100 B | 20 KB |
+| `mcp:taint:{sub}:{thread_id}` (TTL 30 ngày) + `mcp:taint:{sub}:recent` (24h) | 200 user × ~20 thread × ~300 B | ~1,2 MB |
 | `mcp:rl:{server}:{sub}` | 3 × 200 × 250 B | 150 KB |
 | Phân mảnh/AOF buffer | ×1,3 | +30% |
 | **Tổng** | | **~20 MB** (demo), **~30 MB** (bench) |
@@ -2066,10 +2090,14 @@ Bộ E4c nằm trong **security regression suite** (mục 14A): chạy mỗi PR,
 | R3 Thu hồi key | E5 rút gọn: 2 instance, 5 lần, `leak_window = 0`, p95 < 1 s | mục 14 | PR |
 | R4 Cô lập cache | exact cache per-user: user B không hit prompt của user A; canary chéo semantic (nếu bật) = 0; header `x-acme-cache` không lộ cho key thường | E3 | PR |
 | R5 PII | **Tập golden PII** (lấy từ tập viết tay E7, phần cấu trúc CCCD/SĐT/email/STK/MST): recall từng loại không giảm quá 1 điểm so với baseline đã commit; không PII nào tới mock ở policy `mask`/`block` | mục 16 | PR |
-| R6 Hạ tầng | `test_no_egress.sh`, `test_redis_acl.py` (gồm `~mcp:taint:*` chỉ ghi/đọc đúng user, `~mcp:tickets:intent:*`), `test_pg_roles.sql`, `test_no_secret_in_env.sh`, `check_pth.sh` | `eval/security/` | PR |
+| R6 Hạ tầng | `test_no_egress.sh`, `test_redis_acl.py` (gồm `~mcp:taint:*` chỉ `docs`/`analytics`/`tickets` ghi, `~mcp:tickets:intent:*` chỉ `tickets`, `~bff:sess:*` gồm `:rej` chỉ `bff`), `test_pg_roles.sql`, `test_no_secret_in_env.sh`, `check_pth.sh` | `eval/security/` | PR |
 | R7 Audit | sửa/xoá một dòng `audit_log` ⇒ `verify_audit_chain` báo đúng vị trí; anchor lệch chain ⇒ báo; `tool_audit` ghi cùng transaction (rollback cả hai) | 01 (§audit), D6 | PR |
 | R8 Supply chain | `models.lock` khớp hash; gateway không import `onnxruntime/torch/tokenizers` (architecture job); `.pth` lạ | mục 5.4–5.5 | PR |
 | R9 Degraded | Redis-state tạm ngừng: `gw_degraded_overspend_max_usd` ≤ trần cấu hình; chỉ phục vụ alias rẻ; hết 600 s ⇒ 503 `service_unavailable` | D5 | nightly |
+| R11 Sidecar quá tải (D17/N15) | Làm sidecar quá tải/timeout/429 (bão ingest + đóng băng pool online) rồi gửi request có đoạn tool/RAG và tên người (`Nguyễn Văn An`) tới gateway với alias provider ngoài (mock ghi lại payload): **không đoạn tool/RAG chưa kiểm nào có trong payload mock** (thay bằng `[nội dung đã ẩn: không kiểm tra được an toàn]`), **không tên người nào tới provider ngoài** (503 `policy_unavailable` hoặc reroute self-host); `gw_policy_skipped_total` và `gw_policy_redacted_total` tăng; alert `PolicySkipped` kích hoạt; alias self-host vẫn `open` | `01` mục 1.8, `06 §4.1` | PR |
+| R12 Máy trạng thái intent (D17/N06/N07) | (a) 2 `commit_intent` song song cùng intent: đúng 1 ghi `ticket_events` (Lua CAS `pending→committing`), bên kia `approval_replayed`; (b) crash giữa `committing`: sau 30 s lần gọi sau tra `ticket_events.intent_id` ⇒ `committed` nếu có, `failed` nếu không; (c) vi phạm `UNIQUE(intent_id)` ⇒ `committed` + `approval_replayed` (không phải `conflict`); (d) `expected_updated_at` lệch ⇒ `failed` + `conflict`; (e) `jti` không phải `owner_jti` không chuyển được trạng thái; (f) sửa `jws` trong Redis ⇒ verify chữ ký lại thất bại | `02`, `05` | PR |
+| R13 Taint (D17/N12) | (a) taint HR (đọc docs HR hôm qua, thread khác) ⇒ hôm nay `prepare_*` tạo ticket IT có audience rộng hơn bị gắn `possible_downgrade` qua khoá `recent`; (b) agent giả `thread_id` mới/ngẫu nhiên không trốn được taint (bù bằng `recent`); (c) `POST /internal/taint/forget` bằng token user khác `sub` ⇒ 403; (d) xoá thread xoá `mcp:taint:{sub}:{thread_id}` nhưng `recent` còn đến hết TTL; (e) `analytics`/`tickets get_ticket` ghi taint | `02`, `03` | PR |
+| R14 BFF từ chối (D17/N13) | trình lại cùng `intent_id` hoặc cùng `sha256` trong 10 phút sau khi từ chối ⇒ bị chặn; thẻ thứ 11 trong 1 giờ/thread ⇒ `429 rate_limited`; `:rej` nằm trong `~bff:sess:*` (kiểm ACL) | `07` | PR |
 | R10 Live nhẹ | Prompt injection mẫu (≈ 30 ca E4a) với Haiku, D3; **ASR ghi trái phép với oracle = 0**; PII không lọt | mục 13 | nightly (≈ 0,1 USD/đêm, key `eval-regression`) |
 
 **Quy tắc.** (1) PR chạy R1–R8 với `mock-provider` và `GW_PROVIDER_OVERRIDE=mock`, thời gian mục tiêu ≤ 10 phút; (2) nightly chạy R9–R10 và quét lỗ hổng; (3) trước mỗi release chạy thêm E4a đầy đủ và E3/E8 nếu thay đổi router/prompt; (4) kết quả xuất JUnit + `summary.json` làm artifact CI; (5) ca không có `xfail` trừ khi có ADR và hạn xử lý; (6) tập ca tăng theo sự cố: mỗi lỗ hổng/sự cố thực tế phải thêm một ca hồi quy trước khi đóng.
@@ -2537,6 +2565,9 @@ groups:
         expr: up{job="policy-sidecar"} == 0
         for: 1m
         labels: { severity: page }
+      - alert: PolicySkipped                       # D17/N15: stage guard/NER bị bỏ qua hoặc redact => rủi ro lộ dữ liệu
+        expr: sum(increase(gw_policy_skipped_total[5m])) > 0
+        labels: { severity: page }
       - alert: ApprovalSignerDown
         expr: up{job="approval-signer"} == 0
         for: 1m
@@ -2576,7 +2607,7 @@ Tài liệu này **không** sửa contracts. Các thay đổi dưới đây cầ
 | 2 | §2 Redis ACL `redis-state`: `docs` đọc+ghi `~mcp:taint:*` (Lua `taint_max`, STRING int), `tickets` đọc `%R~mcp:taint:*` + rw `~mcp:tickets:*` (bao `intent:*`, `jti:*`); `signer`/`sidecar` không có user Redis | D8, D12. 04 mục 2.3 đã khớp contracts v1.2 | ✅ |
 | 3 | §3.1: phòng `EVAL` budget cứng **120 → 160 USD**; key `eval-regression` | mục 20 | ✅ chốt bởi D14 (trần 160, đã áp ở 20.x) |
 | 4 | §5: alias `acme-judge` chain **Gemini 3.1 Pro trước**, rồi (khác họ) → fallback; `acme-embed` trỏ tới `policy-sidecar /v1/embed` (hoặc docs-mcp gọi trực tiếp sidecar) | D2, D10, D14 | ✅ D14: `acme-embed` → `sidecar/embed` |
-| 5 | §7 env: 04 dùng đúng tên contracts v1.2 (`SIDECAR_TOKEN`, `GW_SIDECAR_URL`, `GW_SIDECAR_TIMEOUT_MS`, `GW_GUARD_FAIL_POLICY`, `GW_NER_FAIL_POLICY`, `GW_DEGRADED_MAX_S`, `GW_INSTANCES`, `AUDIT_HMAC_KEY(_ID)`, `AUDIT_ANCHOR_DIR`, `MODELS_LOCK_PATH`, `INTENT_PRIVATE_KEY_PATH`/`INTENT_KEY_ID`/`INTENT_TTL_S`/`TAINT_POLICY`, `APPROVAL_PUBLIC_KEY_PATH`, `APPROVAL_SIGNER_PRIVATE_KEY_PATH`/`_KEY_ID`, `INTENT_PUBLIC_KEYS_DIR`, `APPROVAL_SIGNER_URL`, `AGENT_THREAD_RETENTION_DAYS`, `AGENT_CHECKPOINT_ENCRYPTION_KEY`). Còn thiếu ở contracts: nơi quy định **`AUDIT_ANCHOR_DIR` cho gateway ở chế độ chỉ-append** và biến `*_TLS_*` của mục 22.1 | mục 1.3, 5.1, 22.1 | 🔶 ✅ TLS env + `MODELS_LOCK_SHA256`, `SIDECAR_TOKEN_PREV` chốt bởi D14 |
+| 5 | §7 env: 04 dùng đúng tên contracts v1.2 (`SIDECAR_TOKEN`, `GW_SIDECAR_URL`, `GW_SIDECAR_TIMEOUT_MS`, `GW_GUARD_TOOL_FAIL_POLICY`, `GW_GUARD_USER_FAIL_POLICY`, `GW_NER_EXTERNAL_FAIL_POLICY` (D17, thay `GW_GUARD_FAIL_POLICY`/`GW_NER_FAIL_POLICY`), `GW_DEGRADED_MAX_S`, `GW_INSTANCES`, `AUDIT_HMAC_KEY(_ID)`, `AUDIT_ANCHOR_DIR`, `MODELS_LOCK_PATH`, `INTENT_PRIVATE_KEY_PATH`/`INTENT_KEY_ID`/`INTENT_TTL_S`/`TAINT_POLICY`, `APPROVAL_PUBLIC_KEY_PATH`, `APPROVAL_SIGNER_PRIVATE_KEY_PATH`/`_KEY_ID`, `INTENT_PUBLIC_KEYS_DIR`, `APPROVAL_SIGNER_URL`, `AGENT_THREAD_RETENTION_DAYS`, `AGENT_CHECKPOINT_ENCRYPTION_KEY`). Còn thiếu ở contracts: nơi quy định **`AUDIT_ANCHOR_DIR` cho gateway ở chế độ chỉ-append** và biến `*_TLS_*` của mục 22.1 | mục 1.3, 5.1, 22.1 | 🔶 ✅ TLS env + `MODELS_LOCK_SHA256`, `SIDECAR_TOKEN_PREV` chốt bởi D14 |
 | 6 | §9.2 ports: contracts đã có adapter `sidecar_http` cho `Embedder`/`InjectionGuard`/`PiiDetector` và `Clock` ✅. Còn cần xác nhận nơi **ghi anchor audit ra kho ngoài** (job chung `packages/common/audit`; adapter `file_append_only` dev / `s3_object_lock` sau): port riêng **`AnchorStore`** (`put`, `latest`) | D6, D11, D14 | ✅ chốt bởi D14 |
 | 7 | Keycloak: client `approval-signer` bearer-only; **không** có audience mapper `approval-signer` trên `chat-ui`; token-exchange tới `approval-signer` chỉ cho `chat-ui`; không có client `bff` — 04 mục 4.2/4.3 và `realm-acme.json` khớp | D1, D12, D13, D15 | ✅ D15 thay D13 (phần Keycloak) |
 | 8 | Metrics (đề xuất, G4): `gateway_policy_call_total{endpoint,outcome}`, `gateway_policy_call_ms`, `gateway_degraded_mode`, `gw_degraded_overspend_max_usd`, `gateway_audit_anchor_age_seconds`, `gateway_audit_chain_verify_failed`, `approval_signer_requests_total{result}`, `approval_signer_sign_ms`, `mcp_approval_rejected_total{reason}` | mục 6.2, 22.6 | 🔶 đối chiếu 01/02/05 |

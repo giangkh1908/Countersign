@@ -2,7 +2,16 @@
 
 > **Nguồn chân lý duy nhất** cho tên dịch vụ, cổng, mạng, Redis keyspace, schema Postgres, JWT claims, mã lỗi, biến môi trường.
 > Mọi tài liệu thiết kế `01..04` và mọi dòng code phải khớp file này. Muốn đổi thì sửa file này trước và ghi ADR.
-> Phiên bản 1.3, 2026-10-29. Khi mâu thuẫn với `DECISIONS-v1.2.md` thì `DECISIONS-v1.2.md` thắng.
+> Phiên bản 1.4, 2026-10-29. Khi mâu thuẫn với `DECISIONS-v1.2.md` thì `DECISIONS-v1.2.md` thắng.
+
+### Changelog v1.4
+Tham chiếu: `D17` trong `design/DECISIONS-v1.2.md`; `N05`, `N06`, `N07`, `N12`, `N13`, `N15` trong `docs/reviews/review-02-opus.md`.
+- **N05:** `mcp:tickets:intent:{intent_id}` lưu thêm `jws` và `owner_jti`; `commit_intent` verify lại chữ ký JWS đọc từ Redis; ACL chỉ user `tickets` (§2, §2.1).
+- **N06/N07:** một máy trạng thái intent duy nhất `pending -> committing -> committed | failed` (§4.2); bỏ trạng thái `cancelled` và `aborted`; `ticket_events.intent_id` `UNIQUE` (§3.3).
+- **N12:** taint theo thread và phòng ban (`mcp:taint:{sub}:{thread_id}` + `mcp:taint:{sub}:recent`), `docs`/`analytics`/`tickets` ghi, hàm `acme.ticket_audience(draft)` (§2.1, §3.3).
+- **N13:** BFF giữ `bff:sess:{sid}:rej`, giới hạn thẻ duyệt theo thread (§2.1, §6.4).
+- **N15:** mã lỗi `policy_unavailable` (503); chính sách lỗi guard/NER tách theo loại nội dung; sidecar chia pool theo lớp ưu tiên; metric `gw_policy_*` (§6.1, §7).
+- Env cũ bị thay: `GW_GUARD_FAIL_POLICY`, `GW_NER_FAIL_POLICY`, `MCP_TAINT_TTL_S` (nay `TAINT_RECENT_TTL_S`).
 
 ### Changelog v1.3
 Tham chiếu: `D15` trong `design/DECISIONS-v1.2.md`, `docs/adr/ADR-002-ui-react-bff.md` (thay ADR-001); `N01`, `N02` trong `docs/reviews/review-02-opus.md`.
@@ -28,7 +37,7 @@ Tham chiếu: `Dn` = mục n trong `design/DECISIONS-v1.2.md`; `Rnn` = phát hi�
 - **D5 Degraded mode Redis (R20):** hạn mức in-memory chia theo số worker/instance, chỉ alias rẻ, TTL L1 ≤ 30s, metric `gw_degraded_overspend_max_usd`, hết 600s -> 503 (§2.3).
 - **D6 Audit (R15):** hash chain dùng HMAC-SHA256 với khoá ngoài DB (`AUDIT_HMAC_KEY`), anchor mỗi giờ ra kho append-only ngoài DB; audit tool ghi của tickets-mcp ghi đồng bộ cùng transaction (§3.1, §3.6).
 - **D7 PII nội bộ (R12):** checkpoint LangGraph mã hoá mặc định, retention 30 ngày (§3.5, §7).
-- **D8 Taint (R16):** `mcp:taint:{sub}` do docs-mcp ghi; `risk_flags:["possible_downgrade"]` trong intent (§2.1, §4).
+- **D8 Taint (R16):** `mcp:taint:{sub}` do docs-mcp ghi *(v1.4/D17 thay bằng khoá theo thread)*; `risk_flags:["possible_downgrade"]` trong intent (§2.1, §4).
 - **D9 Analytics (R19):** MVP chỉ tool tham số hoá; `run_readonly_sql` + HMAC ctx chuyển sang mục "Tuỳ chọn sau v1.0" (§3.4).
 - **D10 Đánh giá:** benchmark + security regression + user study; adapter `permissive` vẫn chỉ ở `ACME_ENV=eval`.
 - **D11 Ports cân bằng (R18):** bảng port viết lại: thêm `Clock`, `IntentIssuer`, `IntentVerifier`, `ApprovalSigner` (nay ở approval-signer), `ApprovalVerifier`; gộp `UsageSink`+`AuditSink` -> `EventSink`; bỏ port `ChatModelFactory`, `Chunker`, `SqlValidator` (§9.2).
@@ -103,20 +112,20 @@ Có **hai instance** (quyết định giữ nguyên, D12) vì hai loại dữ li
 
 | Instance | Chứa | `maxmemory-policy` | Persistence | Nếu mất dữ liệu |
 |---|---|---|---|---|
-| `redis-state` | Rate limit, budget counter, circuit breaker, thu hồi key, chống replay `jti`, intent, taint, concurrency | `noeviction` (bị đầy thì báo lỗi thay vì lặng lẽ xoá counter) | AOF `everysec` | Rate limit reset ngắn hạn; budget được reconcile lại từ Postgres; intent đang chờ mất -> user duyệt lại (an toàn); taint mất -> mất cảnh báo, xem 02 |
+| `redis-state` | Rate limit, budget counter, circuit breaker, thu hồi key, chống replay `jti`, intent, taint, concurrency | `noeviction` (bị đầy thì báo lỗi thay vì lặng lẽ xoá counter) | AOF `everysec` | Rate limit reset ngắn hạn; budget được reconcile lại từ Postgres; intent đang chờ mất -> user duyệt lại (an toàn); taint mất -> mất cảnh báo, xem 02. Intent mang JWS nên chứa dữ liệu mức phân loại của ticket (§2.1); M7: mã hoá đĩa AOF |
 | `redis-cache` | Exact cache, semantic cache (vector index) | `allkeys-lru` | Không | Chỉ mất cache hit |
 
 **Redis ACL** (`users.acl`; user `default` bị tắt; **mỗi service MỘT user bao trùm các prefix của mình**; mật khẩu nạp theo quy ước `<BIẾN>_FILE`). `approval-signer` và `policy-sidecar` **không có user Redis** (không dùng Redis):
 ```
 user gateway   on >${REDIS_GATEWAY_PASSWORD}   ~gw:*  &gw:events  +@read +@write +@scripting +@pubsub -@dangerous
-user tickets   on >${REDIS_TICKETS_PASSWORD}   ~mcp:tickets:* ~mcp:rl:tickets-mcp:* %R~mcp:taint:*  +@read +@write +@scripting -@dangerous
+user tickets   on >${REDIS_TICKETS_PASSWORD}   ~mcp:tickets:* ~mcp:rl:tickets-mcp:* ~mcp:taint:*  +@read +@write +@scripting -@dangerous
 user docs      on >${REDIS_DOCS_PASSWORD}      ~mcp:rl:docs-mcp:* ~mcp:taint:*  +@read +@write +@scripting -@dangerous
-user analytics on >${REDIS_ANALYTICS_PASSWORD} ~mcp:rl:analytics-mcp:*  +@read +@write +@scripting -@dangerous
+user analytics on >${REDIS_ANALYTICS_PASSWORD} ~mcp:rl:analytics-mcp:* ~mcp:taint:*  +@read +@write +@scripting -@dangerous
 user bff       on >${REDIS_BFF_PASSWORD}       ~bff:sess:*  +@read +@write -@dangerous   # chỉ trên redis-state (D15)
 user health    on >${REDIS_HEALTH_PASSWORD}    resetkeys +ping
 user ops       on >${REDIS_OPS_PASSWORD}       ~*  +@read +info +ping -@dangerous
 ```
-`+@scripting` là bắt buộc vì token bucket, breaker, concurrency và `taint_max` chạy bằng Lua (`EVALSHA`). `docs` cần quyền đọc+ghi `mcp:taint:*` vì Lua gộp `max` (đọc giá trị cũ, ghi giá trị mới); `tickets` chỉ **đọc** taint (`%R~`). `redis-cache` dùng user `gateway` với `~gwc:*` và quyền search (`+@search` hoặc liệt kê `FT.*`; kiểm thử ACL thật sớm). User `health` có ở cả hai instance. **User `bff` (D16) chỉ dùng lệnh đơn**: không có `MULTI/WATCH/EXEC/EVAL/EVALSHA` (ACL `+@read +@write -@dangerous` không cấp `@scripting`/`@transaction`); BFF chỉ dùng `GET/SET NX EX/HSET/HGETALL/EXPIRE/INCR/DEL`, không Lua.
+`+@scripting` là bắt buộc vì token bucket, breaker, concurrency và `taint_max` chạy bằng Lua (`EVALSHA`). `docs`, `analytics` và `tickets` (cho `get_ticket`) đều cần quyền đọc+ghi `mcp:taint:*` vì Lua gộp `max`/hợp tập (đọc giá trị cũ, ghi giá trị mới); `tickets` còn **đọc** taint ở `prepare_*` (D17). Chỉ user `tickets` có `~mcp:tickets:intent:*` (intent mang JWS, N05). `redis-cache` dùng user `gateway` với `~gwc:*` và quyền search (`+@search` hoặc liệt kê `FT.*`; kiểm thử ACL thật sớm). User `health` có ở cả hai instance. **User `bff` (D16) chỉ dùng lệnh đơn**: không có `MULTI/WATCH/EXEC/EVAL/EVALSHA` (ACL `+@read +@write -@dangerous` không cấp `@scripting`/`@transaction`); BFF chỉ dùng `GET/SET NX EX/HSET/HGETALL/EXPIRE/INCR/DEL`, không Lua.
 
 ### 2.1 `redis-state`
 
@@ -132,11 +141,14 @@ user ops       on >${REDIS_OPS_PASSWORD}       ~*  +@read +info +ping -@dangerou
 | `gw:cb:{provider}:state` | HASH `{state: closed\|open\|half_open, opened_at_ms, probe_lock}` | không | gateway | Lua `breaker.lua` | Trạng thái circuit breaker **chia sẻ** giữa các instance |
 | `gw:cb:{provider}:win:{bucket10s}` | HASH `{ok, fail, timeout}` | 120s | gateway | `HINCRBY` | Cửa sổ trượt 60s (6 bucket) để tính tỉ lệ lỗi |
 | `gw:idem:{key_id}:{idempotency_key}` | STRING (request_id) | **1h** (cấu hình được) | gateway | `SET NX` | Chống gửi trùng. **Chỉ tạo khi client gửi header** `Idempotency-Key` |
-| `mcp:tickets:intent:{intent_id}` | HASH `{sha256, sub, status: pending\|committed\|cancelled}` | **330s** (= `exp` của intent 300s + 30s; D14) | tickets-mcp | `prepare_*`: `HSET` + `EXPIRE 330`; `commit_intent`: kiểm `sha256`, `sub`, `status=pending`, rồi đặt `committed` (Lua, atomic) | Ràng buộc intent đã phát hành với đúng người, đúng nội dung; dùng một lần. `sha256` = `intent_sha256` (§4) |
+| `mcp:tickets:intent:{intent_id}` | HASH `{jws, sha256, sub, status: pending\|committing\|committed\|failed, owner_jti, updated_at}` | `exp` của intent + 30s = **330s** (D14, D17) | tickets-mcp | `prepare_*`: `HSET` (`status=pending`) + `EXPIRE 330`; `commit_intent`: chuyển trạng thái bằng Lua CAS theo máy trạng thái §4.2 (định nghĩa duy nhất) | Ràng buộc intent đã phát hành với đúng người, đúng nội dung; dùng một lần. `sha256` = `intent_sha256` (§4); `commit_intent` đọc `jws` từ đây và **verify lại chữ ký** trước khi dùng `args_canonical`. **Phân loại dữ liệu:** JWS chứa `before/after/args_canonical` của ticket nên mang đúng `classification` của ticket; ACL: chỉ user `tickets` có `~mcp:tickets:intent:*`; M7 mã hoá đĩa AOF |
 | `mcp:tickets:jti:{jti}` | STRING "1" | 180s (> exp của approval token) | tickets-mcp | `SET NX EX 180`. Thất bại tức là **replay**, từ chối | Approval token chỉ dùng được một lần |
-| `mcp:taint:{sub}` | STRING int (max `classification` đã trả cho user) | **1800s** (30 phút), gia hạn mỗi lần ghi | docs-mcp (Lua `taint_max`) | docs-mcp ghi sau mỗi lần trả tài liệu có `classification` cao hơn; tickets-mcp **chỉ đọc** | Taint phía server (agent không giả được) để phát hiện `possible_downgrade` ở `prepare_*` (D8) |
+| `mcp:taint:{sub}:{thread_id}` | HASH `{max_class, dept_set (JSON), sources (≤20 id), updated_at}` | `AGENT_THREAD_RETENTION_DAYS` (mặc định 30 ngày), xoá cùng thread | `docs-mcp`, `analytics-mcp` (tool gắn `classification`/`dept` trong registry), `tickets-mcp` (`get_ticket`); ghi bằng Lua `taint_merge` (max `max_class`, hợp `dept_set`, nối `sources` cắt 20) | **Ghi:** sau mỗi lần trả dữ liệu; `thread_id` lấy từ `_meta` của MCP request. **Đọc:** `tickets-mcp` ở `prepare_*`. **Xoá:** agent gọi `POST /internal/taint/forget {thread_id}` của docs-mcp bằng token user, docs-mcp kiểm `sub` rồi `DEL` | Taint theo thread và phòng ban (N12, D17): phát hiện `possible_downgrade` ở `prepare_*` (D8) |
+| `mcp:taint:{sub}:recent` | HASH cùng cấu trúc | `TAINT_RECENT_TTL_S` = 86400s (24h), gia hạn mỗi lần ghi | như trên (ghi đồng thời với khoá thread) | Như trên; **đọc:** `tickets-mcp` ở `prepare_*` cùng với khoá thread | Gộp mọi thread của user, để agent giả `thread_id` không trốn được taint |
 | `bff:sess:{sid}` | HASH `{v, sub, user (JSON hiển thị, không dùng để cấp quyền), created_at, csrf, access_enc, access_exp, refresh_token_enc, id_token_enc, agent_enc, agent_exp, signer_token (enc), signer_exp}` (+ `gw_admin_enc` ở M6); các trường `*_enc` mã hoá AES-GCM (`BFF_SESSION_KEY`, AAD = sid + tên trường) | idle 30 phút (trượt, `BFF_SESSION_IDLE_S=1800`), tuyệt đối 8 giờ (`BFF_SESSION_ABS_S=28800`) | bff | `HSET`/`EXPIRE`, xoá khi logout | Phiên BFF (D15). Token chỉ ở đây, không xuống trình duyệt; agent chỉ nhận token `aud=agent-service` mỗi request. TTL token signer ≤ `BFF_SIGNER_TOKEN_TTL_S` (≤ 300s) |
-| `bff:sess:{sid}:pend` | HASH `interrupt_id → JSON {thread_id, intent_id, intent_jws, op, expires_at, state, tries}`, tối đa 5 mục | cùng phiên | bff | `HSET`/`HGET`/`HDEL` | Interrupt BFF nhận từ agent; **BFF giữ `intent_jws` ở đây** (trình duyệt chỉ gửi `thread_id`/`interrupt_id`). Ngoại lệ có chủ đích duy nhất của quy tắc "không lưu intent JWS" bên dưới; xoá khi resume (D16) |
+| `bff:sess:{sid}:pend` | HASH `interrupt_id → JSON {thread_id, intent_id, intent_jws, op, expires_at, state, tries}`, tối đa 5 mục | cùng phiên | bff | `HSET`/`HGET`/`HDEL` | Interrupt BFF nhận từ agent; **BFF giữ `intent_jws` ở đây** (trình duyệt chỉ gửi `thread_id`/`interrupt_id`). Một trong hai ngoại lệ có chủ đích của quy tắc "không lưu intent JWS" bên dưới; xoá khi resume (D16) |
+| `bff:sess:{sid}:rej` | SET các `intent_id`, `intent_sha256` và `content_sha256` (= sha256 canonical `{op, target, args_canonical}`, chặn `prepare` lại cùng nội dung) đã bị từ chối | 600s (10 phút) | bff | `SADD`/`SISMEMBER`/`EXPIRE` | Từ chối (N13): BFF từ chối trình lại cùng `intent_id` hoặc cùng `sha256`. Không có tool huỷ intent; intent tự hết hạn sau 300s |
+| `bff:sess:u:{sha256(sub)[:16]}:cards:{thread_id}` | STRING `INCR` | 3600s (`EXPIRE NX`) | bff | `INCR`/`EXPIRE` | Đếm thẻ duyệt đã hiện trong thread, trần `BFF_MAX_CARDS_PER_THREAD_HOUR` (N13; 07 §2.7 quy tắc 9) |
 | `bff:sess:{sid}:lock` | STRING `SET NX PX 10000` | 10s | bff | `SET NX PX` | Single-flight refresh/exchange |
 | `bff:sess:{sid}:gate:{interrupt_id}` | STRING `SET NX EX 150` | 150s | bff | `SET NX EX` | Chống bấm đúp Duyệt / hai tab |
 | `bff:sess:{sid}:rl:{bucket}` | STRING `INCR` + `EXPIRE NX` | cửa sổ 60s (`streams`: 330s) | bff | `INCR`/`DECR`/`EXPIRE` | Rate limit và số luồng SSE theo phiên |
@@ -146,7 +158,7 @@ user ops       on >${REDIS_OPS_PASSWORD}       ~*  +@read +info +ping -@dangerou
 
 **Reconcile budget:** job mỗi 5 phút tính `SUM(cost_micro_usd)` từ `gateway.usage_events` trong tháng và ghi đè `gw:spend:*`. Postgres là nguồn chân lý, Redis là counter nóng.
 
-**Không bao giờ lưu trong Redis:** bảng ánh xạ PII (chỉ nằm trong RAM của request), plaintext API key, access token của user, nội dung prompt chưa mask, **intent JWS đầy đủ** ở các key `mcp:*` (chỉ lưu hash, sub, status); ngoại lệ duy nhất là `bff:sess:{sid}:pend` của phiên BFF (D16).
+**Không bao giờ lưu trong Redis:** bảng ánh xạ PII (chỉ nằm trong RAM của request), plaintext API key, access token của user, nội dung prompt chưa mask, **intent JWS** ở bất kỳ key nào ngoài hai ngoại lệ có chủ đích: `mcp:tickets:intent:{intent_id}` (user `tickets`, TTL `exp`+30s, N05/D17) và `bff:sess:{sid}:pend` (phiên BFF, D16).
 
 ### 2.2 `redis-cache`
 
@@ -300,7 +312,7 @@ CREATE POLICY doc_acl ON documents FOR SELECT TO kn_app USING (   -- cùng đi�
 CREATE POLICY chunk_ingest ON chunks    FOR ALL TO kn_ingest USING (true) WITH CHECK (true);   -- INSERT/UPDATE/DELETE (+SELECT để upsert)
 CREATE POLICY doc_ingest   ON documents FOR ALL TO kn_ingest USING (true) WITH CHECK (true);
 ```
-docs-mcp lọc ACL **hai lớp**: điều kiện `WHERE` tường minh trong query, cộng RLS dựa trên `SET LOCAL app.*` lấy từ JWT. User không có quyền gửi SQL vào database này. **Một runtime embedding duy nhất (D2):** job ingest và query của docs-mcp đều lấy vector qua alias `acme-embed` của gateway (-> `policy-sidecar /v1/embed`), không chạy runtime embedding riêng. Sau mỗi lần trả tài liệu, docs-mcp cập nhật `mcp:taint:{sub}` = max `classification` đã trả (§2.1).
+docs-mcp lọc ACL **hai lớp**: điều kiện `WHERE` tường minh trong query, cộng RLS dựa trên `SET LOCAL app.*` lấy từ JWT. User không có quyền gửi SQL vào database này. **Một runtime embedding duy nhất (D2):** job ingest và query của docs-mcp đều lấy vector qua alias `acme-embed` của gateway (-> `policy-sidecar /v1/embed`), không chạy runtime embedding riêng. Sau mỗi lần trả tài liệu, docs-mcp ghi taint (`max_class`, `dept_set`) vào `mcp:taint:{sub}:{thread_id}` và `mcp:taint:{sub}:recent` (§2.1).
 
 ### 3.3 `tickets`
 ```sql
@@ -321,7 +333,7 @@ CREATE TABLE ticket_comments (id bigserial PRIMARY KEY, ticket_id bigint REFEREN
   created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE ticket_events (id bigserial PRIMARY KEY, ticket_id bigint REFERENCES tickets,
   actor_sub text NOT NULL, on_behalf_of text, action text NOT NULL,      -- create|comment|status|close
-  approval_jti uuid, intent_id uuid, intent_sha256 char(64),             -- ràng buộc với intent đã duyệt (D1)
+  approval_jti uuid, intent_id uuid UNIQUE, intent_sha256 char(64),      -- ràng buộc với intent đã duyệt (D1); UNIQUE: mỗi intent tối đa một sự kiện (D17)
   before jsonb, after jsonb, ts timestamptz NOT NULL DEFAULT now());
 CREATE TABLE tool_audit (...);   -- hash-chain HMAC, cùng format audit_log (§3.6); ghi cùng transaction với UPDATE
 -- RLS: requester_sub = app.sub
@@ -329,7 +341,9 @@ CREATE TABLE tool_audit (...);   -- hash-chain HMAC, cùng format audit_log (§3
 --   OR 'admin' = ANY(app.roles)
 -- Comment có internal = true chỉ hiện với cùng assignee_dept.
 ```
-`commit_intent` thực hiện trong **một transaction**: `UPDATE tickets ... WHERE code=:code AND updated_at=:expected_updated_at` (0 dòng -> `conflict`), `INSERT ticket_events`, `INSERT tool_audit` (hash-chain HMAC). Lỗi ở bất kỳ bước nào -> rollback cả ba; không có thao tác ghi nào thiếu audit.
+`commit_intent` thực hiện trong **một transaction**: `UPDATE tickets ... WHERE code=:code AND updated_at=:expected_updated_at` (0 dòng -> `conflict`), `INSERT ticket_events`, `INSERT tool_audit` (hash-chain HMAC). Lỗi ở bất kỳ bước nào -> rollback cả ba; không có thao tác ghi nào thiếu audit. Kết quả transaction ánh xạ sang trạng thái intent theo §4.2; vi phạm `UNIQUE(ticket_events.intent_id)` nghĩa là intent này đã được áp dụng.
+
+**Hàm audience (D17, N12):** `acme.ticket_audience(draft jsonb) RETURNS TABLE(min_clearance smallint, dept_set text[])`, `STABLE`, `SECURITY INVOKER`. `draft` là bản nháp ticket đích do `prepare_*` dựng (ticket hiện có: `requester_sub`, `requester_dept`, `assignee_dept`, `classification`; ticket mới: `requester_*`, `assignee_dept`, `classification` mặc định). Trả về `min_clearance` = mức clearance tối thiểu để một principal nhìn thấy ticket, và `dept_set` = tập phòng ban có thể nhìn thấy. Hàm **suy từ chính điều kiện của chính sách RLS `tk_select`** (người yêu cầu, `assignee_dept` cùng role `employee`, `admin`, comment `internal` chỉ cùng `assignee_dept`), không dùng một số nguyên floor cố định; khi sửa `tk_select` phải sửa hàm cùng migration (có test đối chiếu). `possible_downgrade` xem §2.1 (khoá taint) và `02`.
 
 ### 3.4 `analytics` (giả lập CRM/bán hàng)
 - Bảng gốc (schema `core`, do `an_owner` sở hữu): `customers(id, name, segment, region, phone, email, tax_code, account_manager_sub, owning_dept)`, `products`, `orders(id, customer_id, order_date, status, total_vnd, sales_rep_sub, owning_dept)`, `order_items`.
@@ -408,7 +422,7 @@ Agent và BFF/SPA **không** giữ khoá riêng nào.
   "sub": "<user uuid>", "risk_flags": ["possible_downgrade"],
   "iat": 0, "exp": "iat + 300" }
 ```
-`op ∈ {create_ticket, add_comment, update_status, close_ticket}`. tickets-mcp **tự đọc DB** để tính `before`/`after`/`expected_updated_at`; mọi trường hiển thị cho người duyệt lấy từ intent, agent không dựng preview. `intent_sha256 = sha256(canonical_json(payload))` (JCS: khoá sắp xếp, không float). `risk_flags` có thể gồm `possible_downgrade` (D8; chính sách `TAINT_POLICY=warn|block`: `block` -> `prepare_*` trả `forbidden`). Lưu `mcp:tickets:intent:{intent_id}` (§2.1).
+`op ∈ {create_ticket, add_comment, update_status, close_ticket}`. tickets-mcp **tự đọc DB** để tính `before`/`after`/`expected_updated_at`; mọi trường hiển thị cho người duyệt lấy từ intent, agent không dựng preview. `intent_sha256 = sha256(canonical_json(payload))` (JCS: khoá sắp xếp, không float). `risk_flags` có thể gồm `possible_downgrade` (D8, D17): gắn khi `taint.max_class > audience.min_clearance`, hoặc khi `audience.dept_set ⊄ taint.dept_set` với `max_class ≥ 1`; `audience` từ `acme.ticket_audience(draft)` (§3.3); xét cả taint của thread lẫn `recent`, `reason` ghi rõ nguồn. Chính sách `TAINT_POLICY=warn|block`: `block` -> `prepare_*` trả `forbidden`. Lưu `mcp:tickets:intent:{intent_id}` gồm cả `jws` (§2.1).
 
 **Approval token** (do **approval-signer** ký, không phải LLM, agent hay UI), header `{"alg":"ES256","typ":"acme-approval+jwt","kid":"<APPROVAL_SIGNER_KEY_ID>"}`:
 ```json
@@ -426,8 +440,8 @@ Agent và BFF/SPA **không** giữ khoá riêng nào.
 3. BFF (`POST /api/intents/verify`) gọi `approval-signer /v1/intents/verify` -> SPA render thẻ duyệt.
 4. User bấm Duyệt -> BFF (`POST /api/approvals`) gọi `approval-signer /v1/approvals` -> `approval_token` (không trả về trình duyệt).
 5. BFF resume graph `Command(resume={decision:"approve", approval_token})`; agent gọi `commit_intent(intent_id, approval_token)`.
-6. tickets-mcp kiểm: chữ ký approval, `aud`, `exp`, `sub == caller.sub`, intent tồn tại + `sha256` khớp `intent_sha256` + `status=pending`, `jti` `SET NX` (replay -> `approval_replayed`), rồi thực thi trong một transaction với `expected_updated_at` (lệch -> `conflict`), ghi `ticket_events` + `tool_audit` cùng transaction, đặt intent `status=committed`; trả `approval_jti`.
-7. **Sửa (edit):** SPA/BFF gửi args mới cho agent -> agent gọi lại `prepare_*` -> intent mới. Không bao giờ ký args do UI/agent tự dựng. **Từ chối:** intent hết TTL tự huỷ.
+6. tickets-mcp kiểm: chữ ký approval, `aud`, `exp`, `sub == caller.sub`; **đọc `jws` từ `mcp:tickets:intent:{intent_id}` và verify lại chữ ký intent**, `sha256` khớp `intent_sha256`, `sub` khớp; `jti` `SET NX`; rồi chuyển `pending -> committing` (Lua CAS, ghi `owner_jti`); thực thi transaction DB với `expected_updated_at`, ghi `ticket_events` + `tool_audit` cùng transaction; chuyển `committing -> committed | failed` theo kết quả; trả `approval_jti`. Nhánh replay/conflict/khôi phục và mã lỗi: **§4.2** (định nghĩa duy nhất).
+7. **Sửa (edit):** SPA/BFF gửi args mới cho agent -> agent gọi lại `prepare_*` -> intent mới. Không bao giờ ký args do UI/agent tự dựng. **Từ chối (N13):** không có tool huỷ; BFF ghi `bff:sess:{sid}:rej` (10 phút) và từ chối trình lại cùng `intent_id`/`sha256`; intent tự hết hạn sau 300s. BFF giới hạn `BFF_MAX_CARDS_PER_THREAD_HOUR` thẻ duyệt mỗi thread mỗi giờ (vượt -> `429 rate_limited`).
 8. Các tool ghi trực tiếp kiểu cũ (nhận `approval_token` theo `args`) **không còn**: tool ghi = cặp `prepare_<op>` + `commit_intent`.
 
 **Xoay khoá (D14):** khoá ES256 (intent, approval) xoay với overlap 15 phút; JWKS/thư mục khoá công khai công bố cả `kid` cũ và mới trong thời gian overlap.
@@ -435,6 +449,29 @@ Agent và BFF/SPA **không** giữ khoá riêng nào.
 **Rủi ro còn lại (ghi rõ):** BFF bị chiếm có thể xin chữ ký cho intent của chính user đang đăng nhập (sub khớp). Giảm thiểu: BFF tối giản, token không xuống trình duyệt, CSP chặt từ M1; và tuỳ chọn step-up (WebAuthn/CIBA) cho thao tác rủi ro cao (sau v1.0).
 
 **Gateway nhận danh tính user:** agent gọi gateway với `Authorization: Bearer <API key của agent-service>` và `X-Acme-User-Token: <JWT aud=llm-gateway>`. Gateway chỉ tin header này khi key có `trust_end_user_token = true`. Khi đó chi phí, budget và chính sách PII tính theo `dept` của user.
+
+### 4.2 Máy trạng thái intent (D17; N06, N07) — định nghĩa duy nhất
+
+Các tài liệu khác chỉ tham chiếu mục này, không lặp lại bảng. Trạng thái lưu ở trường `status` của `mcp:tickets:intent:{intent_id}` (§2.1): `pending -> committing -> committed | failed`. **Hết hạn** = key hết TTL (`exp`+30s) -> `intent_expired` (hoặc `intent_not_found` nếu key đã bị xoá). Không có trạng thái nào khác.
+
+| Từ | Sự kiện | Đến | Mã lỗi trả về |
+|---|---|---|---|
+| (chưa có) | `prepare_*` | `pending` | — |
+| `pending` | `commit_intent`: Lua CAS `status==pending`, ghi `owner_jti = approval.jti` | `committing` | — |
+| `committing` | `commit_intent` khác tới | không đổi | `approval_replayed` |
+| `committed` | `commit_intent` tới | không đổi | `approval_replayed` |
+| `failed` | `commit_intent` tới | không đổi | `intent_mismatch` (reason=`failed`; phải `prepare` lại) |
+| `committing` | owner: transaction thành công | `committed` | — (trả `ok`) |
+| `committing` | owner: `expected_updated_at` lệch | `failed` | `conflict` |
+| `committing` | owner: vi phạm `UNIQUE(ticket_events.intent_id)` | `committed` | `approval_replayed` |
+| `committing` | owner: lỗi khác (rollback) | `failed` | `upstream_unavailable` |
+| mọi trạng thái | key hết TTL | (key mất) | `intent_expired` / `intent_not_found` |
+
+**Lua CAS:** script nhận `(key, expected_status, new_status, owner_jti)`. Chuyển `pending -> committing` chỉ khi `status == pending` và đặt `owner_jti`. Chuyển `committing -> committed | failed` chỉ khi `owner_jti` truyền vào bằng `owner_jti` đã lưu (chỉ owner mới kết thúc). Mỗi lần chuyển cập nhật `updated_at`; script trả trạng thái hiện tại để phía gọi ánh xạ mã lỗi theo bảng. Mỗi chuyển phát metric `mcp_intent_state_total{from,to}`.
+
+**Khôi phục `committing` quá 30s** (`updated_at` cũ hơn 30s, tiến trình owner đã chết): lần `commit_intent` kế tiếp tra `ticket_events` theo `intent_id`. Có dòng -> đặt `committed` (rồi trả `approval_replayed`, vì lần này không phải owner); không có -> đặt `failed` (người dùng phải duyệt lại qua `prepare_*` mới). Việc chuyển do tiến trình khôi phục thực hiện bằng Lua riêng kiểm `status == committing` và `updated_at` cũ, không cần `owner_jti`.
+
+**Bất biến:** tối đa một transaction ghi cho mỗi `intent_id` (nhờ CAS cộng `UNIQUE(ticket_events.intent_id)`, §3.3); `jti` approval dùng một lần (`mcp:tickets:jti:{jti}`).
 
 ## 5. Model alias (`config/models.yaml`)
 ```yaml
@@ -469,7 +506,8 @@ aliases:
 | 500 | `internal_error` | Lỗi không lường trước (không lộ chi tiết) |
 | 502 | `all_providers_failed` | Hết chuỗi fallback |
 | 503 | `provider_circuit_open` | Mọi provider trong chuỗi đều đang mở breaker |
-| 503 | `service_unavailable` | Degraded Redis quá `GW_DEGRADED_MAX_S` hoặc alias không phải `acme-fast` khi degraded; PG/Redis đều lỗi; policy-sidecar lỗi với `guard: fail_closed` |
+| 503 | `service_unavailable` | Degraded Redis quá `GW_DEGRADED_MAX_S` hoặc alias không phải `acme-fast` khi degraded; PG/Redis đều lỗi; policy-sidecar lỗi với guard prompt user `fail_closed` (`GW_GUARD_USER_FAIL_POLICY=closed`) |
+| 503 | `policy_unavailable` (D17) | Sidecar lỗi/timeout/429 khi request sắp đi tới **provider ngoài** và cần NER (`GW_NER_EXTERNAL_FAIL_POLICY=closed`); không có alias self-host để định tuyến lại. Không lộ chi tiết |
 
 ### 6.2 Header, endpoint
 
@@ -494,14 +532,14 @@ aliases:
 | POST | `/admin/cache/purge` | admin | Xoá theo `alias` hoặc `scope_hash` |
 | POST/PATCH | `/admin/keys` | admin | Tạo/sửa key, gồm cờ `expose_debug` |
 
-**Metric mới (D14; bảng đầy đủ ở 01 §7, 04 §6):** `gateway_sidecar_duration_seconds`, `gateway_sidecar_errors_total`, `gateway_sidecar_fail_policy_total`, `gateway_cache_ineligible_total`, `gw_degraded_overspend_max_usd`, `gateway_audit_anchor_age_seconds`, `gateway_audit_chain_verify_failed`, `approval_signer_requests_total{result}`, `approval_signer_sign_ms`, `mcp_approval_rejected_total{reason}`.
+**Metric mới (D14; bảng đầy đủ ở 01 §7, 04 §6):** `gateway_sidecar_duration_seconds`, `gateway_sidecar_errors_total`, `gateway_sidecar_fail_policy_total`, `gateway_cache_ineligible_total`, `gw_degraded_overspend_max_usd`, `gateway_audit_anchor_age_seconds`, `gateway_audit_chain_verify_failed`, `approval_signer_requests_total{result}`, `approval_signer_sign_ms`, `mcp_approval_rejected_total{reason}`. **D17:** `gw_policy_skipped_total{stage,reason}` (bước guard/NER bị bỏ qua do lỗi sidecar; alert khi > 0 trong 5 phút), `gw_policy_redacted_total{stage}` (đoạn nội dung bị thay bằng `[nội dung đã ẩn: không kiểm tra được an toàn]`), `mcp_intent_state_total{from,to}` (chuyển trạng thái intent, §4.2).
 
 **Endpoint BFF (D15/D16; cổng 8300; chi tiết `07` mục 2.6):** `GET /auth/login`, `GET /auth/callback` (cookie `__Host-login` SameSite=Lax, chỉ cho callback), `POST /auth/logout`, `GET /api/me`, `POST /api/chat` (SSE; `thread_id=null` tạo thread ngầm, event `thread`), `POST /api/resume` (edit/reject/refresh; `approve` không đi qua đây), `GET /api/threads`, `GET /api/threads/{id}/messages`, `DELETE /api/threads/{id}`, `POST /api/intents/verify`, `POST /api/approvals` (phải kèm `intent_sha256` đã verify; trả SSE của lượt resume), `GET /api/requests/{request_id}`, `GET /healthz`, `GET /readyz`, `GET /metrics`; M6: `/api/admin/*` (role `admin`).
 
 **Endpoint agent bổ sung (D16):** `GET /v1/requests/{request_id}` (agent giữ API key sở hữu request, kiểm request thuộc thread của `sub` rồi gọi `GET /v1/requests/{id}` của gateway) phục vụ `GET /api/requests/{id}`; `POST /v1/internal/evict` (`sub` lấy từ token Bearer, không nhận tham số). Chi tiết `03` mục 1.3.
 
 ### 6.3 Mã lỗi tool MCP (chuẩn hoá; trả trong kết quả tool lỗi, trường `code`; approval-signer dùng cùng mã trong body lỗi HTTP)
-`unauthorized`, `forbidden`, `not_found`, `invalid_argument`, `rate_limited`, `approval_required`, `approval_invalid`, `approval_expired`, `approval_mismatch`, `approval_replayed`, **`intent_not_found`** (không có intent, đã `committed`/hết TTL bị xoá), **`intent_expired`** (quá `exp` của intent), **`intent_mismatch`** (`sha256` không khớp `intent_sha256`, chữ ký intent sai, hoặc `sub` của intent khác `sub` của caller), **`intent_unrenderable`** (422; signer: intent có trường không hiển thị được trong `display_fields`, D15/N03), `conflict` (optimistic concurrency, `expected_updated_at` lệch), `query_rejected`, `query_timeout`, `upstream_unavailable`.
+`unauthorized`, `forbidden`, `not_found`, `invalid_argument`, `rate_limited`, `approval_required`, `approval_invalid`, `approval_expired`, `approval_mismatch`, **`approval_replayed`** (intent đã/đang được commit: trạng thái `committing`/`committed`, hoặc vi phạm `UNIQUE(ticket_events.intent_id)`, hoặc `jti` đã dùng; §4.2), **`intent_not_found`** (không có intent hoặc key đã bị xoá sau TTL), **`intent_expired`** (quá `exp` của intent), **`intent_mismatch`** (`sha256` không khớp `intent_sha256`, chữ ký intent sai, `sub` của intent khác `sub` của caller, hoặc intent ở trạng thái `failed` với reason=`failed`: phải `prepare` lại), **`intent_unrenderable`** (422; signer: intent có trường không hiển thị được trong `display_fields`, D15/N03), `conflict` (chỉ khi `expected_updated_at` lệch, intent chuyển `failed`; **không** dùng cho replay, §4.2), `query_rejected`, `query_timeout`, `upstream_unavailable`.
 
 ### 6.4 Lỗi BFF (D15/D16; JSON `{"error":{"code","message","retryable","request_id"}}`, không lộ chi tiết; mọi response có `X-Request-Id`)
 | HTTP | `code` | Khi nào |
@@ -517,7 +555,7 @@ aliases:
 | 413 | `request_too_large` | Body > 64 KiB |
 | 422 | `intent_unrenderable` | Chuyển tiếp từ signer; SPA không cho Duyệt |
 | 422 | `intent_mismatch` | Chuyển tiếp từ signer, hoặc `intent_sha256` gửi lên khác thẻ đã verify |
-| 429 | `rate_limited` | Vượt hạn mức theo phiên/IP/người dùng (+ `Retry-After`) |
+| 429 | `rate_limited` | Vượt hạn mức theo phiên/IP/người dùng, hoặc quá `BFF_MAX_CARDS_PER_THREAD_HOUR` thẻ duyệt mỗi thread mỗi giờ (N13) (+ `Retry-After`) |
 | 502 | `upstream_unavailable` | `agent`/`approval-signer`/Keycloak lỗi (503 khi Redis lỗi, fail-closed) |
 | SSE `error` | `upstream_timeout` (`retryable=true`) | Vượt `BFF_STREAM_MAX_S`/`BFF_STREAM_IDLE_S` |
 
@@ -540,14 +578,14 @@ Mã nhận từ agent qua SSE (`budget_exceeded`, `provider_unavailable`, ...) �
 
 | Service | Biến |
 |---|---|
-| gateway | `GW_DATABASE_URL`, `GW_REDIS_STATE_URL`, `GW_REDIS_CACHE_URL` (user `gateway`), `GW_KEY_PEPPER` (>= 32 byte), `GW_KEY_PEPPER_PREV` (tuỳ chọn), `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GW_SIDECAR_URL=http://policy-sidecar:8010`, `SIDECAR_TOKEN`, `SIDECAR_TOKEN_PREV` (tuỳ chọn, xoay token), `GW_SIDECAR_TIMEOUT_MS`, `GW_GUARD_FAIL_POLICY=fail_open\|fail_closed`, `GW_NER_FAIL_POLICY=skip_on_error`, `GW_WORKERS`, `GW_INSTANCES`, `GW_DEGRADED_MAX_S=600`, `AUDIT_HMAC_KEY`, `AUDIT_HMAC_KEY_ID`, `AUDIT_ANCHOR_DIR` (dev) / `AUDIT_ANCHOR_BUCKET` (prod), `GW_PROVIDER_OVERRIDE=mock` (factory thay MỌI phần tử của mọi chain bằng adapter `mock`, giữ tên model gốc để tính giá; không `if` trong business code), `GW_FEATURES=auth,ratelimit,budget,pii,guard,cache,router` (ablation; thứ tự stage cố định, `router` trước `cache`; `auth` chỉ tắt được khi `ACME_ENV=bench`), `GW_PII_STRICT`, `METRICS_TOKEN` |
-| policy-sidecar | `SIDECAR_PORT=8010`, `SIDECAR_TOKEN` (bearer nội bộ), `SIDECAR_TOKEN_PREV` (tuỳ chọn, chấp nhận token cũ khi xoay), `MODELS_LOCK_PATH=/app/models.lock`, `MODELS_LOCK_SHA256` (hash của `models.lock`; lệch -> từ chối khởi động), `SIDECAR_MODELS_DIR`, `SIDECAR_EMBED_ENABLED`, `SIDECAR_GUARD_ENABLED`, `SIDECAR_NER_ENABLED`, `SIDECAR_WORKERS`, `METRICS_TOKEN`. Không có khoá provider, DB hay Redis |
+| gateway | `GW_DATABASE_URL`, `GW_REDIS_STATE_URL`, `GW_REDIS_CACHE_URL` (user `gateway`), `GW_KEY_PEPPER` (>= 32 byte), `GW_KEY_PEPPER_PREV` (tuỳ chọn), `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GW_SIDECAR_URL=http://policy-sidecar:8010`, `SIDECAR_TOKEN`, `SIDECAR_TOKEN_PREV` (tuỳ chọn, xoay token), `GW_SIDECAR_TIMEOUT_MS`, `GW_GUARD_TOOL_FAIL_POLICY=redact` (guard nội dung tool/RAG lỗi -> thay đoạn bằng chỗ giữ chỗ, request vẫn chạy), `GW_GUARD_USER_FAIL_POLICY=open\|closed` (mặc định `open`, có metric), `GW_NER_EXTERNAL_FAIL_POLICY=closed` (request tới provider ngoài -> `503 policy_unavailable` hoặc định tuyến alias self-host; chỉ `open` cho model self-host) (D17; thay `GW_GUARD_FAIL_POLICY`, `GW_NER_FAIL_POLICY`), `GW_WORKERS`, `GW_INSTANCES`, `GW_DEGRADED_MAX_S=600`, `AUDIT_HMAC_KEY`, `AUDIT_HMAC_KEY_ID`, `AUDIT_ANCHOR_DIR` (dev) / `AUDIT_ANCHOR_BUCKET` (prod), `GW_PROVIDER_OVERRIDE=mock` (factory thay MỌI phần tử của mọi chain bằng adapter `mock`, giữ tên model gốc để tính giá; không `if` trong business code), `GW_FEATURES=auth,ratelimit,budget,pii,guard,cache,router` (ablation; thứ tự stage cố định, `router` trước `cache`; `auth` chỉ tắt được khi `ACME_ENV=bench`), `GW_PII_STRICT`, `METRICS_TOKEN` |
+| policy-sidecar | `SIDECAR_PORT=8010`, `SIDECAR_TOKEN` (bearer nội bộ), `SIDECAR_TOKEN_PREV` (tuỳ chọn, chấp nhận token cũ khi xoay), `MODELS_LOCK_PATH=/app/models.lock`, `MODELS_LOCK_SHA256` (hash của `models.lock`; lệch -> từ chối khởi động), `SIDECAR_MODELS_DIR`, `SIDECAR_EMBED_ENABLED`, `SIDECAR_GUARD_ENABLED`, `SIDECAR_NER_ENABLED`, `SIDECAR_WORKERS`, `SIDECAR_POOL_ONLINE_GUARD_NER`, `SIDECAR_POOL_EMBED_QUERY`, `SIDECAR_POOL_EMBED_INGEST` (kích thước pool theo lớp ưu tiên: guard/NER online > embed truy vấn > embed ingest) cùng `SIDECAR_MAXINFLIGHT_ONLINE_GUARD_NER`, `SIDECAR_MAXINFLIGHT_EMBED_QUERY`, `SIDECAR_MAXINFLIGHT_EMBED_INGEST` (`max_inflight` riêng; ingest không bao giờ làm đói online; D17), `METRICS_TOKEN`. Không có khoá provider, DB hay Redis |
 | approval-signer | `SIGNER_PORT=8310`, `SIGNER_AUDIENCE=approval-signer`, `SIGNER_ALLOWED_AZP` (mặc định `chat-ui`; D13/D15: signer kiểm `aud` + `azp == chat-ui` + `sub == intent.sub`), `APPROVAL_SIGNER_PRIVATE_KEY_PATH`, `APPROVAL_SIGNER_KEY_ID`, `INTENT_PUBLIC_KEYS_DIR` (khoá công khai intent của tickets-mcp, mount read-only), `APPROVAL_TTL_S=120`, `METRICS_TOKEN`. Không có DB, Redis hay secret nào khác |
 | agent | `AGENT_GATEWAY_URL=http://gateway:8000/v1`, `AGENT_GATEWAY_KEY`, `AGENT_KC_CLIENT_ID`, `AGENT_KC_CLIENT_SECRET`, `AGENT_DATABASE_URL` (`ag_app`), `AGENT_DATABASE_OWNER_URL` (`ag_owner`, chỉ job migrate/setup), `MCP_DOCS_URL=http://docs-mcp:8101/mcp`, `MCP_TICKETS_URL`, `MCP_ANALYTICS_URL`, `AGENT_MAX_TOOL_CALLS_TURN`, `AGENT_MAX_TURN_COST_USD`, `AGENT_RECURSION_LIMIT`, `AGENT_CONF_MIN`, `AGENT_CHECKPOINT_ENCRYPTION_KEY` (**bắt buộc** ngoài `ACME_ENV=test`), `AGENT_THREAD_RETENTION_DAYS=30`, `LANGFUSE_HOST/PUBLIC_KEY/SECRET_KEY` (profile `obs`), `LANGFUSE_CAPTURE_CONTENT=false` (mặc định, chỉ metadata), `METRICS_TOKEN`. Agent **không** có `APPROVAL_SIGNER_URL` và không được cấp quyền exchange tới `approval-signer` (D13) |
-| bff | `BFF_PUBLIC_URL`, `BFF_SESSION_KEY` (khoá AES-GCM mã hoá refresh token), `BFF_OIDC_CLIENT_SECRET` (client `chat-ui`), `BFF_AGENT_URL=http://agent:8200`, `BFF_SIGNER_URL=http://approval-signer:8310`, `BFF_REDIS_URL=redis://bff@redis-state:6379/0`, `BFF_SIGNER_TOKEN_TTL_S=300` (≤ 300), `BFF_SESSION_IDLE_S=1800`, `BFF_SESSION_ABS_S=28800`, `BFF_STREAM_MAX_S=300`, `BFF_STREAM_IDLE_S=45`, `BFF_LINK_ALLOWLIST` (host cho phép trong markdown; mặc định rỗng), `BFF_GATEWAY_URL` (M6, proxy admin), `BFF_COOKIE_INSECURE_DEV=false` (chỉ `ACME_ENV=dev`), `BFF_TRUSTED_PROXY=false`, `REDIS_BFF_PASSWORD` (user `bff` trên redis-state, `~bff:sess:*`), `METRICS_TOKEN`. BFF exchange lấy `aud=agent-service` và `aud=approval-signer`; token signer chỉ ở session server. **Không có** khoá ký (D15) |
-| docs-mcp | `MCP_AUDIENCE=docs-mcp`, `MCP_HOST` (tên adapter `mcp_sdk\|fastmcp`), `MCP_PORT=8101`, `MCP_PUBLIC_URL`, `MCP_DATABASE_URL` (`kn_app`), `MCP_REDIS_URL` (user `docs`; gồm taint), `DOCS_GATEWAY_URL`, `DOCS_GATEWAY_KEY` (key `owner_type=service`, `allowed_models={acme-embed}`, PII `allow`), `DOCS_RERANK`, `DOCS_RETRIEVER`, `MCP_TAINT_TTL_S=1800`, `MCP_ALLOWED_AZP`, `MCP_ALLOWED_ORIGINS`, `MCP_RL_CAPACITY`, `MCP_RL_REFILL_PER_S`, `MCP_MAX_OUTPUT_BYTES`, `MCP_AUDIT_DATABASE_URL`, `AUDIT_HMAC_KEY`, `AUDIT_HMAC_KEY_ID`, `METRICS_TOKEN` |
-| tickets-mcp | như docs-mcp (không có `DOCS_*`, `MCP_TAINT_TTL_S`), `MCP_AUDIENCE=tickets-mcp`, `MCP_PORT=8102`, `MCP_DATABASE_URL` (`tk_app`), `MCP_REDIS_URL` (user `tickets`), `INTENT_PRIVATE_KEY_PATH`, `INTENT_KEY_ID`, `INTENT_TTL_S=300` (khoá Redis TTL = `INTENT_TTL_S`+30), `APPROVAL_PUBLIC_KEY_PATH`, `TAINT_POLICY=warn\|block`, `TICKETS_REPOSITORY`, `INTENT_ISSUER` (`es256_jws`), `APPROVAL_VERIFIER` (`es256_jwt`), `AUDIT_HMAC_KEY`, `AUDIT_ANCHOR_DIR`. Adapter `permissive` (của `IntentIssuer`/`ApprovalVerifier`) chỉ khi `ACME_ENV=eval`, nếu không factory raise lúc khởi động; WARNING mỗi lần dùng |
-| analytics-mcp | như docs-mcp (không có `DOCS_*`), `MCP_AUDIENCE=analytics-mcp`, `MCP_PORT=8103`, `MCP_DATABASE_URL` (`an_reader`), `MCP_REDIS_URL` (user `analytics`). *Tuỳ chọn sau v1.0:* `ANALYTICS_ENABLE_RAW_SQL`, `ANALYTICS_CTX_HMAC_KEY` (>= 32 byte) |
+| bff | `BFF_PUBLIC_URL`, `BFF_SESSION_KEY` (khoá AES-GCM mã hoá refresh token), `BFF_OIDC_CLIENT_SECRET` (client `chat-ui`), `BFF_AGENT_URL=http://agent:8200`, `BFF_SIGNER_URL=http://approval-signer:8310`, `BFF_REDIS_URL=redis://bff@redis-state:6379/0`, `BFF_SIGNER_TOKEN_TTL_S=300` (≤ 300), `BFF_SESSION_IDLE_S=1800`, `BFF_SESSION_ABS_S=28800`, `BFF_MAX_CARDS_PER_THREAD_HOUR=10` (D17; vượt -> `429 rate_limited`), `BFF_STREAM_MAX_S=300`, `BFF_STREAM_IDLE_S=45`, `BFF_LINK_ALLOWLIST` (host cho phép trong markdown; mặc định rỗng), `BFF_GATEWAY_URL` (M6, proxy admin), `BFF_COOKIE_INSECURE_DEV=false` (chỉ `ACME_ENV=dev`), `BFF_TRUSTED_PROXY=false`, `REDIS_BFF_PASSWORD` (user `bff` trên redis-state, `~bff:sess:*`), `METRICS_TOKEN`. BFF exchange lấy `aud=agent-service` và `aud=approval-signer`; token signer chỉ ở session server. **Không có** khoá ký (D15) |
+| docs-mcp | `MCP_AUDIENCE=docs-mcp`, `MCP_HOST` (tên adapter `mcp_sdk\|fastmcp`), `MCP_PORT=8101`, `MCP_PUBLIC_URL`, `MCP_DATABASE_URL` (`kn_app`), `MCP_REDIS_URL` (user `docs`; gồm taint), `DOCS_GATEWAY_URL`, `DOCS_GATEWAY_KEY` (key `owner_type=service`, `allowed_models={acme-embed}`, PII `allow`), `DOCS_RERANK`, `DOCS_RETRIEVER`, `TAINT_RECENT_TTL_S=86400` (khoá `recent`; TTL khoá thread = `AGENT_THREAD_RETENTION_DAYS`; D17), `MCP_ALLOWED_AZP`, `MCP_ALLOWED_ORIGINS`, `MCP_RL_CAPACITY`, `MCP_RL_REFILL_PER_S`, `MCP_MAX_OUTPUT_BYTES`, `MCP_AUDIT_DATABASE_URL`, `AUDIT_HMAC_KEY`, `AUDIT_HMAC_KEY_ID`, `METRICS_TOKEN` |
+| tickets-mcp | như docs-mcp (không có `DOCS_*`; có `TAINT_RECENT_TTL_S` vì `get_ticket` ghi taint), `MCP_AUDIENCE=tickets-mcp`, `MCP_PORT=8102`, `MCP_DATABASE_URL` (`tk_app`), `MCP_REDIS_URL` (user `tickets`), `INTENT_PRIVATE_KEY_PATH`, `INTENT_KEY_ID`, `INTENT_TTL_S=300` (khoá Redis TTL = `INTENT_TTL_S`+30), `APPROVAL_PUBLIC_KEY_PATH`, `TAINT_POLICY=warn\|block`, `TICKETS_REPOSITORY`, `INTENT_ISSUER` (`es256_jws`), `APPROVAL_VERIFIER` (`es256_jwt`), `AUDIT_HMAC_KEY`, `AUDIT_ANCHOR_DIR`. Adapter `permissive` (của `IntentIssuer`/`ApprovalVerifier`) chỉ khi `ACME_ENV=eval`, nếu không factory raise lúc khởi động; WARNING mỗi lần dùng |
+| analytics-mcp | như docs-mcp (không có `DOCS_*`), `MCP_AUDIENCE=analytics-mcp`, `MCP_PORT=8103`, `MCP_DATABASE_URL` (`an_reader`), `MCP_REDIS_URL` (user `analytics`; ghi taint nên có `TAINT_RECENT_TTL_S`). *Tuỳ chọn sau v1.0:* `ANALYTICS_ENABLE_RAW_SQL`, `ANALYTICS_CTX_HMAC_KEY` (>= 32 byte) |
 | redis | `REDIS_GATEWAY_PASSWORD`, `REDIS_TICKETS_PASSWORD`, `REDIS_DOCS_PASSWORD`, `REDIS_ANALYTICS_PASSWORD`, `REDIS_HEALTH_PASSWORD`, `REDIS_OPS_PASSWORD` (đều qua `_FILE`) |
 | keycloak | `KC_HOSTNAME=http://keycloak.acme.local:8080`, `KC_DB_URL` (`kc_app`) |
 | TLS (chỉ bật ở M7, D14) | Mỗi service nhóm `<SVC>_TLS_CERT`, `<SVC>_TLS_KEY`, `<SVC>_TLS_CA` (đường dẫn file; qua `_FILE`/mount read-only); dev để trống |
@@ -602,9 +640,9 @@ sequenceDiagram
   AG->>TK: tools/call prepare_close_ticket + Bearer(aud=tickets-mcp)
   TK->>TK: verify JWT user (aud, iss, exp, scope tickets:write)
   TK->>PG: SET LOCAL app.*; SELECT ticket (RLS) → before, updated_at
-  TK->>RS: GET mcp:taint:{sub} (so với classification ticket)
+  TK->>RS: HGETALL mcp:taint:{sub}:{thread_id} và mcp:taint:{sub}:recent (so với acme.ticket_audience(draft))
   TK->>TK: tính intent {before, after, expected_updated_at, risk_flags}; ký JWS (khoá intent)
-  TK->>RS: HSET mcp:tickets:intent:{intent_id} {sha256, sub, pending} EX 330
+  TK->>RS: HSET mcp:tickets:intent:{intent_id} {jws, sha256, sub, status=pending} EX 330
   TK-->>AG: {intent_jws} (chưa đổi dữ liệu)
   AG-->>UI: interrupt {intent_jws} (SSE)
   UI->>KC: token-exchange (subject=token đăng nhập) → aud=approval-signer (azp=chat-ui; giữ trong session server, agent không thấy)
@@ -621,16 +659,17 @@ sequenceDiagram
   UI->>AG: Command(resume={approve, approval_token})
   AG->>TK: tools/call commit_intent(intent_id, approval_token) + Bearer(aud=tickets-mcp)
   TK->>TK: verify approval (chữ ký signer, aud, exp, sub == caller.sub)
-  TK->>RS: kiểm intent: tồn tại, sha256 khớp, status=pending
+  TK->>RS: đọc jws từ mcp:tickets:intent:{intent_id}; verify lại chữ ký intent; sha256 khớp
   TK->>RS: SET mcp:tickets:jti:{jti} NX EX 180 (chống replay)
-  TK->>PG: BEGIN; UPDATE tickets ... WHERE updated_at = expected (RLS); INSERT ticket_events; INSERT tool_audit; COMMIT
-  TK->>RS: intent status = committed
+  TK->>RS: Lua CAS pending -> committing (owner_jti); nếu không phải pending: nhánh replay/failed theo 4.2
+  TK->>PG: BEGIN; UPDATE tickets ... WHERE updated_at = expected (RLS); INSERT ticket_events (intent_id UNIQUE); INSERT tool_audit; COMMIT
+  TK->>RS: Lua committing -> committed (hoặc failed + conflict nếu expected_updated_at lệch)
   TK-->>AG: {ok, ticket, approval_jti}
   AG->>GW: final answer (acme-fast)
   AG-->>UI: "Đã đóng TCK-000123" + chi phí
   UI-->>SPA: SSE stream về trình duyệt
 ```
-Nhánh phụ: **Sửa** -> UI gửi tham số mới cho agent -> agent gọi lại `prepare_close_ticket` -> intent mới (lặp lại từ bước `prepare`). **Từ chối** -> graph quay lại `ticket_agent`, intent tự hết hạn sau 300s (khoá Redis dọn sau 330s). **Agent tự xin approval** (gọi `/v1/approvals` bằng chính token `aud=agent-service` mình cầm) -> `401/403` (D13/D15). **TOCTOU** (ticket đổi sau khi duyệt) -> `UPDATE` 0 dòng -> `conflict`, rollback, không ghi audit thành công. **Agent độc đổi tham số/ticket sau duyệt** -> `intent_mismatch` (hash không khớp) hoặc `intent_not_found`.
+Nhánh phụ: **Sửa** -> UI gửi tham số mới cho agent -> agent gọi lại `prepare_close_ticket` -> intent mới (lặp lại từ bước `prepare`). **Từ chối** -> BFF ghi `bff:sess:{sid}:rej`, graph quay lại `ticket_agent`, intent tự hết hạn sau 300s (khoá Redis dọn sau 330s), không có tool huỷ (N13). **Commit song song/lặp** -> đúng một lần thành công, các lần còn lại `approval_replayed` (§4.2). **Crash giữa transaction** -> khôi phục `committing` quá 30s theo §4.2. **Agent tự xin approval** (gọi `/v1/approvals` bằng chính token `aud=agent-service` mình cầm) -> `401/403` (D13/D15). **TOCTOU** (ticket đổi sau khi duyệt) -> `UPDATE` 0 dòng -> `conflict`, rollback, intent `failed`, không ghi audit thành công. **Agent độc đổi tham số/ticket sau duyệt** -> `intent_mismatch` (hash không khớp) hoặc `intent_not_found`.
 
 ## 9. Kiến trúc code: Ports & Adapters (BẮT BUỘC)
 
@@ -672,8 +711,8 @@ Nhánh phụ: **Sửa** -> UI gửi tham số mới cho agent -> agent gọi l�
 |---|---|---|---|---|---|
 | gateway | `ChatProvider` | `complete(req)`, `stream(req)` | `anthropic`, `gemini`, `mock` | openai, vertex, bedrock, vllm/ollama (on-prem) | Retrying, CircuitBreaking, Fallback, Metered |
 | gateway, policy-sidecar | `Embedder` | `embed(texts)` | gateway: `sidecar_http`; sidecar: `bge_m3_onnx`; test: `fake` | gemini-embedding, vietnamese_embedding | Metered |
-| gateway, policy-sidecar | `PiiDetector` | `detect(text) -> list[PiiSpan]` | gateway: `regex_vi` (thuần Python), `sidecar_ner` (gọi `/v1/pii/ner`, `skip_on_error`); policy-sidecar: `underthesea_ner` (D14; adapter nằm trong `packages/policy_sidecar`) | gliner; `presidio_vi` chỉ là baseline ngoài tuỳ chọn | Composite(regex → NER) |
-| gateway, policy-sidecar | `InjectionGuard` | `score(texts) -> list[float]` | gateway: `sidecar_http` (fail-policy `fail_open\|fail_closed`), `noop`; sidecar: `prompt_guard2_onnx` | llm_guard, azure prompt shields | Metered |
+| gateway, policy-sidecar | `PiiDetector` | `detect(text) -> list[PiiSpan]` | gateway: `regex_vi` (thuần Python), `sidecar_ner` (gọi `/v1/pii/ner`; lỗi -> theo `GW_NER_EXTERNAL_FAIL_POLICY`, D17); policy-sidecar: `underthesea_ner` (D14; adapter nằm trong `packages/policy_sidecar`) | gliner; `presidio_vi` chỉ là baseline ngoài tuỳ chọn | Composite(regex → NER) |
+| gateway, policy-sidecar | `InjectionGuard` | `score(texts) -> list[float]` | gateway: `sidecar_http` (fail-policy theo loại nội dung: tool/RAG `redact`, prompt user `open\|closed`, D17), `noop`; sidecar: `prompt_guard2_onnx` | llm_guard, azure prompt shields | Metered |
 | gateway | `ResponseCache` | `get(key_ctx, req)`, `put(...)` | `redis_exact`, `redis_semantic`, `null` | — | Composite(exact → semantic) |
 | gateway | `ModelRouter` | `route(req, principal) -> RouteDecision` | `static`, `complexity_v1` | routellm, classifier | — |
 | gateway, common | `RateLimiter` | `reserve(...)`, `settle(...)`, `acquire_slot(key_id, max)`, `release_slot(key_id)`; MCP dùng cho rate limit tool theo user | `redis_token_bucket`, `in_memory` (degraded, D5) | — | — |

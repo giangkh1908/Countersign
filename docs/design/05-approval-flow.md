@@ -1,8 +1,19 @@
 # 05 — Phê duyệt ràng buộc giao dịch (What You See Is What You Sign)
 
+> Phiên bản 1.4, 2026-10-29. **v1.4: áp dụng D17** (máy trạng thái intent, từ chối, taint; D17 thắng mọi mâu thuẫn).
 > Phiên bản 1.3, 2026-10-29. Tuân thủ `DECISIONS-v1.2.md` (D1, D7, D8, D10, **D15**; file đó thắng mọi mâu thuẫn). **v1.3 (D15, ADR-002):** UI là React+TS SPA + BFF FastAPI (service `bff`, cổng 8300) ngay từ MVP, Chainlit đã bị thay; luồng token đổi theo D15 (sửa N01/N02); render model phủ toàn bộ trường + `422 intent_unrenderable` (N03) và `00-contracts.md` (mọi điểm cần đổi contracts nằm ở mục 14 "Phụ thuộc contracts v1.2").
 > Đây là tài liệu trung tâm của điểm khác biệt sản phẩm: **agent ghi dữ liệu nghiệp vụ nhưng không bao giờ tự quyết nội dung người dùng được thấy lẫn nội dung được ký**. Liên quan: `02-mcp-servers.md` (tickets-mcp: `prepare_*`/`commit_intent`), `03-agent-ui.md` (interrupt, UI), `04-evaluation.md` (E4).
 > Code là minh hoạ thiết kế, chưa nằm trong repo. Chỗ API thư viện chưa xác minh ghi **[SPIKE]**.
+
+### Changelog v1.4 (D17; review-02 N05, N06, N07, N12, N13)
+
+| Thay đổi | Nguồn | Mục |
+|---|---|---|
+| Redis intent là HASH `{jws, sha256, sub, status, owner_jti, updated_at}`, TTL = intent `exp` + 30s; `commit_intent` đọc `jws` từ Redis và verify lại chữ ký; chỉ Redis user `tickets` có `~mcp:tickets:intent:*`; M7 mã hoá AOF | N05 | 3.1, 3.2, 4.2, 4.4, 6 |
+| Máy trạng thái `pending → committing → committed \| failed` (Lua CAS gắn `owner_jti`); đã bỏ `cancelled`/`aborted`; `UNIQUE(intent_id)` ⇒ `approval_replayed`; khôi phục `committing` > 30s qua `ticket_events.intent_id`. Định nghĩa chuẩn: `00 §máy trạng thái intent` | N06, N07 | 3.2, 3.3, 3.4, 4.4 |
+| Nhánh từ chối ở BFF: `bff:sess:{sid}:rej` (TTL 10 phút), chặn trình lại cùng `intent_id`/`sha256`; ≤ 10 thẻ/thread/giờ ⇒ `429 rate_limited`; không có tool huỷ | N13 | 3.5, 6 |
+| Taint theo `mcp:taint:{sub}:{thread_id}` + `:recent`, có `dept_set`; audience từ `acme.ticket_audience`; docs/analytics/`get_ticket` đều ghi; `/internal/taint/forget` | N12 | 6, 7 |
+| Fault-injection mới F34–F43; F06, F16, F25, F26 sửa | D17 | 9 |
 
 ## 0. Tóm tắt
 
@@ -37,10 +48,10 @@
 | T2 | Agent tráo args giữa lúc duyệt và lúc ghi | Duyệt `resolution=A`, gọi ghi với `resolution=B` | `commit_intent` **không nhận args**; MCP thực thi `args_canonical` lấy từ intent đã lưu; approval gắn `intent_sha256` | — |
 | T3 | Agent tự tạo "intent" giả | Dựng JWS giả để xin signer ký | Signer chỉ ký intent có chữ ký ES256 của MCP (khoá công khai mount sẵn, theo `iss`+`kid`); agent không có khoá intent | — |
 | T4 | Agent tự xin approval | Agent gọi `POST /v1/approvals` bằng token nó đang cầm (`aud=agent-service`) | **Đã quyết D15 (thay D13):** token đăng nhập `aud=chat-ui` không rời BFF; BFF token-exchange (RFC 8693) thành (a) `aud=agent-service` gửi cho agent mỗi request và (b) `aud=approval-signer` giữ server-side theo `session_id` (TTL ≤ 5 phút), không bao giờ gửi cho agent/trình duyệt; Keycloak chỉ cho `chat-ui` exchange tới `agent-service` và `approval-signer`, `agent-service` bị từ chối; signer kiểm `aud ∋ approval-signer`, `azp == chat-ui`, `sub == intent.sub` | Residual F30 (BFF bị chiếm) |
-| T5 | Replay approval/intent | Dùng lại approval, hoặc commit hai lần song song | `jti` `SET NX` (`mcp:tickets:jti:*`), `intent.status` pending→committed, chỉ mục `UNIQUE(intent_id)` ở DB độc lập Redis | — |
+| T5 | Replay approval/intent | Dùng lại approval, hoặc commit hai lần song song | `jti` `SET NX` (`mcp:tickets:jti:*`), `intent.status` Lua CAS `pending→committing` gắn `owner_jti` (hai approval khác `jti` không cùng thắng), chỉ mục `UNIQUE(intent_id)` ở DB độc lập Redis | — |
 | T6 | TOCTOU | Ticket bị người khác sửa giữa prepare và commit | `expected_updated_at` trong intent; UPDATE có điều kiện, 0 dòng → `conflict` | Người dùng phải prepare lại |
 | T7 | Giả danh người dùng | Approval của user A dùng cho phiên user B | Approval `sub` = `intent.sub` = `caller.sub` (3 điểm kiểm: signer, commit, DB `actor_sub`) | — |
-| T8 | Confused-deputy theo clearance | Agent đọc doc mật (clearance 3) rồi ghi nội dung vào ticket mà người clearance thấp đọc được | Taint D8: `risk_flags:["possible_downgrade"]`, UI cảnh báo đỏ; chính sách `warn|block` | Taint thô (mục 7.5) |
+| T8 | Confused-deputy theo clearance | Agent đọc doc mật (clearance 3) rồi ghi nội dung vào ticket mà người clearance thấp đọc được | Taint D8/D17 theo thread + phòng ban: `risk_flags:["possible_downgrade"]`, UI cảnh báo đỏ; chính sách `warn|block` | Taint không phân tích nội dung (mục 7.5) |
 | T9 | Sửa dữ liệu sau khi duyệt nhờ "edit" | SPA/BFF cho sửa rồi ký args do UI dựng | Nhánh edit **gọi lại `prepare_*`**; không có đường ký args do UI/agent dựng | — |
 | T10 | Hạ tầng chéo | Khoá approval lộ qua tầng UI | Khoá chỉ ở container `approval-signer`; BFF/SPA không có khoá | Chiếm signer |
 | T11 | **BFF bị chiếm** | Kẻ tấn công điều khiển tiến trình BFF | Không chặn được việc xin chữ ký cho **intent của chính user đang đăng nhập** (token exchange của user nằm ở BFF) | **Rủi ro còn lại** (1.3) |
@@ -51,7 +62,7 @@
 
 1. **BFF bị chiếm** có thể hiển thị thẻ giả cho người dùng *và* xin signer ký approval cho intent thật của user đó (vì nó cầm token exchange của user). Intent của người **khác** thì không (cần token của họ). Giảm thiểu (D15): BFF là service tối giản ngay từ MVP (bề mặt nhỏ, không chạy code LLM, chỉ proxy + phiên), SPA cùng origin với CSP `script-src 'self'`; step-up WebAuthn/CIBA (mục 12) làm "bằng chứng có mặt của người" độc lập với BFF.
 2. **Người dùng duyệt nhầm** dù thẻ đúng (fatigue). Đo bằng user study và `approval_latency_seconds`.
-3. **Taint thô**: có thể over-flag (người dùng chỉ đọc 1 doc mật rồi ghi ticket vô hại trong 30 phút).
+3. **Taint thô**: có thể over-flag (người dùng đọc 1 doc mật rồi ghi ticket vô hại trong cùng thread hoặc trong 24h qua `recent`); chỉ là tín hiệu cho người duyệt.
 4. **Chiếm tickets-mcp** = chiếm cả khoá intent: ngoài phạm vi; giảm bằng tách khoá intent theo MCP, đọc-ghi DB bằng role tối thiểu (`02`).
 
 ## 2. Luồng cũ và lỗ hổng R01
@@ -75,12 +86,12 @@ v1.2 loại bỏ L1–L6 bằng nguyên tắc: *nội dung hiển thị và nộ
 
 ### 3.1 Các bước (chuẩn)
 
-1. **Prepare.** Agent gọi `prepare_<op>(args)` (scope `tickets:write`, không đổi dữ liệu). tickets-mcp: validate, phân quyền (`TicketPolicy`), đọc DB, chuẩn hoá args (điền mặc định), tính `before/after`, đọc taint (7), dựng `risk_flags`, ký JWS bằng **khoá intent**, lưu `mcp:tickets:intent:{intent_id}` (HASH, TTL 330s = `exp-iat` 300 + 30s ân hạn để trả `intent_expired` rõ ràng), trả `{intent_id, intent_jws, expires_at}` cho agent.
+1. **Prepare.** Agent gọi `prepare_<op>(args)` (scope `tickets:write`, không đổi dữ liệu). tickets-mcp: validate, phân quyền (`TicketPolicy`), đọc DB, chuẩn hoá args (điền mặc định), tính `before/after`, đọc taint (7), dựng `risk_flags`, ký JWS bằng **khoá intent**, lưu `mcp:tickets:intent:{intent_id}` (HASH `{jws, sha256, sub, status=pending, owner_jti, updated_at}`, TTL = intent `exp` + 30s = 330s, ân hạn để trả `intent_expired` rõ ràng), trả `{intent_id, intent_jws, expires_at}` cho agent.
 2. **Interrupt.** Agent `interrupt({kind:"write_approval", intent_jws, intent_id})`. Agent **không** dựng preview, không đọc nội dung intent để quyết định hiển thị.
 3. **Verify/render.** SPA gọi `POST /api/intents/verify` (BFF); BFF gọi `POST signer /v1/intents/verify` kèm token `aud=approval-signer` của phiên. Signer xác minh chữ ký MCP + `exp` + `sub` và **kiểm tính hiển thị được** (N03), trả **render model** với `display_fields` phủ toàn bộ nội dung được ký, hoặc `422 intent_unrenderable`. SPA chỉ vẽ render model.
 4. **Approve.** Người dùng bấm Duyệt → SPA `POST /api/approvals` → BFF gọi signer `POST /v1/approvals {intent_jws}` → signer kiểm lại (gồm cả tính hiển thị được), ký **approval token** (hiệu lực 120s).
 5. **Resume.** BFF resume agent `Command(resume={decision:"approve", approval_token})`. Agent gọi `commit_intent(intent_id, approval_token)`.
-6. **Commit.** tickets-mcp kiểm approval (chữ ký, `aud`, `sub`, `intent_sha256`), tải intent từ Redis, so khớp, `SET NX jti`, thực thi `args_canonical` với `expected_updated_at` trong **một transaction** cùng `ticket_events` và `tool_audit` (D6), đặt `status=committed`.
+6. **Commit.** tickets-mcp kiểm approval (chữ ký, `aud`, `sub`, `intent_sha256`), đọc `jws` từ Redis và **verify lại chữ ký MCP** (nguồn duy nhất của `args_canonical`), so khớp, `SET NX jti`, Lua CAS `pending → committing` (gắn `owner_jti`), thực thi `args_canonical` với `expected_updated_at` trong **một transaction** cùng `ticket_events` và `tool_audit` (D6), rồi owner `jti` đặt `committed` (hoặc `failed` khi `conflict`). Máy trạng thái chi tiết: 3.4.
 
 ### 3.2 Sequence diagram (luồng chính và các nhánh lỗi)
 
@@ -104,9 +115,9 @@ sequenceDiagram
   UI->>AG: POST /threads/{id}/runs (chỉ token aud=agent-service)
   AG->>TK: prepare_close_ticket(code, resolution)
   TK->>DB: đọc ticket (RLS + TicketPolicy)
-  TK->>RS: đọc mcp:taint:{sub}
+  TK->>RS: đọc mcp:taint:{sub}:{thread_id} và :recent
   TK->>TK: tính intent, ký JWS ES256 (khoá intent)
-  TK->>RS: HSET mcp:tickets:intent:{id} sha256 sub status=pending jws, EXPIRE 330
+  TK->>RS: HSET mcp:tickets:intent:{id} jws sha256 sub status=pending owner_jti='' updated_at, EXPIRE exp+30s
   TK-->>AG: intent_id, intent_jws, expires_at
   AG->>AG: interrupt(intent_jws) và checkpoint
   AG-->>UI: event interrupt {intent_id, intent_jws} (SSE)
@@ -127,11 +138,12 @@ sequenceDiagram
     UI->>AG: POST /resume {approve, approval_token}
     AG->>TK: commit_intent(intent_id, approval_token)
     TK->>TK: verify chữ ký approval, aud, sub = caller.sub
-    TK->>RS: HGETALL intent, so sha256 = approval.intent_sha256, status = pending
+    TK->>RS: HGETALL intent, đọc jws và verify lại chữ ký MCP, so sha256 = approval.intent_sha256
     TK->>RS: SET mcp:tickets:jti:{jti} NX EX 180
+    TK->>RS: Lua CAS status pending -> committing, owner_jti = approval.jti
     TK->>DB: BEGIN, UPDATE ... WHERE updated_at = expected
-    TK->>DB: INSERT ticket_events, INSERT tool_audit, COMMIT
-    TK->>RS: HSET intent status=committed
+    TK->>DB: INSERT ticket_events (UNIQUE intent_id), INSERT tool_audit, COMMIT
+    TK->>RS: Lua (kiểm owner_jti) status committing -> committed
     TK-->>AG: ok, ticket, event_id
     AG-->>UI: done (completed)
   else Sửa
@@ -143,8 +155,10 @@ sequenceDiagram
     AG->>AG: interrupt(intent_jws mới)
     AG-->>UI: event interrupt (vòng duyệt mới, quay lại bước verify)
   else Từ chối
+    SPA->>UI: POST /api/resume {reject, reason?}
+    UI->>UI: ghi bff:sess:{sid}:rej (intent_id, sha256), TTL 10 phút
     UI->>AG: POST /resume {reject, reason?}
-    AG->>AG: không gọi commit, final_answer "đã huỷ"
+    AG->>AG: không gọi commit, final_answer "đã từ chối" (intent tự hết hạn theo TTL)
   end
 ```
 
@@ -174,24 +188,45 @@ sequenceDiagram
   Note over UI,SG: Nhánh conflict (TOCTOU)
   AG->>TK: commit_intent(intent_id, approval)
   TK->>TK: UPDATE ... WHERE updated_at = expected trả 0 dòng
-  TK->>RS: HSET intent status=aborted
+  TK->>RS: Lua (owner_jti) status committing -> failed
   TK-->>AG: conflict (details.reason = stale)
   AG-->>UI: thông báo ticket đã đổi, đề nghị prepare lại
+  Note right of AG: commit lại cùng intent => intent_mismatch (reason=failed)
 
   Note over UI,SG: Nhánh replay
   AG->>TK: commit_intent(intent_id, approval đã dùng)
-  TK->>RS: SET mcp:tickets:jti NX trả false, hoặc intent.status = committed
+  TK->>RS: SET jti NX trả false, hoặc CAS gặp committing/committed, hoặc UNIQUE(intent_id) vi phạm
   TK-->>AG: approval_replayed (details.already_applied = true, event_id)
+
+  Note over UI,SG: Nhánh tiến trình chết giữa committing
+  AG->>TK: commit_intent lần sau, status = committing quá 30s
+  TK->>RS: tra ticket_events.intent_id (qua DB)
+  TK-->>AG: có => committed + approval_replayed (already_applied); không => failed + intent_mismatch (reason=failed)
 ```
 
-### 3.4 Quy tắc trạng thái intent
+### 3.4 Quy tắc trạng thái intent (D17; định nghĩa chuẩn: 00 §máy trạng thái intent)
 
 ```
-pending --commit ok--> committed
-pending --conflict (ticket đổi)--> aborted
-pending --TTL--> (biến mất) => intent_not_found / intent_expired
+pending --Lua CAS (owner_jti = approval.jti)--> committing --DB ok--> committed
+                                                committing --expected_updated_at lệch--> failed   (lỗi conflict)
+                                                committing --UNIQUE(intent_id) vi phạm--> committed (lỗi approval_replayed)
+mọi trạng thái --key hết TTL (exp + 30s)--> (biến mất) => intent_expired / intent_not_found
 ```
-`pending` + lỗi hạ tầng khi commit (DB/Redis) giữ nguyên `pending`; jti đã đốt nên người dùng nhận approval mới (jti mới) cho **cùng** intent nếu intent còn hạn. Chỉ mục `UNIQUE(ticket_events.intent_id)` bảo đảm không có hai lần ghi dù Redis mất trạng thái.
+- Chỉ owner `jti` (Lua kiểm `owner_jti`) được chuyển `committing → committed | failed`. Hai approval khác `jti` cho cùng intent (luồng `approval_expired`/`needs_new_approval`) chỉ một bên thắng CAS; bên kia nhận `approval_replayed`.
+- Gặp `committing` (≤ 30s) hoặc `committed` ⇒ `approval_replayed`. Gặp `failed` ⇒ `intent_mismatch` (`reason=failed`, phải `prepare_*` lại).
+- Khôi phục: `committing` quá 30s (tiến trình chết) ⇒ lần gọi sau tra `ticket_events.intent_id`: có ⇒ `committed`, không ⇒ `failed`.
+- `cancelled` và `aborted` **đã bỏ**. Lỗi hạ tầng xác định (rollback) ⇒ `failed`; không xác định ⇒ để `committing` chờ khôi phục. `jti` đã đốt nên người dùng làm lại bằng intent mới.
+- `UNIQUE(ticket_events.intent_id)` (schema chuẩn 00 §3.3) bảo đảm không có hai lần ghi dù Redis mất trạng thái; vi phạm ánh xạ thành `approval_replayed`, không phải `conflict`.
+
+### 3.5 Nhánh từ chối và giới hạn thẻ (N13)
+
+Không thêm tool huỷ intent (agent bị chiếm sẽ không gọi). Việc kiểm soát nằm ở **BFF**:
+
+- Khi người dùng bấm Từ chối, BFF ghi `intent_id` và `intent_sha256` vào tập `bff:sess:{sid}:rej` (TTL 10 phút) rồi mới resume agent `reject`.
+- BFF **từ chối trình lại** (`POST /api/intents/verify`, `POST /api/approvals`, sự kiện interrupt mới) mọi thẻ có cùng `intent_id` **hoặc** cùng `intent_sha256` với một phần tử trong `rej`: trả `409 conflict` (`details.reason="rejected"`) và không gọi signer.
+- Agent `prepare` lại cùng nội dung sinh `intent_id` và `sha256` mới (khác `iat/exp/intent_id`). Để vẫn chặn được, BFF lưu thêm `content_sha256 = sha256(canonical_json({op, target, args_canonical}))` tính từ intent đã verify (cùng hàm `canonical_json`) và so cả khoá này.
+- Giới hạn **≤ 10 thẻ duyệt / thread / giờ** ở BFF (đếm số interrupt `write_approval` chuyển cho SPA, khoá `bff:sess:u:{sha256(sub)[:16]}:cards:{thread_id}` (STRING `INCR`, TTL 3600s; định nghĩa ở 07 §2.7 quy tắc 9)); vượt ⇒ `429 rate_limited` (kèm `Retry-After`), thẻ không tới người dùng. Giới hạn đặt ở BFF để không dựa vào agent.
+- Intent bị từ chối tự hết hạn sau 300s (TTL); không cần huỷ chủ động vì approval chỉ được ký khi người dùng bấm Duyệt.
 
 ## 4. Định dạng artefact
 
@@ -228,7 +263,7 @@ Quy tắc: `exp = iat + INTENT_TTL_S` (mặc định 300); `sub` = `caller.sub` 
 
 **Ràng buộc hiển thị (N03):** mọi khoá của `args_canonical` và `before/after` phải có trong bảng `op → display_fields` của signer (mục 5.3); khoá lạ ⇒ signer từ chối ký/verify với `422 intent_unrenderable`. Nhờ đó không tồn tại trường được ký mà người dùng không thấy.
 
-Lưu Redis: `mcp:tickets:intent:{intent_id}` HASH `{sha256, sub, status, exp, op, ticket_code, jws}`.
+Lưu Redis (D17/N05): `mcp:tickets:intent:{intent_id}` HASH `{jws, sha256, sub, status, owner_jti, updated_at}`, TTL = intent `exp` + 30s. `status` ∈ `pending|committing|committed|failed` (3.4). `commit_intent` đọc `jws`, **verify lại chữ ký** bằng khoá công khai của tickets-mcp rồi mới dùng `args_canonical` (agent và `commit_intent` không truyền args). Dữ liệu mang phân loại của ticket nên chỉ Redis user `tickets` có `~mcp:tickets:intent:*`; M7: mã hoá đĩa AOF của redis-state. `exp`, `op`, `ticket_code` lấy từ payload JWS đã verify, không lưu lặp.
 
 ### 4.3 Approval token (JWT ES256)
 
@@ -259,14 +294,14 @@ Header: `{"alg":"ES256","kid":"approval-2026-10","typ":"acme-approval+jwt"}`.
 | 5 | `sub == caller.sub` | `approval_mismatch` |
 | 6 | `intent_id` ở tham số == claim; Redis có intent (`HGETALL`) | `intent_not_found` |
 | 7 | `now <= intent.exp` | `intent_expired` |
-| 8 | `intent.sub == caller.sub`; `intent.sha256 == approval.intent_sha256` (so sánh hằng thời gian); băm lại `jws` đã lưu cũng khớp | `intent_mismatch` |
-| 9 | `intent.status == pending` (đã `committed` → `approval_replayed` + `already_applied`) | `approval_replayed` / `conflict` |
+| 8 | `jws` đọc từ Redis **verify chữ ký MCP**; `intent.sub == caller.sub`; `intent.sha256 == approval.intent_sha256` (so sánh hằng thời gian); băm lại payload đã verify cũng khớp | `intent_mismatch` |
+| 9 | Lua CAS `pending → committing` (ghi `owner_jti = approval.jti`). Gặp `committing`/`committed` → `approval_replayed` (+ `already_applied` khi `committed`); gặp `failed` → `intent_mismatch` (`reason=failed`); `committing` > 30s → khôi phục qua `ticket_events.intent_id` | `approval_replayed` / `intent_mismatch` |
 | 10 | `SET mcp:tickets:jti:{jti} NX EX 180` | `approval_replayed` |
 | 11 | Phân quyền lại với principal hiện tại (`can_view`, `can_modify`, state machine) | `not_found` / `forbidden` / `conflict` |
-| 12 | Thực thi trong 1 transaction, `WHERE updated_at=expected_updated_at` | `conflict` |
+| 12 | Thực thi trong 1 transaction, `WHERE updated_at=expected_updated_at`. Lệch → `committing → failed` + `conflict`; vi phạm `UNIQUE(intent_id)` → `committed` + `approval_replayed`; thành công → `committed` (chỉ owner `jti`) | `conflict` / `approval_replayed` |
 | 13 | Redis lỗi | `upstream_unavailable` (fail-closed) |
 
-Thứ tự: bước 10 sau mọi kiểm rẻ, trước khi ghi; kiểm quyền (11) trước `SET NX` khi có thể để không đốt jti vì lỗi đoán trước (giữ nguyên tinh thần v1.1).
+Thứ tự: bước 10 sau mọi kiểm rẻ, trước CAS (bước 9 thực thi sau 10 và 11; đánh số giữ nguyên để tương thích; code mẫu: `02` mục 6.7) và trước khi ghi; kiểm quyền (11) trước `SET NX` khi có thể để không đốt jti vì lỗi đoán trước (giữ nguyên tinh thần v1.1).
 
 ## 5. Service `approval-signer`
 
@@ -375,36 +410,53 @@ Metrics: `signer_verify_total{result}`, `signer_approval_total{result}`, `signer
 
 | Khoá | Kiểu | TTL | Ghi bởi | Đọc bởi | Nội dung |
 |---|---|---|---|---|---|
-| `mcp:tickets:intent:{intent_id}` | HASH | 330s | tickets (prepare, commit) | tickets | `sha256, sub, status, exp, op, ticket_code, jws` |
+| `mcp:tickets:intent:{intent_id}` | HASH | intent `exp` + 30s (330s) | tickets (prepare, commit; Lua CAS) | tickets | `jws, sha256, sub, status, owner_jti, updated_at` (`status` ∈ `pending\|committing\|committed\|failed`) |
 | `mcp:tickets:jti:{jti}` | STRING | 180s | tickets (SET NX) | tickets | `1` |
-| `mcp:taint:{sub}` | STRING (int) | `MCP_TAINT_TTL_S`=1800s (làm mới mỗi lần ghi) | **docs** | tickets | max classification đã trả cho user |
+| `mcp:taint:{sub}:{thread_id}` | HASH | `AGENT_THREAD_RETENTION_DAYS` (xoá cùng thread) | **docs, analytics, tickets** (`get_ticket`) | tickets (`prepare_*`) | `max_class, dept_set (JSON), sources (≤20 id), updated_at` |
+| `mcp:taint:{sub}:recent` | HASH | 24h | như trên | tickets | gộp mọi thread của `sub` (cùng dạng) |
+| `bff:sess:{sid}:rej` | SET | 10 phút | **bff** | bff | `intent_id`, `intent_sha256`, `content_sha256` của thẻ đã từ chối |
+| `bff:sess:u:{sha256(sub)[:16]}:cards:{thread_id}` | STRING | 1 giờ | **bff** | bff | thời điểm các thẻ duyệt đã trình (giới hạn ≤ 10/giờ) |
 
-ACL (bổ sung `users.acl`): `tickets`: `~mcp:rl:tickets-mcp:* ~mcp:tickets:intent:* ~mcp:tickets:jti:* %R~mcp:taint:*`; `docs`: `~mcp:rl:docs-mcp:* ~mcp:taint:*` (read+write vì script max, contracts §8); `signer`: không có user Redis. Prefix `{...}` tách rõ, không `KEYS`/`SCAN` cho tickets.
+ACL (bổ sung `users.acl`): `tickets`: `~mcp:rl:tickets-mcp:* ~mcp:tickets:intent:* ~mcp:tickets:jti:* ~mcp:taint:*` (read+write: `get_ticket` ghi taint, `prepare_*` đọc); `docs` và `analytics`: `~mcp:rl:{server}:* ~mcp:taint:*` (read+write vì script Lua gộp, contracts §8). **Chỉ user `tickets` có `~mcp:tickets:intent:*`** (khoá chứa JWS mang nội dung và phân loại của ticket); mọi user khác không có. Redis user `bff` chỉ lệnh đơn, không `MULTI/EVAL` (D15): các khoá `bff:*` dùng `SADD/EXPIRE/ZADD/ZCARD` đơn lẻ. `signer`: không có user Redis. M7: mã hoá đĩa AOF của redis-state. Không `KEYS`/`SCAN` cho tickets.
 
-## 7. Taint chống confused-deputy theo clearance (D8)
+## 7. Taint chống confused-deputy theo thread và phòng ban (D8, sửa D17/N12)
 
 ### 7.1 Vấn đề
 
-Người dùng clearance 3 hỏi agent về tài liệu mật; agent (hoặc injection trong tài liệu) ghi một phần nội dung vào comment/mô tả ticket mà người clearance 0–1 đọc được: rò rỉ hạ cấp, dù mọi lời gọi đều "đúng quyền" của người dùng.
+Người dùng clearance 3 hỏi agent về tài liệu mật; agent (hoặc injection trong tài liệu) ghi một phần nội dung vào comment/mô tả ticket mà người clearance 0–1, hoặc người **phòng ban khác**, đọc được: rò rỉ hạ cấp dù mọi lời gọi đều "đúng quyền" của người dùng. Hai lỗ hổng của v1.3: (a) taint TTL 1800s trong khi checkpoint giữ nội dung 30 ngày (D7); (b) chỉ so clearance nên bỏ qua chiều phòng ban (HR class 1 → ticket IT class 1: không cờ).
 
-### 7.2 Cơ chế
+### 7.2 Mô hình dữ liệu
 
-- **docs-mcp ghi** mỗi khi trả kết quả `search_documents`/`get_document`: `taint = max(taint_hiện_tại, max(classification các chunk trả về))` cho `mcp:taint:{sub}`, TTL 1800s, bằng script Lua nguyên tử (`+@scripting`). Ghi phía server; agent không đọc/ghi được khoá này.
-- **tickets-mcp đọc** trong `prepare_*` (ghi nội dung tự do: `create`, `add_comment`, `update_status` có `reason`, `close` có `resolution`): so với `audience_floor(ticket)` = clearance tối thiểu của những người đọc được ticket đích.
-- Quy tắc: nếu `taint > audience_floor` → thêm `possible_downgrade` vào `risk_flags` (và `risk=high`). Redis lỗi/không có khoá: coi như **không có taint** nhưng gắn `taint_unknown` khi Redis lỗi (khác với khoá không tồn tại = taint 0).
-- `audience_floor(ticket)`: cột `tickets.classification` (mặc định 0, mới; xem mục 14); comment `internal=true` dùng `max(classification, INTERNAL_FLOOR)` (cấu hình, mặc định 1).
+- `mcp:taint:{sub}:{thread_id}`: HASH `{max_class, dept_set (JSON), sources (≤20 id), updated_at}`, TTL = `AGENT_THREAD_RETENTION_DAYS`, xoá cùng thread. Khoá phụ `mcp:taint:{sub}:recent` (TTL 24h) gộp mọi thread của `sub`, để agent giả/đổi `thread_id` không trốn được.
+- `thread_id` do agent gửi trong `_meta` của MCP request. Nó chỉ chọn khoá taint, không dùng để phân quyền; thiếu `_meta.thread_id` ⇒ chỉ `recent`.
+- **Ai ghi:** docs-mcp (mỗi chunk trả về: `classification`, `department`), analytics-mcp (registry tool gắn `classification`/`dept`), tickets-mcp `get_ticket` (`tickets.classification`, `assignee_dept`). Ghi bằng Lua nguyên tử gộp `max_class = max(cũ, mới)` và `dept_set = hợp` (mã mẫu: `02` mục 5.7). Agent không đọc/ghi được khoá.
+- **Xoá:** khi xoá thread, agent gọi `POST /internal/taint/forget {thread_id}` của docs-mcp bằng token user; docs-mcp kiểm `sub` từ JWT và `DEL mcp:taint:{sub}:{thread_id}`. `:recent` tự hết hạn.
 
-### 7.3 Chính sách
+### 7.3 Tính audience và cờ
 
-`TAINT_POLICY=warn|block` (cấu hình tickets-mcp). `warn`: intent có cờ, signer render cảnh báo đỏ ("Nội dung có thể xuất phát từ tài liệu mật mức N, ticket này người mức M đọc được"), người dùng quyết định. `block`: `prepare_*` trả lỗi `forbidden` với `details.reason="possible_downgrade"`, không tạo intent. Mặc định `warn`; khuyến nghị `block` cho ticket `classification=0` khi taint ≥ 2.
+- `prepare_*` tính audience đích bằng hàm SQL `acme.ticket_audience(draft) -> (min_clearance, dept_set)` suy từ chính sách RLS `tk_select` (xem `02` mục 6.5), thay cho một số nguyên `audience_floor`:
 
-### 7.4 Kiểm thử
+```sql
+-- tk_select: requester (dept của requester) + employee của assignee_dept + admin (toàn cục, bỏ qua)
+-- dept_set = {requester_dept, assignee_dept}; comment internal chỉ {assignee_dept}
+-- min_clearance = classification của ticket đích (comment internal: GREATEST(classification, INTERNAL_FLOOR))
+SELECT * FROM acme.ticket_audience('{"classification":1,"assignee_dept":"IT","requester_dept":"HR"}'::jsonb);
+--  min_clearance | dept_set
+--  1             | {HR,IT}
+```
+- Gắn `possible_downgrade` (và `risk=high`) khi **`taint.max_class > audience.min_clearance`** hoặc khi **`audience.dept_set ⊄ taint.dept_set` với `taint.max_class ≥ 1`**. Xét cả taint của thread lẫn `recent`; `details.reason_source` ghi rõ nguồn (`thread` hoặc `recent`).
+- Redis lỗi khi đọc: gắn `taint_unknown` (khác "khoá không tồn tại" = `max_class 0`, `dept_set` rỗng).
+- **Kịch bản review-02 N12 (HR → IT qua ngày):** hôm qua `u_hr` hỏi bảng lương (class 1, dept `{HR}`). Hôm nay mở lại thread, nhờ tạo ticket giao IT: audience `(1, {IT})`; khoá thread vẫn còn (vòng đời = checkpoint), `{IT} ⊄ {HR}` và `max_class = 1` ⇒ có `possible_downgrade`.
 
-Xem F19–F21 (mục 9). Test đơn vị: bảng (taint × floor × policy × op).
+### 7.4 Chính sách
 
-### 7.5 Giới hạn
+`TAINT_POLICY=warn|block` (giữ nguyên, cấu hình tickets-mcp). `warn`: intent có cờ, signer render cảnh báo đỏ ("Nội dung có thể xuất phát từ tài liệu mức N phòng X; ticket này người mức M phòng Y đọc được"), người dùng quyết định. `block`: `prepare_*` trả `forbidden` với `details.reason="possible_downgrade"`, không tạo intent. Mặc định `warn`; khuyến nghị `block` khi `taint.max_class ≥ 2` hoặc lệch phòng ban.
 
-Per-user chứ không per-thread (over-flag); chỉ docs-mcp tạo taint (dữ liệu analytics/ticket phòng khác chưa tính; hướng mở rộng); không phân tích nội dung thực sự được chép. Đây là tín hiệu cho **con người**, không phải bằng chứng rò rỉ.
+### 7.5 Kiểm thử và giới hạn
+
+F26, F27, F41, F42, F43 (mục 9). Test đơn vị: bảng (taint thread/recent × audience × policy × op), parity SQL `acme.ticket_audience` với RLS `tk_select`.
+
+Giới hạn còn lại: không phân tích nội dung thực sự được chép (over-flag có thể xảy ra trong cùng thread hoặc 24h qua `recent`); admin đọc được mọi thứ nên không nằm trong `dept_set`; đây là tín hiệu cho **con người**, không phải bằng chứng rò rỉ.
 
 ## 8. Thay đổi giao diện công cụ tickets-mcp (tóm tắt, schema ở `02` mục 6.3)
 
@@ -427,7 +479,7 @@ Harness: `MaliciousAgent` (fake) gọi thẳng MCP/signer với chuỗi lời g�
 | F03 | Intent giả ký khoá khác | Agent tự ký JWS giả (khoá lạ) đưa BFF/signer | Signer `422 intent_mismatch` (`details.reason=signature`); không có approval |
 | F04 | Intent đúng khoá nhưng `kid` ngoài tập tin cậy | JWS ký bằng khoá docs-mcp, `iss=tickets-mcp` | `422 intent_mismatch` (`kid` không thuộc `INTENT_PUBLIC_KEYS_DIR`) |
 | F05 | Replay `jti` | `commit_intent` lần 2 với cùng approval | `approval_replayed` (+`already_applied`); 1 dòng `ticket_events` |
-| F06 | Commit song song | 2 `commit_intent` đồng thời | 1 thành công, 1 `approval_replayed`; 1 dòng ghi |
+| F06 | Commit song song, cùng approval | 2 `commit_intent` đồng thời với cùng approval | 1 thành công, 1 `approval_replayed`; 1 dòng ghi (xem F34 cho hai approval khác `jti`) |
 | F07 | Dùng approval của user khác | Token approval `sub=u_hr` do `u_cs` gọi | `approval_mismatch` |
 | F08 | Xin ký intent của user khác | Token user `u_cs`, `intent.sub=u_hr` gửi signer | `422 intent_mismatch` (`reason=sub`) |
 | F09 | Intent hết hạn (signer) | Gửi intent `exp` đã qua | `410 intent_expired` |
@@ -437,7 +489,7 @@ Harness: `MaliciousAgent` (fake) gọi thẳng MCP/signer với chuỗi lời g�
 | F13 | Thuật toán yếu | `alg=none`, `alg=HS256` ký bằng public key | `approval_invalid` |
 | F14 | Khoá/`kid` lạ hoặc `aud` sai | Approval ký khoá lạ; `aud=docs-mcp` | `approval_invalid` |
 | F15 | Sửa `intent_sha256` | Approval hợp lệ nhưng claim băm khác | `intent_mismatch` |
-| F16 | Ticket đổi sau prepare | Người khác UPDATE ticket sau prepare | `conflict`; intent → `aborted` |
+| F16 | Ticket đổi sau prepare | Người khác UPDATE ticket sau prepare | `conflict`; intent → `failed`; commit lại ⇒ `intent_mismatch` (`reason=failed`) (F36) |
 | F17 | Agent bỏ qua prepare | `commit_intent` với `intent_id` tự bịa (uuid ngẫu nhiên) | `intent_not_found` |
 | F18 | Commit không có approval | `commit_intent(intent_id)` thiếu token | `approval_required` |
 | F19 | Gọi tool ghi cũ | `tools/call close_ticket` | Lỗi tool không tồn tại (JSON-RPC) và pinning loại tool |
@@ -451,14 +503,24 @@ Harness: `MaliciousAgent` (fake) gọi thẳng MCP/signer với chuỗi lời g�
 | F33 | Kiểu field lạ ở SPA (N03) | Render model có `kind` không biết | SPA vô hiệu nút Duyệt, hiện cảnh báo |
 | F23 | Intent Redis bị mất | Xoá key intent sau prepare | `intent_not_found`, fail-closed |
 | F24 | Redis chết lúc commit | Dừng redis-state | `upstream_unavailable`, không ghi |
-| F25 | Lỗi giữa transaction | Giả lập lỗi sau UPDATE, trước INSERT audit | Rollback toàn bộ: không đổi ticket, không event; intent vẫn `pending` |
-| F26 | Taint downgrade (warn) | Đọc doc c3, `prepare_add_comment` lên ticket c0 | Intent có `possible_downgrade`, `risk=high` |
+| F25 | Lỗi giữa transaction | Giả lập lỗi sau UPDATE, trước INSERT audit | Rollback toàn bộ: không đổi ticket, không event; intent → `failed` (`internal_error`, `retry_prepare`) |
+| F26 | Taint downgrade (warn) | Đọc doc c3 (cùng `thread_id`), `prepare_add_comment` lên ticket c0 | Intent có `possible_downgrade` (`reason_source=thread`), `risk=high` |
 | F27 | Taint downgrade (block) | Như F26 với `TAINT_POLICY=block` | `forbidden` (`reason=possible_downgrade`), không tạo intent |
 | F28 | Clock skew | Approval `iat` > now + 5s | `approval_invalid` |
 | F29 | Intent đã committed, xin approval mới | Signer ký thêm cho cùng intent, commit | `approval_replayed` (`already_applied`) |
 | F30 | **Residual (ghi nhận, kỳ vọng thành công)** | BFF giả mạo xin approval cho intent của chính user đó | Thành công; chỉ ghi nhận để theo dõi, giảm bằng step-up (mục 12) |
+| F34 | Hai commit song song, hai approval khác `jti` (D17/N06) | Cùng `intent_id`, signer ký 2 approval (`jti` A, B), `commit_intent` đồng thời | Đúng 1 `committed` (1 dòng `ticket_events`), bên còn lại `approval_replayed`; `owner_jti` = bên thắng |
+| F35 | Kill tiến trình giữa `committing` (D17) | Dừng tickets-mcp sau CAS: (a) trước COMMIT, (b) sau COMMIT; lần gọi sau > 30s | (a) `failed` + `intent_mismatch` (`reason=failed`); (b) `committed` + `approval_replayed` (`already_applied`); không ghi 2 lần |
+| F36 | Conflict rồi commit lại (D17) | UPDATE ticket sau prepare; `commit_intent` 2 lần (approval mới ở lần 2) | Lần 1 `conflict` (intent `failed`); lần 2 `intent_mismatch` (`reason=failed`); DB không đổi |
+| F37 | Vi phạm `UNIQUE(intent_id)` (D17/N07) | Redis mất trạng thái; `ticket_events` đã có `intent_id` | `approval_replayed` (không `conflict`); intent → `committed` |
+| F38 | JWS trong Redis bị sửa (N05) | Sửa `jws`/`sha256` trong HASH intent | Verify lại chữ ký thất bại ⇒ `intent_mismatch`; DB không đổi; user Redis khác `tickets` không đọc được khoá |
+| F39 | Từ chối rồi trình lại (N13) | Bấm Từ chối; agent trình lại cùng `intent_id`, hoặc `prepare` lại cùng nội dung (`sha256`/`content_sha256` trùng) trong 10 phút | BFF `409 conflict` (`reason=rejected`), không gọi signer, không có thẻ |
+| F40 | Spam thẻ duyệt (N13) | Agent bị chiếm `prepare` liên tục để có thẻ mới trong một thread | Thẻ thứ 11 trong 1 giờ ⇒ `429 rate_limited` (BFF); thẻ không tới SPA |
+| F41 | Taint qua ngày HR → IT (N12) | `u_hr` đọc lương (class 1, dept HR) ở thread T; ngày hôm sau (FakeClock, `recent` hết hạn) tạo ticket giao IT trong thread T | Có `possible_downgrade` (`{IT} ⊄ {HR}`, `max_class ≥ 1`, `reason_source=thread`); `block` ⇒ `forbidden` |
+| F42 | Agent giả `thread_id` (N12) | Đọc doc mật ở thread T; `prepare_create_ticket` với `_meta.thread_id` khác hoặc bỏ `_meta` | Vẫn có `possible_downgrade` qua `recent` (`reason_source=recent`) |
+| F43 | Nguồn taint đủ + forget (N12) | `analytics` và `get_ticket` ghi taint; `forget` gọi bằng token user khác | Taint ghi ở docs/analytics/tickets; `forget` chỉ xoá khoá của chính `sub` |
 
-F31 chạy ở tầng service (pytest, `MaliciousAgent`); F32 và F33 chạy bằng Playwright trên compose (job `e2e` trong 04 mục 5.5) vì kiểm cách thẻ React hiển thị.
+F34–F38 chạy ở tầng service với Redis thật (Lua) và Postgres; F39–F40 chạy trên BFF; F41–F43 ở tầng service với fakeredis + `FakeClock`. F31 chạy ở tầng service (pytest, `MaliciousAgent`); F32 và F33 chạy bằng Playwright trên compose (job `e2e` trong 04 mục 5.5) vì kiểm cách thẻ React hiển thị.
 
 Chỉ số báo cáo (E4-3): số ca bị từ chối đúng mã / tổng; 0 ca ghi lọt; F30 báo riêng. Đây là **kiểm thử thuộc tính bảo mật**, không phải thí nghiệm thống kê.
 
@@ -501,18 +563,19 @@ Mục đích: thu hẹp rủi ro T11 (BFF bị chiếm) và T12 cho thao tác `r
 | Milestone | Nội dung |
 |---|---|
 | M1 | `approval-signer` + `prepare_close_ticket`/`commit_intent`; BFF + SPA tối thiểu (login, chat streaming, thẻ duyệt) gọi signer qua BFF; F01–F18 chạy CI |
-| M3 | Đủ 4 `prepare_*`; taint docs→tickets (D8); F19–F33 |
+| M3 | Đủ 4 `prepare_*`; taint docs/analytics/tickets→tickets (D8, D17); máy trạng thái intent và nhánh từ chối; F19–F43 |
 | M5 | Security regression trong CI; user study |
 | M6 | Trang admin qua BFF `/api/admin/*`, polish UX/a11y/i18n của thẻ duyệt (BFF đã có từ M1, D15) |
 | Sau v1.0 | Step-up WebAuthn/CIBA |
 
 ## 14. Phụ thuộc contracts v1.2
 
-Mục đã chốt bởi D13/D14: #1 (D13), #2 và #3 (D14); xoay khoá overlap 15 phút và TTL Redis intent 330 s = exp + 30 s (D14). Contracts v1.2 (`00-contracts.md` §4.1, §6, §8, §9.2) đã khớp với tài liệu này ở: định dạng intent/approval, `intent_sha256 = sha256(canonical_json(payload))`, render model, mã lỗi `intent_not_found|intent_expired|intent_mismatch`, `/v1/intents/verify` + `/v1/approvals` đều đòi access token user (aud `approval-signer`), ACL Redis cho `mcp:taint:*`, env `TAINT_POLICY|INTENT_TTL_S`, ports `IntentIssuer|IntentVerifier|ApprovalSigner|ApprovalVerifier|ReplayGuard|Clock`. Các điểm còn lệch hoặc cần xác nhận:
+Mục đã chốt bởi D13/D14: #1 (D13), #2 và #3 (D14); xoay khoá overlap 15 phút và TTL Redis intent 330 s = exp + 30 s (D14). Contracts v1.2 (`00-contracts.md` §4.1, §6, §8, §9.2) đã khớp với tài liệu này ở: định dạng intent/approval, `intent_sha256 = sha256(canonical_json(payload))`, render model, mã lỗi `intent_not_found|intent_expired|intent_mismatch`, `/v1/intents/verify` + `/v1/approvals` đều đòi access token user (aud `approval-signer`), ACL Redis cho `mcp:taint:*` (khoá theo `{sub}:{thread_id}` và `:recent`, D17), `mcp:tickets:intent:*` chỉ user `tickets`, env `TAINT_POLICY|INTENT_TTL_S|AGENT_THREAD_RETENTION_DAYS`, ports `IntentIssuer|IntentVerifier|ApprovalSigner|ApprovalVerifier|ReplayGuard|Clock`. Các điểm còn lệch hoặc cần xác nhận:
 
 1. **Một access token cho hai audience (T4/F22/F30): đã quyết D13, sửa bởi D15.** Token đăng nhập `aud=chat-ui` không gửi cho agent; BFF token-exchange (→ `agent-service`, → `approval-signer`), giữ server-side; bỏ client `bff`; signer kiểm `aud ∋ approval-signer`, `azp == chat-ui`, `sub == intent.sub`. Contracts §8 do worker khác cập nhật theo D15.
 2. DB tickets (chốt D14): `tickets.classification` mặc định `INTERNAL`; `ticket_events.intent_id uuid` (UNIQUE) + `intent_sha256 text` thay cho `args_sha256`; `tool_audit.intent_id` nullable; role `mcp_audit_w` chỉ INSERT. Env `INTERNAL_FLOOR` (mặc định 1).
 3. **Chốt D14:** `IntentIssuer.issue(op, target, draft, ctx)`; `draft` là args đã chuẩn hoá. Ghi chú gốc: tickets-mcp cần nhận thêm bản nháp đã tính (`before/after/expected_updated_at`, đọc qua `TicketRepository.read_for_intent`). Đề xuất truyền qua tham số `draft` hoặc dựng trong adapter có repo; ghi nhận là lệch nhỏ so với chữ ký contracts.
-4. Taint là mô-đun thường `acme_common/services/taint.py` dùng thẳng Redis client (không phải port, đúng §9 "không bọc Redis client"); test bằng fakeredis.
+4. Máy trạng thái intent (`pending → committing → committed | failed`, `owner_jti`, `UNIQUE(ticket_events.intent_id)`) cần có trong `00 §máy trạng thái intent` và `§3.3` (D17); `bff:sess:{sid}:rej` và `bff:sess:u:{sha256(sub)[:16]}:cards:{thread_id}` thêm vào danh mục khoá Redis của 00.
+4b. Taint là mô-đun thường `acme_common/services/taint.py` dùng thẳng Redis client (không phải port, đúng §9 "không bọc Redis client"); test bằng fakeredis.
 5. Mã HTTP của signer dùng mã lỗi contracts; nếu bật step-up thêm `step_up_required` (mục 12).
 6. `canonical_json`/`intent_sha256` ở `acme_common/services/canonical.py` dùng chung.

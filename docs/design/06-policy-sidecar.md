@@ -1,6 +1,6 @@
 # 06 — Policy-sidecar: embedding, guard và NER nội bộ
 
-> Phiên bản v1.2. Tài liệu mới theo `DECISIONS-v1.2.md` D2. Nguồn chân lý chung là `00-contracts.md` (v1.2); khi mâu thuẫn, `DECISIONS-v1.2.md` thắng. Gateway (`01-gateway.md`) chỉ là egress mỏng và gọi sidecar qua HTTP nội bộ.
+> Phiên bản v1.4 (D17: hàng đợi ưu tiên 3 lớp, mục 4.1; xem Changelog v1.4 cuối mục 4). Tài liệu mới theo `DECISIONS-v1.2.md` D2. Nguồn chân lý chung là `00-contracts.md` (v1.2); khi mâu thuẫn, `DECISIONS-v1.2.md` thắng. Gateway (`01-gateway.md`) chỉ là egress mỏng và gọi sidecar qua HTTP nội bộ.
 
 ## Mục lục
 1. Mục đích và ranh giới
@@ -110,7 +110,8 @@ Request:
 {
   "texts": ["Chính sách nghỉ phép năm 2026", "..."],
   "encoding": "base64",
-  "normalize": true
+  "normalize": true,
+  "source": "query"
 }
 ```
 - `texts`: 1..64 phần tử, mỗi phần tử ≤ 32 000 ký tự. `encoding`: `base64` (float32 little-endian, mặc định) hoặc `float` (mảng số, chỉ để debug). `normalize` mặc định `true` (L2).
@@ -195,7 +196,7 @@ Response 200:
 | 401 | `unauthorized` | thiếu/sai bearer |
 | 413 | `request_too_large` | body > giới hạn (embed 1 MiB, guard 2 MiB, ner 256 KiB) hoặc vượt số phần tử/độ dài |
 | 422 | `validation_error` | sai kiểu, trường lạ (`extra=forbid`) |
-| 429 | `overloaded` | hàng đợi đầy hoặc quá `max_inflight`; kèm `Retry-After` (giây) |
+| 429 | `overloaded` | hàng đợi đầy hoặc quá `max_inflight` **của lớp** (4.1); kèm `Retry-After` (giây) và `error.class` (`online` / `query` / `ingest`) |
 | 503 | `model_not_ready` | chưa nạp/verify xong, hoặc endpoint bị tắt bằng `SIDECAR_*_ENABLED=false` |
 | 500 | `internal_error` | lỗi khác (không kèm chi tiết) |
 
@@ -203,8 +204,29 @@ Batching và đồng thời:
 - **Embed**: các request đồng thời được gom micro-batch (cửa sổ chờ ≤ 5 ms, tối đa 32 chuỗi/batch, sắp xếp theo độ dài để giảm padding). Một ORT session, `intra_op_num_threads` cấu hình, `inter_op=1`.
 - **Guard**: gom cửa sổ 512 token của nhiều văn bản vào cùng batch (≤ 16 cửa sổ).
 - **NER**: mỗi khúc là một tác vụ trong `ProcessPoolExecutor(SIDECAR_WORKERS)`; timeout mỗi khúc 2 s.
-- `max_inflight` toàn service (mặc định 32); vượt thì 429 ngay (không xếp hàng vô hạn). Gateway có timeout ngắn và breaker phía client (`01` mục 1.8) nên 429 chỉ làm kích hoạt fail-policy, không treo request.
+- `max_inflight` **riêng từng lớp ưu tiên** (4.1) thay cho một giới hạn toàn service; vượt thì 429 ngay (không xếp hàng vô hạn), kèm tên lớp. Gateway có timeout ngắn và breaker phía client (`01` mục 1.8) nên 429 chỉ làm kích hoạt fail-policy, không treo request.
 - Deadline: mỗi request có hạn `SIDECAR_REQUEST_TIMEOUT_MS` (mặc định 2000 cho guard/embed, 1500 cho NER); quá hạn trả 503/`internal_error` và huỷ công việc chưa chạy.
+
+### 4.1 Hàng đợi ưu tiên 3 lớp (D17, N15)
+
+Một sidecar phục vụ cả đường online lẫn ingest tài liệu. Nếu dùng chung một hàng đợi, đợt ingest lớn làm guard/NER quá hạn và gateway phải redact hoặc `closed` (`01` mục 1.8). Vì vậy tách 3 lớp, mỗi lớp có pool thực thi và `max_inflight` riêng:
+
+| Lớp | Ưu tiên | Endpoint / nguồn | Pool | `max_inflight` mặc định |
+|---|---|---|---|---|
+| `online` | 1 (cao nhất) | `/v1/guard`, `/v1/pii/ner` | guard: pool ORT riêng; NER: `ProcessPoolExecutor(SIDECAR_POOL_ONLINE_GUARD_NER)` | `SIDECAR_MAXINFLIGHT_ONLINE_GUARD_NER=16` |
+| `query` | 2 | `/v1/embed` với `source=query` (embed truy vấn RAG và semantic cache) | pool ORT riêng | `SIDECAR_MAXINFLIGHT_EMBED_QUERY=8` |
+| `ingest` | 3 | `/v1/embed` với `source=ingest` (docs-mcp ingest, job nạp tài liệu) | pool ORT riêng, kích thước `SIDECAR_POOL_EMBED_INGEST` | `SIDECAR_MAXINFLIGHT_EMBED_INGEST=4` |
+
+Quy tắc:
+- Request `/v1/embed` mang trường `source` (`query` mặc định, `ingest`); giá trị `ingest` chỉ được chấp nhận với token có scope `ingest` (service docs-mcp), token khác gửi `ingest` bị 403 `forbidden`. Lớp `online` chỉ gán theo endpoint (guard/NER), client không chọn được.
+- Phân bổ CPU: kích thước pool mỗi lớp cố định theo `SIDECAR_POOL_ONLINE_GUARD_NER` / `SIDECAR_POOL_EMBED_QUERY` / `SIDECAR_POOL_EMBED_INGEST`. Ingest **không bao giờ** mượn luồng của online; online được phép mượn luồng rảnh của query/ingest nhưng ngược lại thì không. Hàng đợi trong từng lớp là FIFO có chặn độ dài bằng `max_inflight`.
+- Khi lớp đầy: 429 `overloaded` với `error.class` = lớp đó và `Retry-After`. Gateway chỉ thấy 429 của lớp `online` hoặc `query`; ingest nhận 429 thì tự giãn nhịp (backoff luỹ thừa) và không ảnh hưởng online.
+- Preemption nhẹ: micro-batch của ingest được cắt ngắn (≤ 8 chuỗi, thay vì 32) và kiểm hàng đợi `online` giữa các batch; batch ingest đang chạy không bị huỷ.
+- Metric (bổ sung mục 9): `sidecar_inflight{class}`, `sidecar_queue_wait_seconds{class}`, `sidecar_rejected_total{reason,class}`.
+- Env mới (tên chốt ở contracts §7): `SIDECAR_POOL_ONLINE_GUARD_NER`, `SIDECAR_POOL_EMBED_QUERY`, `SIDECAR_POOL_EMBED_INGEST`, `SIDECAR_MAXINFLIGHT_ONLINE_GUARD_NER`, `SIDECAR_MAXINFLIGHT_EMBED_QUERY`, `SIDECAR_MAXINFLIGHT_EMBED_INGEST`. `SIDECAR_WORKERS` cũ tương đương `SIDECAR_POOL_ONLINE_GUARD_NER`.
+- Scheduler là một `Port` nhỏ `PriorityScheduler(abc.ABC)` (adapter `three_class`, `FakeScheduler` cho test API); services chỉ gọi `submit(class, job)`.
+
+**Changelog v1.4 (D17):** thêm 4.1 (3 lớp ưu tiên), 429 kèm lớp, env `SIDECAR_POOL_*`/`SIDECAR_MAXINFLIGHT_*`, metric theo `class`, test tải ingest-vs-online.
 
 ---
 
@@ -374,7 +396,13 @@ CI thêm kiểm tra: lock hợp lệ theo schema; không có revision là nhánh
 | `SIDECAR_EMBED_ENABLED` | `true` | bật `/v1/embed` |
 | `SIDECAR_GUARD_ENABLED` | `true` | bật `/v1/guard` |
 | `SIDECAR_NER_ENABLED` | `true` | bật `/v1/pii/ner` |
-| `SIDECAR_WORKERS` | `2` | số process NER; ORT dùng thread trong process chính |
+| `SIDECAR_WORKERS` | `2` | (cũ) tương đương `SIDECAR_POOL_ONLINE_GUARD_NER` |
+| `SIDECAR_POOL_ONLINE_GUARD_NER` | `2` | kích thước pool lớp online (process NER) |
+| `SIDECAR_MAXINFLIGHT_ONLINE_GUARD_NER` | `16` | trần đồng thời lớp online (guard + NER) |
+| `SIDECAR_MAXINFLIGHT_EMBED_QUERY` | `8` | trần đồng thời embed truy vấn |
+| `SIDECAR_POOL_EMBED_QUERY` | `2` | kích thước pool embed truy vấn |
+| `SIDECAR_POOL_EMBED_INGEST` | `1` | kích thước pool embed ingest |
+| `SIDECAR_MAXINFLIGHT_EMBED_INGEST` | `4` | trần đồng thời embed ingest |
 
 Các tham số tinh (ngưỡng batch, cache LRU, giới hạn cửa sổ) nằm ở `config/sidecar.yaml` (đọc lúc khởi động, từ git), không đặt qua API.
 
@@ -415,9 +443,9 @@ Metric Prometheus (prefix `sidecar_`, label cố định, không label theo nộ
 | `sidecar_requests_total` | counter | `endpoint`, `code` |
 | `sidecar_request_duration_seconds` | histogram | `endpoint` |
 | `sidecar_batch_size` | histogram | `endpoint` |
-| `sidecar_queue_wait_seconds` | histogram | `endpoint` |
-| `sidecar_inflight` | gauge | |
-| `sidecar_rejected_total` | counter | `reason` (`overloaded`, `too_large`, `not_ready`) |
+| `sidecar_queue_wait_seconds` | histogram | `endpoint`, `class` |
+| `sidecar_inflight` | gauge | `class` (`online`, `query`, `ingest`) |
+| `sidecar_rejected_total` | counter | `reason` (`overloaded`, `too_large`, `not_ready`), `class` |
 | `sidecar_guard_cache_hits_total` / `_misses_total` | counter | |
 | `sidecar_guard_windows` | histogram | |
 | `sidecar_embed_tokens_total` | counter | |
@@ -443,6 +471,7 @@ Cấu trúc `packages/policy_sidecar/tests/`: `unit/`, `adapters/`, `contract/`,
 - **Slow** (`pytest -m slow`, có model thật, CI đêm): embed trả `dim=1024`, vector L2 = 1; độ tương đồng cặp câu tiếng Việt đồng nghĩa > cặp không liên quan; guard bắt mẫu injection tiếng Anh đơn giản và không bắt câu bình thường; NER bắt tên người tiếng Việt mẫu; bộ nhớ không rò (RSS ổn định sau 10 phút tải).
 - **Parity**: `eval_recall_parity.py` (mục 5.2) là cổng bắt buộc khi đổi model/lượng tử hoá.
 - **Security**: lock sai hash -> process thoát, không `ready`; thêm file lạ vào thư mục model -> từ chối; `.pkl` giả -> từ chối; fuzz body (JSON lồng sâu, chuỗi cực dài, Unicode lạ, null byte) không làm crash; ReDoS/DoS: văn bản 200k ký tự, 1000 cửa sổ -> bị giới hạn đúng, thời gian có trần; token sai không lộ thông tin thời gian (kiểm thô).
+- **Tải ưu tiên (D17)**: (a) bão ingest (đẩy `/v1/embed source=ingest` vượt `SIDECAR_MAXINFLIGHT_EMBED_INGEST` liên tục) trong khi chạy tải guard/NER bình thường ⇒ p95 guard/NER tăng ≤ 20% so với nền, 0 lỗi 429 ở lớp `online`, ingest nhận 429 `class=ingest`; (b) bão query ⇒ online không bị 429; (c) quá tải riêng lớp online ⇒ 429 `class=online` kèm `Retry-After`; (d) token không có scope `ingest` gửi `source=ingest` bị từ chối; (e) gateway + sidecar quá tải: không đoạn tool/RAG chưa kiểm nào tới provider fake (xem `04` security regression).
 - **Tải** (`bench/`): Locust/k6 đa endpoint; đo p50/p95/p99, RPS tối đa trước khi 429, RAM đỉnh; chạy lại trên phần cứng đích để thay số ước tính ở mục 7.
 - **Tích hợp với gateway** (job chậm ở `01` mục 18.2): kill sidecar -> fail-policy; chậm sidecar -> timeout đúng; token sai -> gateway ghi `gateway_sidecar_errors_total`.
 - Leak-grep: §9.1(8) và grep thứ hai cho `packages/gateway/src` (không có `onnxruntime|torch|tokenizers|transformers|sentence_transformers|huggingface_hub`); kiểm `packages/policy_sidecar/src/policy_sidecar/api` không import vendor.

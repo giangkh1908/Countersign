@@ -136,3 +136,29 @@ Người dùng quyết định bỏ Chainlit. Đồng thời sửa N01/N02 (revi
 - Client scope: `agent:invoke` (BFF → agent, có trong token exchange `aud=agent-service`), `signer:approve` (BFF → signer). Agent/signer kiểm scope ngoài `aud`/`azp`.
 - `display_fields[].kind`: nguồn chuẩn là `05-approval-flow.md` (§ render model); 07 và 00 dùng đúng tập đó.
 - Chấp nhận các quyết định trong 07: BFF giữ `intent_jws` trong `bff:sess:{sid}:pend` (trình duyệt chỉ gửi `thread_id`/`interrupt_id`); approve phải kèm `intent_sha256` đã verify; `POST /api/resume`, `GET /api/threads/{id}/messages`; cookie `__Host-login` SameSite=Lax chỉ cho callback; bidi/control khoá nút Duyệt, zero-width chỉ cảnh báo; CSP thêm `object-src 'none'`; `TokenBroker`/`TokenVerifier` chuyển vào `acme_common`; Redis user `bff` chỉ lệnh đơn, không `MULTI/EVAL`.
+
+## D17. Sửa 4 lỗi High của review-02 (N05, N06, N12, N15) + N07, N13 đi kèm
+**N05: Redis intent lưu JWS.** `mcp:tickets:intent:{intent_id}` là HASH `{jws, sha256, sub, status, owner_jti, updated_at}`, TTL = intent `exp` + 30s. `commit_intent` đọc `jws` từ Redis và **verify lại chữ ký** trước khi dùng `args_canonical`. Dữ liệu này mang phân loại của ticket; chỉ Redis user `tickets` có `~mcp:tickets:intent:*` (mọi user khác không có). M7: mã hoá đĩa AOF của redis-state.
+**N06 + N07: một máy trạng thái duy nhất.**
+- `pending → committing → committed | failed`. Hết hạn = key hết TTL ⇒ `intent_expired`. Bỏ `cancelled` và `aborted`.
+- `pending → committing`: Lua CAS, chỉ khi `status == pending`, đồng thời ghi `owner_jti = approval.jti`. Nếu status là `committing` hoặc `committed` thì trả `approval_replayed`. Nếu là `failed` thì trả `intent_mismatch` (reason=`failed`, cần prepare lại).
+- Chỉ owner `jti` được chuyển `committing → committed | failed` (Lua kiểm `owner_jti`).
+- Kết quả transaction DB:
+  - Thành công ⇒ `committed`.
+  - `expected_updated_at` lệch ⇒ `failed` + lỗi `conflict`.
+  - Vi phạm `UNIQUE(intent_id)` ⇒ `committed` + lỗi `approval_replayed` (không phải `conflict`).
+- Khôi phục: nếu `committing` quá 30s (tiến trình chết), lần gọi sau tra `ticket_events.intent_id`. Có ⇒ `committed`, không ⇒ `failed`.
+- `ticket_events.intent_id` có **`UNIQUE`** trong schema chuẩn (00 §3.3).
+**N13 (đi kèm): từ chối.** Không thêm tool huỷ (agent bị chiếm sẽ không gọi). BFF giữ tập intent đã từ chối `bff:sess:{sid}:rej` (TTL 10 phút) và từ chối trình lại cùng `intent_id` hoặc cùng `sha256`. Giới hạn ≤10 thẻ duyệt/thread/giờ ở BFF, vượt ⇒ `429 rate_limited`. Intent tự hết hạn sau 300s.
+**N12: taint theo thread + phòng ban + audience thật.**
+- Key `mcp:taint:{sub}:{thread_id}`, HASH `{max_class, dept_set (JSON), sources (≤20 id), updated_at}`. TTL bằng `AGENT_THREAD_RETENTION_DAYS`, xoá cùng thread. Thêm khoá phụ `mcp:taint:{sub}:recent` (TTL 24h) gộp mọi thread, để agent giả `thread_id` không trốn được taint.
+- `thread_id` do agent gửi trong `_meta` của MCP request. docs-mcp, analytics-mcp (tool gắn `classification`/`dept` trong registry) và tickets-mcp `get_ticket` đều **ghi** taint.
+- Xoá thread: agent gọi `POST /internal/taint/forget {thread_id}` của docs-mcp bằng token user, docs-mcp kiểm `sub`.
+- `prepare_*` tính audience đích bằng hàm SQL `acme.ticket_audience(draft) -> (min_clearance, dept_set)` suy từ chính sách RLS `tk_select`, không dùng một số nguyên floor. Gắn `possible_downgrade` khi `taint.max_class > audience.min_clearance` hoặc khi `audience.dept_set ⊄ taint.dept_set` với `max_class ≥ 1`. Xét cả taint của thread lẫn `recent`; `reason` ghi rõ nguồn. `TAINT_POLICY=warn|block` giữ nguyên.
+**N15: guard/NER không fail-open với nội dung rủi ro.**
+- Guard trên nội dung tool/RAG khi sidecar lỗi, timeout hoặc 429: **fail_closed theo đoạn**, thay đoạn bằng `[nội dung đã ẩn: không kiểm tra được an toàn]`. Request vẫn chạy, chỉ thiếu đoạn đó. Guard trên prompt của chính user: `fail_open` cấu hình được, có metric.
+- NER: **fail_closed** khi request đi tới provider ngoài, trả `503 policy_unavailable` (mã lỗi mới) hoặc định tuyến sang alias self-host nếu cấu hình có. Chỉ `fail_open` khi model self-host.
+- Sidecar có hàng đợi ưu tiên theo nguồn: guard/NER online > embed truy vấn > embed ingest. Mỗi lớp có pool và `max_inflight` riêng. Ingest không bao giờ làm đói online.
+- Metric `gw_policy_skipped_total{stage,reason}` và `gw_policy_redacted_total{stage}`. Alert khi skipped > 0 trong 5 phút.
+- Thêm ca security regression: làm sidecar quá tải ⇒ không đoạn tool/RAG nào chưa kiểm tra lọt tới provider, không tên người nào lọt tới provider ngoài.
+**Còn mở sau D17** (Medium/Low của review-02): N08–N11, N14, N16–N26. Xử lý ở vòng sau.

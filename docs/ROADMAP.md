@@ -108,13 +108,14 @@ Quy tắc: hết 2 ngày chưa đạt tiêu chí thì **chuyển sang phương �
 |---|---|---|
 | tickets-mcp: đủ `prepare_*`/`commit_intent` cho `create_ticket`, `add_comment`, `update_status`, `close_ticket`; audit ghi cùng transaction | W | Rollback đồng thời khi một bước lỗi; 0 thao tác ghi thiếu audit |
 | analytics-mcp: **chỉ tool tham số hoá**, view `security_barrier` mask PII, RLS FORCE, thu hồi quyền cột PII, role read-only | W | `an_reader` không đọc được `core.*`; test SQL/GUC không có đường vào |
-| Taint: docs-mcp ghi `mcp:taint:{sub}`; `prepare_*` gắn `possible_downgrade`; `TAINT_POLICY=warn\|block` | W | Test: đọc tài liệu mật rồi ghi ticket công khai -> cờ đỏ / bị chặn |
+| Taint (D17): docs-mcp, analytics-mcp, `get_ticket` ghi `mcp:taint:{sub}:{thread_id}` + `:recent`; `acme.ticket_audience(draft)`; `prepare_*` gắn `possible_downgrade`; `TAINT_POLICY=warn\|block` | W | Test: đọc tài liệu mật rồi ghi ticket công khai -> cờ đỏ / bị chặn; taint còn hiệu lực qua ngày (khoá `recent`) và qua phòng ban |
+| Máy trạng thái intent (00 §4.2), Redis lưu JWS + verify lại, `ticket_events.intent_id UNIQUE`, BFF `:rej` + giới hạn thẻ | W | Test máy trạng thái (xem DoD M3 mục 6) |
 | Checkpoint mã hoá + retention 30 ngày + API xoá thread | W | Test: DB chỉ chứa ciphertext; job xoá hoạt động |
 | Agent đủ 3 subgraph (docs, ticket, data) + input_guard; tập 150 câu có nhãn | W | Routing accuracy đo được |
 | Dữ liệu ACME đầy đủ: 4 phòng ban, ~200 tài liệu, ~2.000 ticket, DB bán hàng | W | Seed lặp lại, seed cố định |
 | Security regression v1 (E6) trong CI | W | Bảng vượt quyền = 0 |
 
-**DoD M3:** (1) mọi tool ghi chạy qua intent/approval, 100% ghi có `tool_audit` cùng transaction, và ca "agent gọi `/v1/approvals` bằng chính token agent cầm -> 401/403" vẫn xanh với mọi MCP/audience mới (D13); (2) E6 = 0 truy cập trái phép trong ≥ 30 ca; (3) DB `agent` không chứa plaintext hội thoại; (4) routing accuracy ≥ 90% trên 150 câu; (5) `uv run pytest` xanh, leak-grep rỗng.
+**DoD M3:** (1) mọi tool ghi chạy qua intent/approval, 100% ghi có `tool_audit` cùng transaction, và ca "agent gọi `/v1/approvals` bằng chính token agent cầm -> 401/403" vẫn xanh với mọi MCP/audience mới (D13); (2) E6 = 0 truy cập trái phép trong ≥ 30 ca; (3) DB `agent` không chứa plaintext hội thoại; (4) routing accuracy ≥ 90% trên 150 câu; (5) `uv run pytest` xanh, leak-grep rỗng; (6) test máy trạng thái intent: 2 `commit_intent` song song cho cùng intent -> đúng 1 thành công, cái kia `approval_replayed`; crash giả lập ở `committing` -> sau 30s khôi phục đúng (`committed` nếu có `ticket_events.intent_id`, ngược lại `failed`); `expected_updated_at` lệch -> `failed` + `conflict`; (7) taint qua ngày (khoá `recent`, `thread_id` giả) và qua phòng ban ra `possible_downgrade` đúng.
 
 ## M4 v0.4 — Policy sidecar & tối ưu chi phí
 
@@ -130,7 +131,7 @@ Quy tắc: hết 2 ngày chưa đạt tiêu chí thì **chuyển sang phương �
 | Guard bật theo kết quả pilot M0/M4 | O + W | Có quyết định bật/tắt kèm TPR/FPR |
 | NER underthesea, tập test PII ≥ 300 câu viết tay; so regex vs regex+CRF | W | CI theo entity (Wilson) |
 
-**DoD M4:** (1) gateway image không chứa onnxruntime/torch/tokenizers; (2) E3 trên trace agent thật: giảm chi phí ≥ 50% tại iso-quality (chất lượng giảm ≤ 3 điểm %) so với baseline tất-cả-đắt, và vượt router ngẫu nhiên cùng tỉ lệ; (3) semantic cache: 0 rò chéo scope, false-hit < 1% (đo, bật mặc định tắt); (4) độ trễ có/không sidecar được báo cáo phân rã theo stage; (5) PII recall ≥ 95% (CCCD/SĐT/email), precision PERSON được báo cáo riêng.
+**DoD M4:** (1) gateway image không chứa onnxruntime/torch/tokenizers; (2) E3 trên trace agent thật: giảm chi phí ≥ 50% tại iso-quality (chất lượng giảm ≤ 3 điểm %) so với baseline tất-cả-đắt, và vượt router ngẫu nhiên cùng tỉ lệ; (3) semantic cache: 0 rò chéo scope, false-hit < 1% (đo, bật mặc định tắt); (4) độ trễ có/không sidecar được báo cáo phân rã theo stage; (5) PII recall ≥ 95% (CCCD/SĐT/email), precision PERSON được báo cáo riêng; (6) ca sidecar quá tải/timeout/429: không đoạn tool/RAG chưa kiểm tra nào tới provider (bị thay bằng `[nội dung đã ẩn...]`), không tên người nào tới provider ngoài (`503 policy_unavailable`), embed ingest không làm đói guard/NER online; `gw_policy_skipped_total` tăng và alert kích hoạt.
 
 ## M5 v0.5 — Bộ đánh giá & red-team
 
@@ -148,7 +149,7 @@ Quy tắc: hết 2 ngày chưa đạt tiêu chí thì **chuyển sang phương �
 
 **Ngân sách M5:** phòng EVAL trần cứng **160 USD** (dự kiến ~130 USD), key riêng `eval-regression` cho nightly regression (D14).
 
-**DoD M5:** (1) security regression chạy trong CI mỗi PR, fail build khi hồi quy; (2) fault-injection 100% bị từ chối, ASR thao tác ghi = 0%; (3) có số liệu E1–E8 theo SLO của SOLUTION §9 (đạt hoặc có issue theo dõi cho mục chưa đạt); (4) user study hoàn tất với ≥ 8 người, báo cáo tỉ lệ duyệt nhầm kèm CI; (5) kết quả công bố seed/prompt/phiên bản.
+**DoD M5:** (1) security regression chạy trong CI mỗi PR, fail build khi hồi quy; (2) fault-injection 100% bị từ chối, ASR thao tác ghi = 0%; (3) có số liệu E1–E8 theo SLO của SOLUTION §9 (đạt hoặc có issue theo dõi cho mục chưa đạt); (4) user study hoàn tất với ≥ 8 người, báo cáo tỉ lệ duyệt nhầm kèm CI; (5) kết quả công bố seed/prompt/phiên bản; (6) security regression gồm các ca D17: commit song song/replay (`approval_replayed`), crash ở `committing`, taint qua ngày/qua phòng ban, intent đã từ chối bị trình lại, vượt 10 thẻ/thread/giờ, sidecar quá tải không lọt nội dung chưa kiểm.
 
 ## M6 v0.6 — Trang admin + polish UX/a11y/i18n
 

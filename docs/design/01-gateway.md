@@ -1,9 +1,15 @@
 # 01 — Thiết kế chi tiết LLM Gateway
 
-> Phiên bản 1.2, 2026-10-28. Tuân thủ `00-contracts.md` (tên key Redis, bảng Postgres, mã lỗi, header, env) và `DECISIONS-v1.2.md` (mâu thuẫn thì DECISIONS thắng). Chỗ nào contracts thiếu/chưa rõ thì **không sửa contracts** mà ghi vào mục 20–21.
+> Phiên bản 1.4, 2026-10-29. Tuân thủ `00-contracts.md` (tên key Redis, bảng Postgres, mã lỗi, header, env) và `DECISIONS-v1.2.md` (mâu thuẫn thì DECISIONS thắng). Chỗ nào contracts thiếu/chưa rõ thì **không sửa contracts** mà ghi vào mục 20–21.
 > Kiến trúc code theo `00-contracts.md §9` (Ports & Adapters, `abc.ABC`, factory registry, decorator).
 > Phạm vi: package `packages/gateway` (FastAPI, Python 3.12, `uv`). Phần suy luận model (embedding, prompt-injection guard, NER) **không** nằm trong gateway mà ở `06-policy-sidecar.md`. Tài liệu này là đặc tả để dev code thẳng theo; không chứa code chạy được của repo.
 > Thuật ngữ kỹ thuật giữ tiếng Anh. Mọi con số về latency/throughput là **mục tiêu SLO hoặc ước lượng**, phải đo lại bằng benchmark (E1).
+
+## Changelog v1.4 (D17, review-02 N15)
+
+- Guard: nội dung tool/RAG khi sidecar lỗi/timeout/429 ⇒ `fail_policy: redact` theo đoạn (thay bằng `[nội dung đã ẩn: không kiểm tra được an toàn]`); prompt user ⇒ `open` cấu hình được. Bỏ chế độ mở cho tool/RAG.
+- NER: `closed` khi provider ngoài (`503 policy_unavailable` hoặc định tuyến alias self-host); `open` chỉ self-host.
+- Env mới `GW_GUARD_TOOL_FAIL_POLICY`, `GW_GUARD_USER_FAIL_POLICY`, `GW_NER_EXTERNAL_FAIL_POLICY` (thay `GW_GUARD_FAIL_POLICY`/`GW_NER_FAIL_POLICY`); metric `gw_policy_skipped_total{stage,reason}`, `gw_policy_redacted_total{stage}`; mã lỗi mới `policy_unavailable`; threat model và test cập nhật. Mục: 1.8, 2 (stage 10), 8.4, 9.3, 15, 17.1, 18, 21.
 
 ## Changelog v1.2 (theo `DECISIONS-v1.2.md`, sau review-01)
 
@@ -60,7 +66,7 @@ packages/gateway/
     adapters/               # CHỈ nơi này import SDK/HTTP/regex-VN/redis script của vendor
       providers/ anthropic.py  gemini.py  mock.py  openai_compatible.py   # ChatProvider
       sidecar_http.py       # Embedder "sidecar_http", InjectionGuard "sidecar_http" + SidecarClient (composition, mục 1.8)
-      sidecar_ner.py        # PiiDetector "sidecar_ner" (gọi /v1/pii/ner, skip_on_error)
+      sidecar_ner.py        # PiiDetector "sidecar_ner" (gọi /v1/pii/ner; fail-policy theo provider đích, D17)
       pii_regex_vi.py       # PiiDetector "regex_vi" (thuần Python: regex + validator + context + PERSON theo danh xưng)
       guard_noop.py         # InjectionGuard "noop"
       cache_redis_exact.py  cache_redis_semantic.py  cache_null.py         # ResponseCache
@@ -264,8 +270,8 @@ class FallbackProvider(ChatProvider):      # nhận list[ChatProvider] theo chai
 class MeteredProvider(ChatProvider):       # histogram/counter/trace — CHỈ metadata, không payload
 class MeteredEmbedder(Embedder):           # đo thời gian/lỗi gọi sidecar /v1/embed
 class MeteredGuard(InjectionGuard):        # đo gọi sidecar /v1/guard
-class FailPolicyGuard(InjectionGuard):     # bọc timeout + breaker + fail_open|fail_closed quanh guard sidecar (mục 1.8)
-class MergedPiiDetector(PiiDetector):      # regex_vi (đồng bộ) + NER sidecar (tuỳ chọn, skip_on_error), giải quyết chồng lấn (8.3)
+class FailPolicyGuard(InjectionGuard):     # bọc timeout + breaker + fail_policy `redact|open|closed` quanh guard sidecar (mục 1.8, D17)
+class MergedPiiDetector(PiiDetector):      # regex_vi (đồng bộ) + NER sidecar (tuỳ chọn; `closed` khi provider ngoài, D17), giải quyết chồng lấn (8.3)
 class CompositeCache(ResponseCache):       # exact -> semantic (semantic chỉ đọc; chỉ ghi từ nguồn tin cậy, mục 10.7)
 class DegradingRateLimiter(RateLimiter):   # primary=redis, fallback=in_memory khi Redis lỗi (mục 4.5)
 class DegradingSpendTracker(SpendTracker): # primary=redis_pg, fallback=PG SUM + cộng dồn cục bộ (mục 4.5)
@@ -353,20 +359,33 @@ class SidecarNerDetector(PiiDetector):     # POST /v1/pii/ner      -> span PER (
 
 ```yaml
 sidecar:
-  guard: { timeout_ms: 400, block_deadline_ms: 2000, fail_policy: fail_open }   # fail_open | fail_closed
-  ner:   { timeout_ms: 150, fail_policy: skip_on_error }                         # skip_on_error | fail_closed (khi GW_PII_STRICT=1 cho dept block)
+  guard:
+    timeout_ms: 400
+    block_deadline_ms: 2000
+    tool_fail_policy: redact      # nội dung tool/RAG: redact | closed  (D17; KHÔNG có open)
+    user_fail_policy: open        # prompt của chính user: open | redact | closed (mặc định open, có metric)
+  ner:
+    timeout_ms: 150
+    external_fail_policy: closed  # provider ngoài: closed (503 policy_unavailable hoặc định tuyến alias self-host)
+    selfhost_fail_policy: open    # chỉ áp cho alias self-host
+    selfhost_fallback_alias: null # nếu đặt (vd acme-local), NER lỗi => định tuyến sang alias này thay vì 503
   embed: { timeout_ms: 150, fail_policy: miss }                                  # cố định: lỗi => bỏ semantic (miss), không bao giờ lỗi request
 ```
 
-Biến môi trường `GW_GUARD_FAIL_POLICY` và `GW_NER_FAIL_POLICY` (contracts §7) ghi đè các khoá `fail_policy` ở trên.
+Biến môi trường (D17) ghi đè: `GW_GUARD_TOOL_FAIL_POLICY` (`tool_fail_policy`), `GW_GUARD_USER_FAIL_POLICY` (`user_fail_policy`), `GW_NER_EXTERNAL_FAIL_POLICY` (`external_fail_policy`). `GW_GUARD_FAIL_POLICY` / `GW_NER_FAIL_POLICY` cũ bị thay thế (v1.4); nếu còn đặt thì gateway từ chối khởi động với thông báo đổi tên.
+
+**Ngữ nghĩa D17:** nội dung tool/RAG chưa được guard kiểm tra **không bao giờ** đi tới provider; chỉ prompt do chính user gõ mới được `open`. NER là lớp duy nhất phát hiện tên người, nên mất NER với provider ngoài nghĩa là có thể lộ PII.
 
 | Endpoint | Stage | Khi lỗi/timeout/breaker mở | Quan sát |
 |---|---|---|---|
 | `/v1/embed` | `cache` (semantic lookup/store) | `miss`: bỏ semantic, đi tiếp exact → provider | `gateway_sidecar_fail_policy_total{endpoint="embed",action="miss"}` |
-| `/v1/guard` | `guard` | `fail_open` (mặc định khi `guard.mode=flag`): bỏ qua, `skipped=true`, `ctx.cacheable=False`. `fail_closed` (khuyến nghị khi `guard.mode=block`): 503 `service_unavailable` sau `block_deadline_ms` | `gateway_guard_skipped_total`, `..._fail_policy_total{endpoint="guard"}` |
-| `/v1/pii/ner` | `pii` | `skip_on_error`: dùng kết quả regex, `gateway_pii_ner_timeouts_total`++; `fail_closed` (khi `GW_PII_STRICT=1` và policy hiệu lực `block`): 503 | `..._fail_policy_total{endpoint="ner"}` |
+| `/v1/guard` (đoạn tool/RAG) | `guard` | `redact` (mặc định): **theo từng đoạn**, thay đoạn bằng `[nội dung đã ẩn: không kiểm tra được an toàn]`, request vẫn chạy thiếu đoạn đó, `ctx.cacheable=False`, audit `guard.redacted` (hash đoạn). Áp cả khi sidecar trả 429/timeout/breaker mở. `closed`: 503 `service_unavailable` sau `block_deadline_ms` | `gw_policy_redacted_total{stage="guard"}`, `gw_policy_skipped_total{stage="guard",reason}`, `..._fail_policy_total{endpoint="guard"}` |
+| `/v1/guard` (prompt user) | `guard` | `open` (mặc định, cấu hình được): bỏ qua, `skipped=true`, `ctx.cacheable=False`; `redact`/`closed` như trên | `gw_policy_skipped_total{stage="guard",reason}` |
+| `/v1/pii/ner` | `pii` | Provider **ngoài**: `closed` — 503 `policy_unavailable` (mã lỗi mới D17, cần thêm vào contracts §6.1), hoặc định tuyến sang `selfhost_fallback_alias` nếu cấu hình. Chỉ alias **self-host**: `open` (dùng kết quả regex, `gateway_pii_ner_timeouts_total`++). Request không cần NER (xem 8.4) không bị ảnh hưởng | `gw_policy_skipped_total{stage="ner",reason}`, `..._fail_policy_total{endpoint="ner"}` |
 
-- Khởi động: gateway **không** chờ sidecar (không phụ thuộc cứng); `/readyz` báo `sidecar: ok|degraded` nhưng vẫn `ready` nếu fail-policy không phải `fail_closed`. Nếu có `fail_closed` được bật thì `/readyz` coi sidecar là thành phần bắt buộc.
+`reason ∈ {timeout, overloaded, breaker_open, error}`. Alert khi `gw_policy_skipped_total > 0` trong 5 phút (04 §Alert).
+
+- Khởi động: gateway **không** chờ sidecar (không phụ thuộc cứng); `/readyz` báo `sidecar: ok|degraded` nhưng vẫn `ready` vì mất sidecar thì redact/closed theo từng request chứ không để lọt. Nếu bật `closed` ở bất kỳ stage nào thì `/readyz` coi sidecar là thành phần bắt buộc.
 - Dữ liệu gửi sang sidecar: `/v1/guard` nhận **văn bản đã mask PII** (stage `pii` chạy trước); `/v1/embed` chỉ nhận câu hỏi đã qua PII scan = 0 entity; `/v1/pii/ner` nhận văn bản **chưa mask** (đó là mục đích của nó) nên chỉ gọi trong mạng `core`, sidecar không log nội dung (xem 17.1 và `06 §9`).
 
 ---
@@ -387,7 +406,7 @@ Biến môi trường `GW_GUARD_FAIL_POLICY` và `GW_NER_FAIL_POLICY` (contracts
 | 7 | Rate limit **reserve** | `gw:rl:{key,dept,user}:{id}:{req,tok}` (Lua `token_bucket.lua`) | 429 `rate_limit_requests` / `rate_limit_tokens` + `Retry-After` | một lần gọi Lua cho mọi bucket |
 | 8 | Budget check | `GET gw:spend:key:{key_id}:{yyyymm}`, `GET gw:spend:dept:{dept}:{yyyymm}` | 402 `budget_exceeded` | mục 5 |
 | 9 | PII (mask/block/allow) | — (mapping chỉ ở RAM) | 400 `pii_blocked` | trước cache để biết có PII không. Regex VN trong gateway; NER tên người (tuỳ chọn) → **`policy-sidecar` `/v1/pii/ner`** |
-| 10 | Guard injection | — | 400 `prompt_injection_detected` (mode block); 503 nếu `fail_closed` | chỉ tool/RAG; gọi **`policy-sidecar` `/v1/guard`** |
+| 10 | Guard injection | — | 400 `prompt_injection_detected` (mode block); đoạn tool/RAG không kiểm được ⇒ `redact` (D17); 503 nếu `closed` | tool/RAG (+ prompt user nếu bật); gọi **`policy-sidecar` `/v1/guard`** |
 | 11 | Router: alias -> chain | — | — | `acme-auto` resolve **trước** cache vì cache key chứa alias đã resolve |
 | 12 | Cache lookup (exact; semantic nếu bật) | `redis-cache`: `gwc:x:{sha}`, `FT.SEARCH gwc:sidx` | — | hit: nhảy tới stage 16. Semantic (tắt mặc định) gọi **`policy-sidecar` `/v1/embed`** |
 | 13 | Provider call + breaker + retry + fallback | `gw:cb:{provider}:state`, `gw:cb:{provider}:win:{bucket10s}` | 502 `all_providers_failed`, 503 `provider_circuit_open` | |
@@ -1303,7 +1322,7 @@ Gateway **luôn** lấy usage từ provider khi stream, chỉ chuyển chunk usa
 
 ### 8.1 Quyết định kiến trúc
 - **Presidio không phải thành phần của hệ thống** (R24; khác `SOLUTION.md §4` cũ, ghi ở mục 20): Presidio kéo spaCy + thinc + model (hàng trăm MB, nhiều dependency, tăng bề mặt supply chain) trong khi ta phải tự viết recognizer tiếng Việt. Presidio chỉ được phép xuất hiện như **baseline ngoài tuỳ chọn** khi đánh giá E7 (chạy ngoài gateway, ngoài image, so với `regex` và `regex+CRF`). Tự viết một khung nhỏ (~250 dòng) giữ cùng khái niệm: `pattern → validator → context → score`.
-- Pipeline: (1) regex + validator (đồng bộ, vài ms, **trong gateway**) → (2) tầng "danh xưng + tên" bằng regex (trong gateway, R26) → (3) NER CRF tên người qua `policy-sidecar /v1/pii/ner` (tuỳ chọn, timeout + `skip_on_error`) → (4) giải quyết chồng lấn → (5) áp chính sách.
+- Pipeline: (1) regex + validator (đồng bộ, vài ms, **trong gateway**) → (2) tầng "danh xưng + tên" bằng regex (trong gateway, R26) → (3) NER CRF tên người qua `policy-sidecar /v1/pii/ner` (tuỳ chọn, timeout; lỗi ⇒ `closed` với provider ngoài, D17) → (4) giải quyết chồng lấn → (5) áp chính sách.
 - **Ranh giới an toàn (D2):** các entity có cấu trúc (CCCD, SĐT, STK, MST, email, thẻ, SECRET...) và PERSON theo danh xưng **không phụ thuộc sidecar**; sidecar sập thì vẫn mask/block được. Sidecar chỉ bổ sung bắt tên người không có danh xưng.
 
 ### 8.2 Danh sách entity và recognizer
@@ -1338,7 +1357,7 @@ Gom mọi span, sắp theo `(score desc, độ dài desc, start asc)`, duyệt t
 ### 8.4 NER tên người (qua policy-sidecar)
 - Gateway **không** nạp model NER. Adapter `sidecar_http` (`SidecarNerDetector`) gọi `policy-sidecar POST /v1/pii/ner`; sidecar chạy NER CRF tiếng Việt trong process pool riêng (chi tiết ở `06 §6`, bản CRF mặc định, không kéo PyTorch).
 - Quyết định gọi hay không nằm ở gateway (`pii` stage): chỉ gọi khi (i) policy hiệu lực của request ≠ `allow`, (ii) cấu hình `pii.ner=sidecar`, (iii) regex **chưa** tìm thấy entity khiến request bị `block` (đã chặn thì khỏi gọi), (iv) văn bản có ≥1 chuỗi `[A-ZÀ-Ỹ][a-zà-ỹ]+(\s+[A-ZÀ-Ỹ][a-zà-ỹ]+)+`. Gửi theo lô: mọi vùng văn bản của request trong **một** lời gọi (≤ 8 text); văn bản dài hơn 8000 ký tự do sidecar cắt (4000/đoạn, tối đa 5 đoạn).
-- Timeout `sidecar.ner.timeout_ms` (150). Quá hạn/lỗi/breaker mở → dùng kết quả regex, `gateway_pii_ner_timeouts_total`++ (**`skip_on_error`**, vì NER chỉ là lớp bổ sung); `GW_PII_STRICT=1` đổi thành 503 cho request có policy hiệu lực `block`.
+- Timeout `sidecar.ner.timeout_ms` (150). Quá hạn/lỗi/429/breaker mở (D17): nếu alias đích đi tới **provider ngoài** ⇒ `closed`: định tuyến sang `selfhost_fallback_alias` nếu có, không thì 503 `policy_unavailable`; `gw_policy_skipped_total{stage="ner",reason}`++. Chỉ khi alias đích **self-host** mới `open` (dùng kết quả regex, `gateway_pii_ner_timeouts_total`++). Quyết định lấy theo alias đã resolve (nếu chưa resolve được thì coi là ngoài). `GW_PII_STRICT=1` giữ nguyên ý nghĩa bổ sung: ép `closed` cả khi self-host.
 - Span trả về là offset ký tự (Unicode code point) trên đúng chuỗi đã gửi; gateway gán `score=0.7`, entity `PERSON`, rồi đưa vào bước giải quyết chồng lấn (8.3) cùng span regex.
 - Văn bản gửi sang sidecar là bản **chưa mask** (bản chất của NER). Chỉ đi trong mạng `core` (không egress), sidecar không ghi nội dung vào log/metric/đĩa (`06 §9`); xem 17.1.
 - Hạn chế đã biết (ghi trong tài liệu đánh giá): tên viết thường/IN HOA, tên nước ngoài ít gặp. Đánh giá bằng tập test viết tay có nhãn (mục 18.5, E7).
@@ -1432,7 +1451,7 @@ class StreamUnmasker:
 
 ## 9. Chống prompt injection (guard chạy ở policy-sidecar)
 
-Port: `InjectionGuard.score(texts) -> list[float]` (adapter `sidecar_http`, `noop`; decorators `MeteredGuard`, `FailPolicyGuard`). Stage `guard` (services/stages/guard.py) chọn *văn bản nào* quét và quyết định flag/block; model, chia đoạn và suy luận nằm ở `policy-sidecar` (`06 §5`). Gateway không nạp model.
+Port: `InjectionGuard.score(texts) -> list[float]` (adapter `sidecar_http`, `noop`; decorators `MeteredGuard`, `FailPolicyGuard`). Stage `guard` (services/stages/guard.py) chọn *văn bản nào* quét và quyết định flag/block; model, chia đoạn và suy luận nằm ở `policy-sidecar` (`06 §4.1`). Gateway không nạp model.
 
 ### 9.1 Áp vào đâu
 Guard không quét toàn bộ prompt (tốn CPU, và nội dung user là "principal", không phải dữ liệu không tin cậy). Chỉ quét **dữ liệu không tin cậy**:
@@ -1456,7 +1475,7 @@ Không quét message `assistant` và `system`.
 | `block` | `score ≥ block_threshold` (0.95) | 400 `prompt_injection_detected`, audit `guard.block` (`deny`), không gọi provider. Vùng `[0.5, 0.95)` xử lý như `flag` |
 
 - **Điều kiện bật (R17):** guard chỉ được bật ở môi trường thật (M4) sau khi **pilot guard tiếng Việt** đạt tiêu chí go/no-go ở `06 §11`; trước đó `guard.mode=off` (hoặc `flag` chỉ để thu số liệu, không spotlight). Giá trị khởi đầu `0.5/0.95` là điểm xuất phát; **hiệu chỉnh** trên tập: payload từ AgentDojo + garak + mẫu tiếng Việt tự soạn (positive) và tài liệu nội bộ/ticket tiếng Việt bình thường (negative). Chọn `block_threshold` sao cho FPR ≤ 0.1% trên tập negative, `flag_threshold` ứng với FPR ≤ 1%. Báo cáo recall tiếng Việt riêng (số liệu công bố của Meta chủ yếu tiếng Anh).
-- Lỗi/quá tải/timeout/breaker sidecar mở → theo `sidecar.guard.fail_policy` (mục 1.8): `fail_open` (mặc định khi `mode=flag`): bỏ qua, `skipped=true`, `ctx.cacheable=False`, metric `gateway_guard_skipped_total`; `fail_closed` (khuyến nghị khi `mode=block`): chờ tối đa `block_deadline_ms` (2000), quá hạn thì 503 `service_unavailable`. Khởi động ghi WARN nếu `mode=block` mà `fail_policy=fail_open`.
+- Lỗi/quá tải (429)/timeout/breaker sidecar mở → theo mục 1.8 (D17): **đoạn tool/RAG** ⇒ `tool_fail_policy=redact` (mặc định): thay riêng đoạn đó bằng `[nội dung đã ẩn: không kiểm tra được an toàn]`, request vẫn chạy, `ctx.cacheable=False`, `gw_policy_redacted_total{stage="guard"}`++; `closed`: chờ tối đa `block_deadline_ms` (2000) rồi 503 `service_unavailable`. **Prompt của chính user** ⇒ `user_fail_policy=open` (mặc định, cấu hình được): bỏ qua, `skipped=true`, `gw_policy_skipped_total{stage="guard",reason}`++. Không còn đường nào cho đoạn tool/RAG chưa kiểm đi tiếp. Khởi động ghi WARN nếu `user_fail_policy=open` mà `mode=block`.
 
 ### 9.4 Ước lượng latency (CPU sidecar, phải đo lại ở E1)
 | Kịch bản | Ước lượng |
@@ -1935,7 +1954,9 @@ Mã lỗi quyền: thiếu/sai token → 401 `invalid_end_user_token`; thiếu r
 | `gateway_cache_semantic_distance` | histogram | — | phân phối `dist` khi có ứng viên |
 | `gateway_cache_shadow_mismatch_total` | counter | — | |
 | `gateway_pii_entities_total` | counter | `entity, action` | `action ∈ {masked, blocked, allowed}` |
-| `gateway_pii_ner_timeouts_total` | counter | — | NER qua sidecar quá hạn (`skip_on_error`) |
+| `gateway_pii_ner_timeouts_total` | counter | — | NER qua sidecar quá hạn (chỉ self-host `open`; provider ngoài ⇒ `closed`, D17) |
+| `gw_policy_skipped_total` | counter | `stage, reason` | stage guard/ner bị bỏ qua hoặc không chạy được; `stage ∈ {guard, ner}`, `reason ∈ {timeout, overloaded, breaker_open, error}`. Alert > 0 trong 5 phút (D17) |
+| `gw_policy_redacted_total` | counter | `stage` | số đoạn tool/RAG bị thay bằng `[nội dung đã ẩn…]` vì không kiểm tra được |
 | `gateway_pii_placeholder_mangled_total` | counter | — | |
 | `gateway_guard_score` | histogram | — | bucket 0.05…1.0 |
 | `gateway_guard_decisions_total` | counter | `decision` | `pass|flag|block|skipped` |
@@ -1951,7 +1972,7 @@ Mã lỗi quyền: thiếu/sai token → 401 `invalid_end_user_token`; thiếu r
 | `gateway_pricing_missing_total` | counter | `model` | |
 | `gateway_sidecar_duration_seconds` | histogram | `endpoint` | `endpoint ∈ {embed, guard, ner}`; thời gian chờ sidecar (RTT + xử lý), để tách overhead thuần gateway (E1, 2.6) |
 | `gateway_sidecar_errors_total` | counter | `endpoint, kind` | `kind` theo `SidecarError` (`timeout`, `connection`, `http_<status>`, `circuit_open`) |
-| `gateway_sidecar_fail_policy_total` | counter | `endpoint, action` | `action ∈ {miss, fail_open, fail_closed, skip}` (mục 1.8) |
+| `gateway_sidecar_fail_policy_total` | counter | `endpoint, action` | `action ∈ {miss, open, redact, closed, reroute}` (mục 1.8, D17) |
 | `gateway_cache_ineligible_total` | counter | `reason` | lý do request không cache được (10.1), phục vụ đo hit-rate trên trace agent (10.9) |
 | `gw_degraded_overspend_max_usd` | gauge | — | cận trên chi vượt mức trong phiên degraded (4.5, D5); tên theo contracts §2.3 |
 | `gateway_audit_anchor_age_seconds` | gauge | — | tuổi anchor gần nhất ghi thành công (13.4); alert nếu > 2 × `audit.anchor_interval_s` |
@@ -1999,7 +2020,7 @@ JSON một dòng/sự kiện (`logging` stdlib + formatter dùng `orjson`; khôn
 |---|---|
 | `auth,ratelimit,budget` | ≤ 6 ms |
 | + `pii` (regex, không NER) | ≤ 12 ms |
-| + `pii` có NER (gọi sidecar `/v1/pii/ner`) | ≤ 70 ms gồm RTT nội bộ (NER là điểm nghẽn; bật theo phòng ban; `skip_on_error` khi sidecar lỗi) |
+| + `pii` có NER (gọi sidecar `/v1/pii/ner`) | ≤ 70 ms gồm RTT nội bộ (NER là điểm nghẽn; bật theo phòng ban; sidecar lỗi ⇒ `closed` với provider ngoài, D17) |
 | + `cache` exact | ≤ 14 ms; hit: tổng ≤ 15 ms |
 | + `cache` semantic (gọi sidecar `/v1/embed`; tắt mặc định) | +40–90 ms trên đường miss, gồm RTT |
 | + `guard` (có tool result; gọi sidecar `/v1/guard`) | +20–150 ms theo độ dài, gồm RTT (lượt sau nhờ LRU cục bộ thấp hơn) |
@@ -2036,7 +2057,8 @@ Stream: overhead trên mỗi chunk ≤ 0.3 ms p99 (không PII) / ≤ 0.5 ms (có
 | | Secret trong image/env dump | secret qua Docker secrets/`.env`, không trong image, không in settings khi lỗi |
 | **D**oS | Flood request/token | rate limit (req+tok), concurrency, budget, body ≤4 MiB, `max_tokens` trần |
 | | Request nặng CPU (regex, và NER/guard/embed ở sidecar) | Gateway: giới hạn độ dài quét, regex có lượng từ giới hạn và không lồng nhau (test ReDoS bằng chuỗi tấn công). Sidecar: giới hạn kích thước/batch/cửa sổ, process pool cô lập, 429 `overloaded` khi quá tải (`06` mục 3, 7) |
-| | Sidecar chậm/sập kéo theo gateway | Timeout ngắn `GW_SIDECAR_TIMEOUT_MS`, circuit breaker phía client, chính sách theo stage: guard `fail_open|fail_closed` (`GW_GUARD_FAIL_POLICY`), NER `skip_on_error` (1.8); metric `gateway_sidecar_fail_policy_total` |
+| | Sidecar chậm/sập kéo theo gateway | Timeout ngắn `GW_SIDECAR_TIMEOUT_MS`, circuit breaker phía client, chính sách theo stage (D17): guard tool/RAG `redact` (`GW_GUARD_TOOL_FAIL_POLICY`), prompt user `open` (`GW_GUARD_USER_FAIL_POLICY`), NER `closed` với provider ngoài (`GW_NER_EXTERNAL_FAIL_POLICY`); metric `gateway_sidecar_fail_policy_total`, `gw_policy_skipped_total`, `gw_policy_redacted_total` |
+| **I**nfo disclosure | Sidecar quá tải/sập bị lợi dụng để đoạn tool/RAG chưa kiểm hoặc tên người lọt tới provider ngoài (N15) | Tool/RAG `redact` theo đoạn (không có đường `open`); NER `closed` với provider ngoài; hàng đợi ưu tiên 3 lớp ở sidecar để ingest không làm đói online (`06 §4.1`); alert `gw_policy_skipped_total > 0`; test security regression "sidecar overload" (mục 18, `04`) |
 | | Slowloris / client treo stream | `timeout_keep_alive`, timeout đọc body, đóng stream khi client ngắt |
 | | Redis/PG sập | degraded mode (4.5), breaker, L1/L2 key |
 | | Provider chậm kéo sập pool | `pool=2s`, timeout từng pha, breaker, deadline chuỗi |
@@ -2072,7 +2094,7 @@ Cấu trúc `packages/gateway/tests/`: `unit/`, `adapters/`, `integration/`, `co
 - `StreamUnmasker`: hypothesis — mọi cách chia chuỗi (kể cả chia giữa `<`, chữ số) cho kết quả = `unmask(whole)`; văn bản có `<` bình thường không bị trễ; `json_escape` cho arguments.
 - Mapping adapter (golden files): OpenAI↔Anthropic↔Gemini cho system/tool/tool-result/ảnh/stop reason/usage; stream event → `ChatChunk` → SSE (fixtures ghi từ API thật, đã ẩn danh).
 - Mọi test thời gian (TTL, degraded 600s, anchor hằng giờ, token bucket) dùng `FakeClock`, không `time.sleep`.
-- Stage dùng sidecar: `FakeEmbedder`/`FakeInjectionGuard`/`FakePiiDetector` kế thừa port. Test fail-policy: sidecar lỗi/timeout → guard `fail_open` cho qua + `x-acme-guard` ghi nhận, `fail_closed` trả lỗi; NER `skip_on_error` vẫn còn kết quả regex; `MergedPiiDetector` hợp span regex và NER đúng ưu tiên.
+- Stage dùng sidecar: `FakeEmbedder`/`FakeInjectionGuard`/`FakePiiDetector` kế thừa port. Test fail-policy (D17): sidecar lỗi/timeout/429 → đoạn tool/RAG bị thay bằng `[nội dung đã ẩn: không kiểm tra được an toàn]` (assert provider fake **không** nhận nội dung gốc), `gw_policy_redacted_total`++; prompt user với `user_fail_policy=open` đi tiếp + `gw_policy_skipped_total`++; `closed` trả 503; NER lỗi + alias provider ngoài ⇒ 503 `policy_unavailable` hoặc reroute sang `selfhost_fallback_alias` (FakeProvider ngoài không được gọi); NER lỗi + alias self-host ⇒ vẫn còn kết quả regex; `MergedPiiDetector` hợp span regex và NER đúng ưu tiên.
 - `SidecarClient` (adapter `sidecar_http`): mapping 401/413/422/429/503, timeout, breaker, `sidecar_ms` được ghi vào usage; không log nội dung.
 - `cost.py`: công thức có cached, `effective_from`, làm tròn half-up, long-context tier.
 - `tokens.py`: ước lượng và `calib`; `complexity_v1` (bảng prompt → điểm kỳ vọng); canonical/hash audit (bất biến với thứ tự key, không float); `scope_hash`/`exact_key` ổn định.
@@ -2176,7 +2198,7 @@ Cố ý **không dùng**: LiteLLM và mọi gateway/SDK tổng hợp (supply cha
 | 4 | Sidecar dùng lại port `PiiDetector` với adapter `underthesea_ner` (nằm trong `packages/policy_sidecar`) | Đề nghị | Contracts mới liệt kê `PiiDetector` cho gateway |
 | 5 | Tên model embedding `sidecar/embed` trong `models.yaml`/`pricing.yaml` thay cho `local/bge-m3` | ✅ chốt bởi D14 | Alias `acme-embed` giữ nguyên; docs-mcp ingest đi qua alias này |
 | 6 | Khoá chỉ nằm trong `gateway.yaml` (không env): `sidecar.*` (url lấy từ `GW_SIDECAR_URL`), `degraded.key_l1_ttl_s`, `degraded.allowed_aliases`, `degraded.overspend_alert_usd`, `cache.scopes`, `audit.anchor_interval_s`, `pii.person.*`, `guard.local_cache_size` | Đề nghị | Liệt kê vào danh sách config §3.1 |
-| 7 | Cột/trường: `api_keys.expose_debug`, `usage_events.sidecar_ms`, `audit_log.hmac_kid`; env `SIDECAR_TOKEN`, `GW_SIDECAR_URL`, `GW_SIDECAR_TIMEOUT_MS`, `GW_GUARD_FAIL_POLICY`, `GW_NER_FAIL_POLICY`, `GW_WORKERS`, `GW_INSTANCES`, `GW_DEGRADED_MAX_S`, `AUDIT_HMAC_KEY`, `AUDIT_HMAC_KEY_ID` | ✅ | Contracts §2.3, §3, §7 |
+| 7 | Cột/trường: `api_keys.expose_debug`, `usage_events.sidecar_ms`, `audit_log.hmac_kid`; env `SIDECAR_TOKEN`, `GW_SIDECAR_URL`, `GW_SIDECAR_TIMEOUT_MS`, `GW_GUARD_TOOL_FAIL_POLICY`, `GW_GUARD_USER_FAIL_POLICY`, `GW_NER_EXTERNAL_FAIL_POLICY` (thay `GW_GUARD_FAIL_POLICY`/`GW_NER_FAIL_POLICY`, D17; contracts §7 cần cập nhật), `GW_WORKERS`, `GW_INSTANCES`, `GW_DEGRADED_MAX_S`, `AUDIT_HMAC_KEY`, `AUDIT_HMAC_KEY_ID` | ✅ | Contracts §2.3, §3, §7 |
 | 8 | Endpoint admin cache: `POST /admin/cache/warmup`, `POST /admin/cache/faq`, `GET|DELETE /admin/cache/entries`, `POST /admin/cache/purge`; `expose_debug` trong `POST|PATCH /admin/keys` | ✅ đưa vào contracts §5 bởi D14 | Thêm vào bảng endpoint §6 (mục 14 của file này liệt kê chi tiết) |
 | 9 | Metric `gateway_sidecar_duration_seconds`, `gateway_sidecar_errors_total`, `gateway_sidecar_fail_policy_total`, `gateway_cache_ineligible_total`, `gw_degraded_overspend_max_usd`, `gateway_audit_anchor_age_seconds` | Đề nghị | Thêm vào danh mục metric §7 |
 | 10 | Leak-grep thứ hai (cấm `onnxruntime|torch|tokenizers|transformers|sentence_transformers|huggingface_hub` trong `packages/gateway/src`) | ✅ | Contracts §9.1(8) |
