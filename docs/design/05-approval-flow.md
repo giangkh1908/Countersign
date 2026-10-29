@@ -1,6 +1,6 @@
 # 05 — Phê duyệt ràng buộc giao dịch (What You See Is What You Sign)
 
-> Phiên bản 1.2, 2026-10-28. Tuân thủ `DECISIONS-v1.2.md` (D1, D7, D8, D10; file đó thắng mọi mâu thuẫn) và `00-contracts.md` (mọi điểm cần đổi contracts nằm ở mục 14 "Phụ thuộc contracts v1.2").
+> Phiên bản 1.3, 2026-10-29. Tuân thủ `DECISIONS-v1.2.md` (D1, D7, D8, D10, **D15**; file đó thắng mọi mâu thuẫn). **v1.3 (D15, ADR-002):** UI là React+TS SPA + BFF FastAPI (service `bff`, cổng 8300) ngay từ MVP, Chainlit đã bị thay; luồng token đổi theo D15 (sửa N01/N02); render model phủ toàn bộ trường + `422 intent_unrenderable` (N03) và `00-contracts.md` (mọi điểm cần đổi contracts nằm ở mục 14 "Phụ thuộc contracts v1.2").
 > Đây là tài liệu trung tâm của điểm khác biệt sản phẩm: **agent ghi dữ liệu nghiệp vụ nhưng không bao giờ tự quyết nội dung người dùng được thấy lẫn nội dung được ký**. Liên quan: `02-mcp-servers.md` (tickets-mcp: `prepare_*`/`commit_intent`), `03-agent-ui.md` (interrupt, UI), `04-evaluation.md` (E4).
 > Code là minh hoạ thiết kế, chưa nằm trong repo. Chỗ API thư viện chưa xác minh ghi **[SPIKE]**.
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | Ai dựng thẻ duyệt | Agent (preview từ `get_ticket` + args do LLM đề xuất) | **tickets-mcp** tính `intent` từ DB, ký JWS; agent chỉ chuyển tiếp |
 | UI hiển thị gì | `preview` trong payload agent gửi | **Render model** do `approval-signer` dựng từ intent đã xác minh chữ ký |
-| Ai ký approval | `ui` (Chainlit giữ khoá ES256) | **`approval-signer`** (service riêng, không egress), Chainlit không giữ khoá |
+| Ai ký approval | `ui` (Chainlit giữ khoá ES256; đã thay bằng SPA+BFF ở D15) | **`approval-signer`** (service riêng, không egress), BFF không giữ khoá |
 | Chữ ký ràng buộc | `sha256(args)` do agent/UI tự dựng | `intent_sha256` = băm payload intent do **MCP ký** |
 | Ghi dữ liệu | `close_ticket(args, approval_token)` | `prepare_close_ticket(args)` rồi `commit_intent(intent_id, approval_token)` |
 | TOCTOU | tuỳ chọn `expected_updated_at` trong args | `expected_updated_at` **nằm trong intent đã ký**, lệch → `conflict` |
@@ -26,7 +26,7 @@
 | Nội dung tài liệu/ticket/dữ liệu | Không tin cậy (injection lưu trữ) | Spotlighting ở `02` |
 | tickets-mcp | Tin cậy (giữ khoá intent, đọc DB, thực thi ghi) | Mỗi MCP có cặp khoá riêng |
 | approval-signer | Tin cậy (giữ khoá approval) | Mã nguồn ≤ 300 dòng để review được |
-| **UI backend (Chainlit, sau này BFF)** | Tin cậy một phần: **bị chiếm = rủi ro còn lại** (1.3) | Giảm thiểu ở M6 và step-up (mục 12) |
+| **BFF (FastAPI, D15)** + SPA React | BFF tin cậy một phần: **bị chiếm = rủi ro còn lại** (1.3); SPA chạy trong trình duyệt, chỉ vẽ render model | Bề mặt nhỏ (không chạy code LLM), CSP chặt, step-up (mục 12) |
 | Keycloak, Postgres, Redis | Tin cậy (hạ tầng); Redis `state` có ACL theo user | |
 
 ### 1.2 Các mối đe doạ và biện pháp
@@ -36,19 +36,20 @@
 | T1 | Agent bị lừa/chiếm đề xuất thao tác khác ý người dùng | Người dùng nói "đóng TCK-000123"; agent gửi `close TCK-000999` kèm lời giải thích đẹp | Thẻ chỉ lấy từ intent do MCP tính; mã ticket, `before`, `after` hiển thị đúng đối tượng sẽ bị ghi | Người dùng phải đọc thẻ (user study) |
 | T2 | Agent tráo args giữa lúc duyệt và lúc ghi | Duyệt `resolution=A`, gọi ghi với `resolution=B` | `commit_intent` **không nhận args**; MCP thực thi `args_canonical` lấy từ intent đã lưu; approval gắn `intent_sha256` | — |
 | T3 | Agent tự tạo "intent" giả | Dựng JWS giả để xin signer ký | Signer chỉ ký intent có chữ ký ES256 của MCP (khoá công khai mount sẵn, theo `iss`+`kid`); agent không có khoá intent | — |
-| T4 | Agent tự xin approval | Agent gọi `POST /v1/approvals` bằng token user nó đang cầm | **Đã quyết D13:** token user gửi agent chỉ có `aud=agent-service`; UI backend tự token-exchange (RFC 8693) sang `aud=approval-signer`, giữ server-side theo `session_id` (TTL ≤ 5 phút), không bao giờ gửi cho agent/trình duyệt; Keycloak chỉ cho `chat-ui`/`bff` exchange tới `approval-signer`, `agent-service` bị từ chối; signer kiểm `aud`, `azp ∈ {chat-ui, bff}`, `sub == intent.sub` | Residual F30 (UI backend bị chiếm) |
+| T4 | Agent tự xin approval | Agent gọi `POST /v1/approvals` bằng token nó đang cầm (`aud=agent-service`) | **Đã quyết D15 (thay D13):** token đăng nhập `aud=chat-ui` không rời BFF; BFF token-exchange (RFC 8693) thành (a) `aud=agent-service` gửi cho agent mỗi request và (b) `aud=approval-signer` giữ server-side theo `session_id` (TTL ≤ 5 phút), không bao giờ gửi cho agent/trình duyệt; Keycloak chỉ cho `chat-ui` exchange tới `agent-service` và `approval-signer`, `agent-service` bị từ chối; signer kiểm `aud ∋ approval-signer`, `azp == chat-ui`, `sub == intent.sub` | Residual F30 (BFF bị chiếm) |
 | T5 | Replay approval/intent | Dùng lại approval, hoặc commit hai lần song song | `jti` `SET NX` (`mcp:tickets:jti:*`), `intent.status` pending→committed, chỉ mục `UNIQUE(intent_id)` ở DB độc lập Redis | — |
 | T6 | TOCTOU | Ticket bị người khác sửa giữa prepare và commit | `expected_updated_at` trong intent; UPDATE có điều kiện, 0 dòng → `conflict` | Người dùng phải prepare lại |
 | T7 | Giả danh người dùng | Approval của user A dùng cho phiên user B | Approval `sub` = `intent.sub` = `caller.sub` (3 điểm kiểm: signer, commit, DB `actor_sub`) | — |
 | T8 | Confused-deputy theo clearance | Agent đọc doc mật (clearance 3) rồi ghi nội dung vào ticket mà người clearance thấp đọc được | Taint D8: `risk_flags:["possible_downgrade"]`, UI cảnh báo đỏ; chính sách `warn|block` | Taint thô (mục 7.5) |
-| T9 | Sửa dữ liệu sau khi duyệt nhờ "edit" | UI cho sửa rồi ký args do UI dựng | Nhánh edit **gọi lại `prepare_*`**; không có đường ký args do UI/agent dựng | — |
-| T10 | Hạ tầng chéo | Khoá approval lộ qua Chainlit | Khoá chỉ ở container `approval-signer`; Chainlit không có khoá | Chiếm signer |
-| T11 | **UI backend bị chiếm** | Kẻ tấn công điều khiển tiến trình Chainlit | Không chặn được việc xin chữ ký cho **intent của chính user đang đăng nhập** (token của user nằm ở UI) | **Rủi ro còn lại** (1.3) |
+| T9 | Sửa dữ liệu sau khi duyệt nhờ "edit" | SPA/BFF cho sửa rồi ký args do UI dựng | Nhánh edit **gọi lại `prepare_*`**; không có đường ký args do UI/agent dựng | — |
+| T10 | Hạ tầng chéo | Khoá approval lộ qua tầng UI | Khoá chỉ ở container `approval-signer`; BFF/SPA không có khoá | Chiếm signer |
+| T11 | **BFF bị chiếm** | Kẻ tấn công điều khiển tiến trình BFF | Không chặn được việc xin chữ ký cho **intent của chính user đang đăng nhập** (token exchange của user nằm ở BFF) | **Rủi ro còn lại** (1.3) |
+| T13 | **Thẻ che giấu nội dung (N03)** | Intent có trường trong `args_canonical` mà thẻ không hiển thị, hoặc tiêu đề chứa ký tự bidi/điều khiển (U+202E...) làm đảo chiều đọc | Signer trả `display_fields` phủ **toàn bộ** `args_canonical` + `before/after`; trường không hiển thị được ⇒ `422 intent_unrenderable` (không có thẻ); SPA render mọi field theo kiểu, kiểu lạ ⇒ không cho bấm Duyệt; BFF/SPA escape bidi/điều khiển thành dạng nhìn thấy được (`\u202E`) | Người dùng vẫn có thể hiểu sai nội dung hợp lệ |
 | T12 | Mệt mỏi/duyệt phản xạ | Người dùng bấm Duyệt không đọc | Thẻ ngắn, diff rõ, cờ rủi ro; đo `approval_latency`; step-up cho thao tác rủi ro cao (mục 12) | Hành vi con người |
 
 ### 1.3 Rủi ro còn lại (ghi rõ, không che giấu)
 
-1. **UI backend bị chiếm** có thể hiển thị thẻ giả cho người dùng *và* xin signer ký approval cho intent thật của user đó (vì nó cầm token của user). Intent của người **khác** thì không (cần token của họ). Giảm thiểu: M6 tách BFF tối giản (bề mặt nhỏ, không chạy code LLM/markdown phức tạp); step-up WebAuthn/CIBA (mục 12) làm "bằng chứng có mặt của người" độc lập với UI backend.
+1. **BFF bị chiếm** có thể hiển thị thẻ giả cho người dùng *và* xin signer ký approval cho intent thật của user đó (vì nó cầm token exchange của user). Intent của người **khác** thì không (cần token của họ). Giảm thiểu (D15): BFF là service tối giản ngay từ MVP (bề mặt nhỏ, không chạy code LLM, chỉ proxy + phiên), SPA cùng origin với CSP `script-src 'self'`; step-up WebAuthn/CIBA (mục 12) làm "bằng chứng có mặt của người" độc lập với BFF.
 2. **Người dùng duyệt nhầm** dù thẻ đúng (fatigue). Đo bằng user study và `approval_latency_seconds`.
 3. **Taint thô**: có thể over-flag (người dùng chỉ đọc 1 doc mật rồi ghi ticket vô hại trong 30 phút).
 4. **Chiếm tickets-mcp** = chiếm cả khoá intent: ngoài phạm vi; giảm bằng tách khoá intent theo MCP, đọc-ghi DB bằng role tối thiểu (`02`).
@@ -63,7 +64,7 @@ Lỗ hổng (review R01/R05):
 |---|---|---|
 | L1 | `preview` và `args` đều do agent cung cấp; chữ ký chỉ chứng minh "UI ký đúng cái agent đưa" | Agent bị chiếm đưa preview đẹp + args độc; người dùng duyệt "đóng TCK-1", MCP ghi "đóng TCK-9" miễn hai thứ trong payload của agent khớp hash |
 | L2 | Chữ ký ràng buộc **đầu vào** (args), không ràng buộc **hiệu ứng** (before/after, đối tượng thực) | Không phát hiện lệch giữa mô tả và tác động; TOCTOU chỉ tuỳ chọn |
-| L3 | Chainlit giữ khoá ES256 và là bên ký | Bề mặt tấn công UI (markdown, plugin) = bề mặt đánh cắp khoá |
+| L3 | UI (Chainlit, đã thay bằng SPA+BFF ở D15) giữ khoá ES256 và là bên ký | Bề mặt tấn công UI (markdown, plugin) = bề mặt đánh cắp khoá |
 | L4 | `decode_unverified` trên access token; `SESSION_TOKENS[sub]` khoá theo `sub` | Hai tab/phiên của cùng user dùng chung/ghi đè token; phiên chéo (R05) |
 | L5 | Nhánh "Sửa" ký lại trên args do UI dựng | UI/agent tự quyết nội dung được ký |
 | L6 | Một người dùng ký được cho `thread_id` bất kỳ UI nhận | Phụ thuộc UI kiểm tra |
@@ -76,9 +77,9 @@ v1.2 loại bỏ L1–L6 bằng nguyên tắc: *nội dung hiển thị và nộ
 
 1. **Prepare.** Agent gọi `prepare_<op>(args)` (scope `tickets:write`, không đổi dữ liệu). tickets-mcp: validate, phân quyền (`TicketPolicy`), đọc DB, chuẩn hoá args (điền mặc định), tính `before/after`, đọc taint (7), dựng `risk_flags`, ký JWS bằng **khoá intent**, lưu `mcp:tickets:intent:{intent_id}` (HASH, TTL 330s = `exp-iat` 300 + 30s ân hạn để trả `intent_expired` rõ ràng), trả `{intent_id, intent_jws, expires_at}` cho agent.
 2. **Interrupt.** Agent `interrupt({kind:"write_approval", intent_jws, intent_id})`. Agent **không** dựng preview, không đọc nội dung intent để quyết định hiển thị.
-3. **Verify/render.** UI backend gọi `POST signer /v1/intents/verify` kèm token riêng của user. Signer xác minh chữ ký MCP + `exp` + `sub`, trả **render model**. UI chỉ vẽ render model.
-4. **Approve.** Người dùng bấm Duyệt → UI gọi `POST /v1/approvals {intent_jws}` → signer kiểm lại, ký **approval token** (hiệu lực 120s).
-5. **Resume.** UI `Command(resume={decision:"approve", approval_token})`. Agent gọi `commit_intent(intent_id, approval_token)`.
+3. **Verify/render.** SPA gọi `POST /api/intents/verify` (BFF); BFF gọi `POST signer /v1/intents/verify` kèm token `aud=approval-signer` của phiên. Signer xác minh chữ ký MCP + `exp` + `sub` và **kiểm tính hiển thị được** (N03), trả **render model** với `display_fields` phủ toàn bộ nội dung được ký, hoặc `422 intent_unrenderable`. SPA chỉ vẽ render model.
+4. **Approve.** Người dùng bấm Duyệt → SPA `POST /api/approvals` → BFF gọi signer `POST /v1/approvals {intent_jws}` → signer kiểm lại (gồm cả tính hiển thị được), ký **approval token** (hiệu lực 120s).
+5. **Resume.** BFF resume agent `Command(resume={decision:"approve", approval_token})`. Agent gọi `commit_intent(intent_id, approval_token)`.
 6. **Commit.** tickets-mcp kiểm approval (chữ ký, `aud`, `sub`, `intent_sha256`), tải intent từ Redis, so khớp, `SET NX jti`, thực thi `args_canonical` với `expected_updated_at` trong **một transaction** cùng `ticket_events` và `tool_audit` (D6), đặt `status=committed`.
 
 ### 3.2 Sequence diagram (luồng chính và các nhánh lỗi)
@@ -87,15 +88,19 @@ v1.2 loại bỏ L1–L6 bằng nguyên tắc: *nội dung hiển thị và nộ
 sequenceDiagram
   autonumber
   actor U as Người dùng
-  participant UI as UI backend
+  participant SPA as SPA React (trình duyệt)
+  participant UI as BFF (bff:8300)
+  participant KC as Keycloak
   participant AG as agent
   participant TK as tickets-mcp
   participant RS as redis-state
   participant SG as approval-signer
   participant DB as Postgres tickets
 
-  U->>UI: "Đóng TCK-000123, đã xử lý xong"
-  UI->>UI: token exchange (D13): token user → aud=approval-signer, lưu server-side theo session_id (TTL ≤ 5 phút)
+  U->>SPA: "Đóng TCK-000123, đã xử lý xong"
+  SPA->>UI: POST /api/chat (cookie __Host-sid + X-CSRF-Token)
+  UI->>KC: token exchange (a): token đăng nhập aud=chat-ui → aud=agent-service
+  UI->>KC: token exchange (b): → aud=approval-signer, lưu server-side bff:sess:{sid} (TTL ≤ 5 phút, không rời BFF)
   UI->>AG: POST /threads/{id}/runs (chỉ token aud=agent-service)
   AG->>TK: prepare_close_ticket(code, resolution)
   TK->>DB: đọc ticket (RLS + TicketPolicy)
@@ -104,15 +109,19 @@ sequenceDiagram
   TK->>RS: HSET mcp:tickets:intent:{id} sha256 sub status=pending jws, EXPIRE 330
   TK-->>AG: intent_id, intent_jws, expires_at
   AG->>AG: interrupt(intent_jws) và checkpoint
-  AG-->>UI: event interrupt {intent_id, intent_jws}
-  UI->>SG: POST /v1/intents/verify (intent_jws, token signer aud=approval-signer, azp=chat-ui|bff)
-  SG->>SG: verify JWKS, aud, azp ∈ {chat-ui, bff}, sub == intent.sub, chữ ký MCP, exp
-  SG-->>UI: render model (before, after, risk_flags)
-  UI-->>U: Thẻ từ render model [Duyệt] [Sửa] [Từ chối]
+  AG-->>UI: event interrupt {intent_id, intent_jws} (SSE)
+  UI-->>SPA: SSE interrupt
+  SPA->>UI: POST /api/intents/verify {intent_jws}
+  UI->>SG: POST /v1/intents/verify (intent_jws, token aud=approval-signer, azp=chat-ui)
+  SG->>SG: verify JWKS, aud ∋ approval-signer, azp == chat-ui, sub == intent.sub, chữ ký MCP, exp, display_fields phủ toàn bộ args_canonical + before/after
+  SG-->>UI: render model (display_fields, before, after, risk_flags) hoặc 422 intent_unrenderable
+  UI-->>SPA: render model
+  SPA-->>U: Thẻ React từ render model (escape bidi/điều khiển) [Duyệt] [Sửa] [Từ chối]
 
   alt Duyệt
-    U->>UI: bấm Duyệt
-    UI->>SG: POST /v1/approvals (intent_jws, token signer aud=approval-signer)
+    U->>SPA: bấm Duyệt
+    SPA->>UI: POST /api/approvals {intent_jws}
+    UI->>SG: POST /v1/approvals (intent_jws, token aud=approval-signer)
     SG->>SG: kiểm lại intent, sub, exp, ký approval ES256 (exp = iat + 120)
     SG-->>UI: approval_token
     UI->>AG: POST /resume {approve, approval_token}
@@ -126,7 +135,8 @@ sequenceDiagram
     TK-->>AG: ok, ticket, event_id
     AG-->>UI: done (completed)
   else Sửa
-    U->>UI: nhập resolution mới
+    U->>SPA: nhập resolution mới
+    SPA->>UI: POST /api/chat (edit)
     UI->>AG: POST /resume {edit, args_patch}
     AG->>TK: prepare_close_ticket(args mới)
     TK-->>AG: intent MỚI (intent_id mới)
@@ -143,7 +153,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   autonumber
-  participant UI as UI backend
+  participant UI as BFF
   participant AG as agent
   participant TK as tickets-mcp
   participant RS as redis-state
@@ -216,6 +226,8 @@ Header: `{"alg":"ES256","kid":"tickets-intent-2026-10","typ":"acme-intent+jws"}`
 ```
 Quy tắc: `exp = iat + INTENT_TTL_S` (mặc định 300); `sub` = `caller.sub` của lời gọi `prepare_*` (từ JWT đã verify, không phải tham số); `before/after` chỉ chứa trường thay đổi + định danh hiển thị; văn bản dài giữ nguyên trong `after` (người dùng phải thấy đúng cái sẽ ghi); kích thước ≤ 8 KiB (vượt → `invalid_argument`). `risk_flags` ∈ {`destructive`, `internal_comment`, `priority_urgent`, `possible_downgrade`, `taint_unknown`}.
 
+**Ràng buộc hiển thị (N03):** mọi khoá của `args_canonical` và `before/after` phải có trong bảng `op → display_fields` của signer (mục 5.3); khoá lạ ⇒ signer từ chối ký/verify với `422 intent_unrenderable`. Nhờ đó không tồn tại trường được ký mà người dùng không thấy.
+
 Lưu Redis: `mcp:tickets:intent:{intent_id}` HASH `{sha256, sub, status, exp, op, ticket_code, jws}`.
 
 ### 4.3 Approval token (JWT ES256)
@@ -262,8 +274,8 @@ Thứ tự: bước 10 sau mọi kiểm rẻ, trước khi ghi; kiểm quyền (
 
 - Container riêng (`packages/approval_signer`), mạng `core` only, **không egress**, cổng **8310**, chỉ phụ thuộc `fastapi`, `pyjwt`, `cryptography`, `acme_common`; tổng ≤ ~300 dòng (CI `wc -l` kiểm tra). JWKS Keycloak lấy qua `TokenVerifier` dùng lại từ `acme_common` (HTTP nội bộ tới Keycloak trong mạng `core`).
 - **Không Redis, không DB** (D12): stateless. Đơn-dùng của approval do tickets-mcp bảo đảm (jti). Rate limit trong bộ nhớ (theo `sub`, mặc định 30 approval/giờ) chỉ là lớp phụ.
-- Keycloak (D13): client `approval-signer` (bearer-only, audience). **Không** có audience mapper `approval-signer` trên `chat-ui`: token đăng nhập chỉ có `aud=agent-service`. UI backend (Chainlit; `bff` ở M6) exchange `subject_token=<token user>` → `audience=approval-signer`, giữ trong session server-side (khoá `session_id`, TTL ≤ 5 phút, không cache sang session khác). Quyền exchange tới `approval-signer` chỉ cấp cho `chat-ui` và `bff`; `agent-service` chỉ được exchange tới `docs-mcp|tickets-mcp|analytics-mcp`. Cả `/v1/intents/verify` và `/v1/approvals` đòi token này; signer verify JWKS, `iss`, `exp`, `aud ∋ approval-signer`, `azp ∈ SIGNER_ALLOWED_AZP = {chat-ui, bff}` và `sub == intent.sub`, ngược lại `403 forbidden`.
-- **Rủi ro T4 (đã quyết D13):** agent bị chiếm không có token nào mang `aud=approval-signer` và không exchange được, nên không tự xin approval. Phần còn lại là UI backend bị chiếm (F30), giảm bằng step-up (mục 12).
+- Keycloak (D15, thay D13; sửa N01/N02): client `approval-signer` (bearer-only, audience). Token đăng nhập của BFF có `aud=chat-ui`, **không** gửi cho agent. BFF (client `chat-ui`; **không có client `bff`**) exchange: (a) → `aud=agent-service` cho agent; (b) `subject_token=<token đăng nhập>` → `audience=approval-signer`, giữ trong session server-side (khoá `session_id`, TTL ≤ 5 phút, không cache sang session khác). Quyền exchange tới `agent-service` và `approval-signer` chỉ cấp cho `chat-ui`; `agent-service` chỉ được exchange (từ token `aud=agent-service` của nó) tới `llm-gateway|docs-mcp|tickets-mcp|analytics-mcp`. Cả `/v1/intents/verify` và `/v1/approvals` đòi token này (BFF xin với scope `signer:approve`); signer verify JWKS, `iss`, `exp`, `aud ∋ approval-signer`, scope chứa `signer:approve`, `azp == SIGNER_ALLOWED_AZP = chat-ui` và `sub == intent.sub`, ngược lại `403 forbidden`.
+- **Rủi ro T4 (đã quyết D15):** agent bị chiếm chỉ cầm token `aud=agent-service`, không có token nào mang `aud=approval-signer` và không exchange được, nên không tự xin approval. Phần còn lại là BFF bị chiếm (F30), giảm bằng step-up (mục 12).
 
 ### 5.2 Ports (ABC, theo contracts §9)
 
@@ -271,7 +283,7 @@ Thứ tự: bước 10 sau mọi kiểm rẻ, trước khi ghi; kiểm quyền (
 |---|---|---|---|
 | `IntentVerifier` | `verify(intent_jws, user_principal) -> RenderModel` (ném `intent_expired`, `intent_mismatch`) | `es256_jws.py`: thư mục `INTENT_PUBLIC_KEYS_DIR/<kid>.pub` | `iss` cố định `tickets-mcp`; từ chối `alg` ≠ ES256, `typ` sai, `aud` ≠ `approval-signer`, `sub` ≠ user |
 | `ApprovalSigner` | `sign(intent, principal) -> ApprovalToken` | `es256_file.py` (khoá PEM mount, `APPROVAL_SIGNER_KEY_ID`) | Thêm `kms.py` sau, không đổi service |
-| `TokenVerifier` | `verify(token, audience) -> Principal` | `oidc_jwks` (dùng lại `acme_common`) | Kiểm `azp ∈ SIGNER_ALLOWED_AZP` và `aud` không chứa `agent-service`/`llm-gateway` |
+| `TokenVerifier` | `verify(token, audience) -> Principal` | `oidc_jwks` (dùng lại `acme_common`) | Kiểm `azp == chat-ui` (`SIGNER_ALLOWED_AZP`), scope `signer:approve` và `aud` không chứa `agent-service`/`llm-gateway` |
 | `Clock` | `now() -> datetime`, `monotonic() -> float` | `system.py`; `FakeClock` cho test | Test `exp`, ân hạn, skew |
 
 Service `services/approval.py` chỉ phụ thuộc bốn port này. Factory registry dict + lazy import. Không bọc FastAPI/PyJWT thành port nào khác.
@@ -280,7 +292,7 @@ Service `services/approval.py` chỉ phụ thuộc bốn port này. Factory regi
 
 | Endpoint | Auth | Vai trò |
 |---|---|---|
-| `POST /v1/intents/verify` | Bearer user token (`aud=approval-signer`) | Xác minh intent, trả render model; **không** ký |
+| `POST /v1/intents/verify` | Bearer user token (`aud=approval-signer`, `azp=chat-ui`, scope `signer:approve`); gọi bởi BFF | Xác minh intent, trả render model; **không** ký |
 | `POST /v1/approvals` | như trên | Xác minh lại intent rồi ký approval |
 | `GET /healthz` | không | Liveness |
 | `GET /metrics` | `METRICS_TOKEN` | Prometheus |
@@ -296,8 +308,15 @@ Service `services/approval.py` chỉ phụ thuộc bốn port này. Factory regi
   "risk_flags": ["destructive"],
   "expires_at": "2026-10-28T08:20:00Z",
   "intent_sha256": "9b1e…",
+  "server_time": "2026-10-28T08:16:03Z",
   "display": {
     "title": "Đóng ticket TCK-000123", "risk": "medium",
+    "display_fields": [
+      {"path": "target.ticket_code", "label": "Ticket", "kind": "ticket_ref", "before": "TCK-000123", "after": "TCK-000123", "changed": false, "sensitive": false},
+      {"path": "target.title", "label": "Tiêu đề", "kind": "text", "before": "Máy in tầng 3 không in được", "after": "Máy in tầng 3 không in được", "changed": false, "sensitive": false},
+      {"path": "args.resolution", "label": "Cách xử lý", "kind": "longtext", "before": null, "after": "Đã thay mực và cài lại driver máy in.", "changed": true, "sensitive": false},
+      {"path": "after.status", "label": "Trạng thái mới", "kind": "enum", "before": "in_progress", "after": "closed", "changed": true, "sensitive": false}
+    ],
     "diff": [
       {"field": "status", "before": "in_progress", "after": "closed"},
       {"field": "resolution", "before": null, "after": "Đã thay mực và cài lại driver máy in."}
@@ -305,7 +324,9 @@ Service `services/approval.py` chỉ phụ thuộc bốn port này. Factory regi
   }
 }
 ```
-Sáu trường đầu (`intent_id, op, target, before, after, risk_flags, expires_at`) là render model theo contracts §4.1; `intent_sha256` và `display` là phần bổ sung (additive). Toàn bộ do **signer** dựng bằng mẫu cố định theo `op` (bảng `op → title/diff fields`), chỉ từ claims đã verify; mọi chuỗi là văn bản thuần (UI phải escape, không render HTML/markdown/ảnh). Lỗi (mã theo contracts): `401 unauthorized`; `403 forbidden` (azp/aud sai); `410 intent_expired`; `422 intent_mismatch` (chữ ký/`typ`/`kid`/`iss`/`aud` sai, hoặc `intent.sub ≠ user.sub`; `details.reason` ∈ `format|alg|typ|kid|iss|aud|signature|sub`); `422 invalid_argument` (JWS sai định dạng).
+Sáu trường đầu (`intent_id, op, target, before, after, risk_flags, expires_at`) là render model theo contracts §4.1; `intent_sha256` và `display` là phần bổ sung (additive). Toàn bộ do **signer** dựng bằng mẫu cố định theo `op` (bảng `op → title/diff fields`), chỉ từ claims đã verify; mọi chuỗi là văn bản thuần (SPA phải escape, không render HTML/markdown/ảnh).
+
+**Phủ toàn bộ (N03).** `display_fields` phải phủ **mọi** khoá của `args_canonical` (parse từ payload đã verify) cộng mọi khoá của `before`/`after`; tập `path` được so khớp với tập khoá thực tế. Nếu có trường không có mẫu hiển thị (khoá lạ, kiểu không hỗ trợ, trường ẩn/thêm vào args) hoặc giá trị không render được an toàn, signer trả `422 intent_unrenderable` (`details.fields=[…]`) ở cả `/v1/intents/verify` lẫn `/v1/approvals` và **không ký**. `kind` ∈ `text|longtext|enum|datetime|ticket_ref` (**tập chuẩn duy nhất**; 00 §4.1 và 07 §3.6 dùng đúng tập này; thêm kind = sửa tài liệu này trước). Mỗi phần tử gồm `path,label,kind,before,after,changed,sensitive`; `server_time` (giờ máy chủ signer, RFC 3339) để SPA bù lệch đồng hồ khi đếm ngược hạn. SPA gặp `kind` lạ thì hiển thị cảnh báo và **vô hiệu nút Duyệt**. Ký tự bidi (U+202A–202E, U+2066–2069), điều khiển (C0/C1), zero-width: signer giữ nguyên trong dữ liệu; BFF và SPA hiển thị dạng escape nhìn thấy được (`\u202E`), nên không thể đảo chiều đọc hay giấu nội dung. Lỗi (mã theo contracts): `401 unauthorized`; `403 forbidden` (azp/aud sai); `410 intent_expired`; `422 intent_unrenderable` (N03); `422 intent_mismatch` (chữ ký/`typ`/`kid`/`iss`/`aud` sai, hoặc `intent.sub ≠ user.sub`; `details.reason` ∈ `format|alg|typ|kid|iss|aud|signature|sub`); `422 invalid_argument` (JWS sai định dạng).
 
 `POST /v1/approvals` — request `{"intent_jws": "…"}`. Response 200 `{"approval_token":"…","jti":"…","expires_at":"…"}`. Lỗi như trên + `429 rate_limited`. Signer **kiểm lại toàn bộ** (không tin lần verify trước).
 
@@ -333,7 +354,7 @@ class ApprovalService:
 ```
 SIGNER_PORT=8310
 KEYCLOAK_ISSUER=http://keycloak.acme.local:8080/realms/acme
-SIGNER_AUDIENCE=approval-signer          SIGNER_ALLOWED_AZP=chat-ui,bff
+SIGNER_AUDIENCE=approval-signer          SIGNER_ALLOWED_AZP=chat-ui           # D15: BFF dùng client chat-ui; không có client bff
 INTENT_PUBLIC_KEYS_DIR=/run/keys/intent  # <kid>.pub, nhiều kid cùng lúc
 APPROVAL_SIGNER_PRIVATE_KEY_PATH=/run/secrets/approval_signing_key   APPROVAL_SIGNER_KEY_ID=approval-2026-10
 APPROVAL_TTL_S=120
@@ -403,7 +424,7 @@ Harness: `MaliciousAgent` (fake) gọi thẳng MCP/signer với chuỗi lời g�
 |---|---|---|---|
 | F01 | Đổi args sau duyệt | Duyệt intent A (`resolution=OK`); agent gọi `commit_intent` thêm tham số `args`/`resolution="xoá hết"` | `invalid_argument` (schema `additionalProperties:false`); thực thi đúng `args_canonical` nếu gửi hợp lệ |
 | F02 | Đổi đối tượng: prepare ticket X nhưng xin duyệt rồi commit intent của ticket Y | Dùng approval của intent A cho `intent_id` B | `intent_mismatch` |
-| F03 | Intent giả ký khoá khác | Agent tự ký JWS giả (khoá lạ) đưa UI/signer | Signer `422 intent_mismatch` (`details.reason=signature`); không có approval |
+| F03 | Intent giả ký khoá khác | Agent tự ký JWS giả (khoá lạ) đưa BFF/signer | Signer `422 intent_mismatch` (`details.reason=signature`); không có approval |
 | F04 | Intent đúng khoá nhưng `kid` ngoài tập tin cậy | JWS ký bằng khoá docs-mcp, `iss=tickets-mcp` | `422 intent_mismatch` (`kid` không thuộc `INTENT_PUBLIC_KEYS_DIR`) |
 | F05 | Replay `jti` | `commit_intent` lần 2 với cùng approval | `approval_replayed` (+`already_applied`); 1 dòng `ticket_events` |
 | F06 | Commit song song | 2 `commit_intent` đồng thời | 1 thành công, 1 `approval_replayed`; 1 dòng ghi |
@@ -422,8 +443,12 @@ Harness: `MaliciousAgent` (fake) gọi thẳng MCP/signer với chuỗi lời g�
 | F19 | Gọi tool ghi cũ | `tools/call close_ticket` | Lỗi tool không tồn tại (JSON-RPC) và pinning loại tool |
 | F20 | Thiếu scope | Token chỉ `tickets:read` gọi `prepare_close_ticket` | 403 `insufficient_scope` |
 | F21 | Tham số danh tính | `prepare_*` kèm `sub`/`user_id` | `invalid_argument` |
-| F22 | Token agent xin approval (D13) | Agent dùng token của mình (`aud=agent-service`, azp=agent-service) gọi `/v1/approvals` | `401 unauthorized` / `403 forbidden` (aud/azp), không ký |
-| F22b | Agent exchange tới signer (D13) | `agent-service` gọi token-exchange `audience=approval-signer` | Keycloak từ chối (403 `access_denied`/`invalid_client`); không có token |
+| F22 | Token agent xin approval (D15/N02) | Dùng **chính token agent đang cầm** (`aud=agent-service`, azp=agent-service, lấy từ request agent nhận) gọi `/v1/intents/verify` và `/v1/approvals`; không dùng token đăng nhập hay token đã exchange cho signer | `401 unauthorized` / `403 forbidden` (aud/azp), không ký |
+| F22b | Agent exchange tới signer (D15/N02) | `agent-service` gọi token-exchange với `subject_token=<token aud=agent-service>`, `audience=approval-signer` | Keycloak từ chối (403 `access_denied`/`invalid_client`); không có token |
+| F22c | Token đăng nhập dùng trực tiếp (D15) | Token `aud=chat-ui` (token đăng nhập) gọi agent, `tickets-mcp`, gateway | `401` (sai `aud`) |
+| F31 | Trường ẩn trong args (N03) | `args_canonical` có thêm trường không có trong `display_fields` (vd `notify_all=true`, hoặc khoá lạ trong `after`) | `422 intent_unrenderable`; không có thẻ, không ký |
+| F32 | Bidi/điều khiển trong tiêu đề (N03) | Ticket title `Hoàn tiền \u202Egnoh` / chứa `\u0000`, zero-width | Signer giữ nguyên dữ liệu; thẻ (Playwright) hiển thị dạng escape `\u202E`, văn bản không bị đảo chiều; hash không đổi |
+| F33 | Kiểu field lạ ở SPA (N03) | Render model có `kind` không biết | SPA vô hiệu nút Duyệt, hiện cảnh báo |
 | F23 | Intent Redis bị mất | Xoá key intent sau prepare | `intent_not_found`, fail-closed |
 | F24 | Redis chết lúc commit | Dừng redis-state | `upstream_unavailable`, không ghi |
 | F25 | Lỗi giữa transaction | Giả lập lỗi sau UPDATE, trước INSERT audit | Rollback toàn bộ: không đổi ticket, không event; intent vẫn `pending` |
@@ -431,7 +456,9 @@ Harness: `MaliciousAgent` (fake) gọi thẳng MCP/signer với chuỗi lời g�
 | F27 | Taint downgrade (block) | Như F26 với `TAINT_POLICY=block` | `forbidden` (`reason=possible_downgrade`), không tạo intent |
 | F28 | Clock skew | Approval `iat` > now + 5s | `approval_invalid` |
 | F29 | Intent đã committed, xin approval mới | Signer ký thêm cho cùng intent, commit | `approval_replayed` (`already_applied`) |
-| F30 | **Residual (ghi nhận, kỳ vọng thành công)** | UI backend giả mạo xin approval cho intent của chính user đó | Thành công; chỉ ghi nhận để theo dõi, giảm bằng step-up (mục 12) |
+| F30 | **Residual (ghi nhận, kỳ vọng thành công)** | BFF giả mạo xin approval cho intent của chính user đó | Thành công; chỉ ghi nhận để theo dõi, giảm bằng step-up (mục 12) |
+
+F31 chạy ở tầng service (pytest, `MaliciousAgent`); F32 và F33 chạy bằng Playwright trên compose (job `e2e` trong 04 mục 5.5) vì kiểm cách thẻ React hiển thị.
 
 Chỉ số báo cáo (E4-3): số ca bị từ chối đúng mã / tổng; 0 ca ghi lọt; F30 báo riêng. Đây là **kiểm thử thuộc tính bảo mật**, không phải thí nghiệm thống kê.
 
@@ -449,8 +476,8 @@ Chỉ số báo cáo (E4-3): số ca bị từ chối đúng mã / tổng; 0 ca 
 
 | Điều kiện | Thẻ hiển thị |
 |---|---|
-| A (đối chứng) | Lời giải thích của agent + tham số thô (`code`, `resolution`, ...) như agent gửi (mô phỏng luồng v1.1) |
-| B (đề xuất) | Render model của signer: tiêu đề, đối tượng thực (mã + tiêu đề ticket), diff before/after, cờ rủi ro |
+| A (đối chứng) | Lời giải thích của agent + tham số thô (`code`, `resolution`, ...) như agent gửi (mô phỏng luồng v1.1), dựng bằng cùng thành phần thẻ React ở chế độ "raw" |
+| B (đề xuất) | **Thẻ duyệt React thật của SPA (D15)** vẽ từ render model của signer: tiêu đề, `display_fields`, đối tượng thực (mã + tiêu đề ticket), diff before/after, cờ rủi ro |
 
 **Kịch bản.** 24 thao tác mỗi người (12 mỗi điều kiện, thứ tự ngẫu nhiên): 50% hợp lệ, 50% độc hại/sai lệch được dàn dựng: mã ticket khác với yêu cầu, `resolution` bị đổi nghĩa, bình luận nội bộ bị đổi thành công khai, đóng ticket đã `resolved` bởi người khác, `possible_downgrade`, ticket tiêu đề giống nhau khác mã. Mỗi ca có "yêu cầu gốc" của người dùng (lời nhắn) để so. Người tham gia đóng vai chủ yêu cầu và quyết định Duyệt/Sửa/Từ chối.
 
@@ -458,13 +485,13 @@ Chỉ số báo cáo (E4-3): số ca bị từ chối đúng mã / tổng; 0 ca 
 
 **Đạo đức/đồng thuận.** Tình nguyện, có phiếu đồng thuận nêu rõ mục đích, rằng "một số đề xuất có thể sai/độc hại" (không đánh lừa về bản chất nghiên cứu), quyền rút lui bất kỳ lúc nào; dữ liệu giả, không dùng ticket/tài khoản thật; định danh được thay bằng mã người tham gia, không ghi hình khuôn mặt; ghi màn hình chỉ cục bộ, xoá sau phân tích; lưu dữ liệu ẩn danh tối đa 12 tháng; phỏng vấn kết thúc (debrief) giải thích ca nào độc hại; phê duyệt nội bộ theo quy định của tổ chức trước khi chạy; không dùng cấp dưới/đồng nghiệp trực tiếp của người nghiên cứu để tránh sức ép.
 
-**Sản phẩm.** `eval/approval_study/`: kịch bản (JSON), ứng dụng thẻ hai điều kiện, script phân tích, báo cáo; số liệu công bố cùng seed/phiên bản.
+**Sản phẩm.** `eval/approval_study/`: kịch bản (JSON), ứng dụng thẻ hai điều kiện (tái dùng component thẻ của `web/src/features/approval`, phát lại tĩnh, không gọi API trực tiếp), script phân tích, báo cáo; số liệu công bố cùng seed/phiên bản.
 
 ## 12. Phương án nâng cao (tuỳ chọn): step-up WebAuthn / CIBA
 
-Mục đích: thu hẹp rủi ro T11 (UI backend bị chiếm) và T12 cho thao tác `risk=high`/`possible_downgrade`/`destructive`.
+Mục đích: thu hẹp rủi ro T11 (BFF bị chiếm) và T12 cho thao tác `risk=high`/`possible_downgrade`/`destructive`.
 
-- **WebAuthn.** `POST /v1/approvals` trả `401 step_up_required` với `challenge = intent_sha256` (base64url). Trình duyệt gọi `navigator.credentials.get` với challenge đó; UI gửi lại assertion; signer verify (khoá công khai đăng ký của user, lưu ở Keycloak/signer) và thêm `acr:"webauthn"`, `amr:["hwk"]` vào approval; tickets-mcp bắt buộc `acr` cho intent có cờ rủi ro cao. UI backend bị chiếm không có khoá phần cứng của người dùng nên không tự duyệt được.
+- **WebAuthn.** `POST /v1/approvals` trả `401 step_up_required` với `challenge = intent_sha256` (base64url). Trình duyệt gọi `navigator.credentials.get` với challenge đó; SPA gửi lại assertion qua BFF; signer verify (khoá công khai đăng ký của user, lưu ở Keycloak/signer) và thêm `acr:"webauthn"`, `amr:["hwk"]` vào approval; tickets-mcp bắt buộc `acr` cho intent có cờ rủi ro cao. BFF bị chiếm không có khoá phần cứng của người dùng nên không tự duyệt được.
 - **CIBA (Keycloak backchannel).** Signer gọi Keycloak khởi tạo CIBA với `binding_message` = tóm tắt render ("Đóng TCK-000123"); người dùng xác nhận trên thiết bị khác; signer nhận kết quả rồi ký. Cần egress tới Keycloak nội bộ (cùng mạng `core`) và poll/ping callback.
 - Ràng buộc nhất quán: bằng chứng step-up luôn gắn `intent_sha256`; không tái sử dụng.
 - **[SPIKE]** hỗ trợ WebAuthn/CIBA ở Keycloak phiên bản chọn; luồng đăng ký khoá. Ngoài milestone v1.0 (mục "Tuỳ chọn sau v1.0" của D0).
@@ -473,17 +500,17 @@ Mục đích: thu hẹp rủi ro T11 (UI backend bị chiếm) và T12 cho thao 
 
 | Milestone | Nội dung |
 |---|---|
-| M1 | `approval-signer` + `prepare_close_ticket`/`commit_intent`; UI gọi signer; F01–F18 chạy CI |
-| M3 | Đủ 4 `prepare_*`; taint docs→tickets (D8); F19–F30 |
+| M1 | `approval-signer` + `prepare_close_ticket`/`commit_intent`; BFF + SPA tối thiểu (login, chat streaming, thẻ duyệt) gọi signer qua BFF; F01–F18 chạy CI |
+| M3 | Đủ 4 `prepare_*`; taint docs→tickets (D8); F19–F33 |
 | M5 | Security regression trong CI; user study |
-| M6 | BFF tối giản thay Chainlit làm UI backend ký |
+| M6 | Trang admin qua BFF `/api/admin/*`, polish UX/a11y/i18n của thẻ duyệt (BFF đã có từ M1, D15) |
 | Sau v1.0 | Step-up WebAuthn/CIBA |
 
 ## 14. Phụ thuộc contracts v1.2
 
 Mục đã chốt bởi D13/D14: #1 (D13), #2 và #3 (D14); xoay khoá overlap 15 phút và TTL Redis intent 330 s = exp + 30 s (D14). Contracts v1.2 (`00-contracts.md` §4.1, §6, §8, §9.2) đã khớp với tài liệu này ở: định dạng intent/approval, `intent_sha256 = sha256(canonical_json(payload))`, render model, mã lỗi `intent_not_found|intent_expired|intent_mismatch`, `/v1/intents/verify` + `/v1/approvals` đều đòi access token user (aud `approval-signer`), ACL Redis cho `mcp:taint:*`, env `TAINT_POLICY|INTENT_TTL_S`, ports `IntentIssuer|IntentVerifier|ApprovalSigner|ApprovalVerifier|ReplayGuard|Clock`. Các điểm còn lệch hoặc cần xác nhận:
 
-1. **Một access token cho hai audience (T4/F22/F30): đã quyết D13.** Bỏ audience mapper `approval-signer` trên `chat-ui`; UI backend token-exchange riêng, giữ server-side; signer kiểm `aud`, `azp ∈ {chat-ui, bff}`, `sub == intent.sub`. Contracts §8 do worker khác cập nhật theo D13.
+1. **Một access token cho hai audience (T4/F22/F30): đã quyết D13, sửa bởi D15.** Token đăng nhập `aud=chat-ui` không gửi cho agent; BFF token-exchange (→ `agent-service`, → `approval-signer`), giữ server-side; bỏ client `bff`; signer kiểm `aud ∋ approval-signer`, `azp == chat-ui`, `sub == intent.sub`. Contracts §8 do worker khác cập nhật theo D15.
 2. DB tickets (chốt D14): `tickets.classification` mặc định `INTERNAL`; `ticket_events.intent_id uuid` (UNIQUE) + `intent_sha256 text` thay cho `args_sha256`; `tool_audit.intent_id` nullable; role `mcp_audit_w` chỉ INSERT. Env `INTERNAL_FLOOR` (mặc định 1).
 3. **Chốt D14:** `IntentIssuer.issue(op, target, draft, ctx)`; `draft` là args đã chuẩn hoá. Ghi chú gốc: tickets-mcp cần nhận thêm bản nháp đã tính (`before/after/expected_updated_at`, đọc qua `TicketRepository.read_for_intent`). Đề xuất truyền qua tham số `draft` hoặc dựng trong adapter có repo; ghi nhận là lệch nhỏ so với chữ ký contracts.
 4. Taint là mô-đun thường `acme_common/services/taint.py` dùng thẳng Redis client (không phải port, đúng §9 "không bọc Redis client"); test bằng fakeredis.

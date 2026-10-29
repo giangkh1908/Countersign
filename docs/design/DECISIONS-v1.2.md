@@ -110,3 +110,29 @@ Quyết định:
 - Cột: `tickets.classification` (mặc định `INTERNAL`), `tool_audit.intent_id` (nullable), `ticket_events.intent_id`; role `mcp_audit_w` giữ INSERT-only.
 - `models.yaml`: `acme-embed` trỏ `sidecar/embed` (thay `local/bge-m3`).
 - Admin cache endpoint của gateway (01) đưa vào contracts §5 / API admin.
+
+## D15. UI = React + TypeScript + BFF ngay từ MVP (thay Chainlit; ADR-002 thay ADR-001)
+Người dùng quyết định bỏ Chainlit. Đồng thời sửa N01/N02 (review-02) vì BFF là nơi giữ và đổi token.
+**Thành phần**
+- Service `bff` (FastAPI, `packages/bff`, cổng **8300**, mạng `edge`+`core`) thay service `ui`. BFF phục vụ SPA đã build (cùng origin, không CORS) + `/auth/*` + `/api/*`. Dev: Vite 5173 proxy → 8300.
+- Frontend `web/` (pnpm): Vite + React 18 + TypeScript strict, React Router, TanStack Query, Tailwind + shadcn/ui, `react-markdown` + `rehype-sanitize` (chặn ảnh/link ngoài trừ allowlist), `@microsoft/fetch-event-source` (SSE qua POST), `zod` validate runtime, type sinh từ OpenAPI của BFF (`openapi-typescript`), Vitest + Testing Library + MSW, Playwright E2E, ESLint (typescript-eslint) + Prettier. Phiên bản chính xác pin trong lockfile, xác minh ở M0.
+**Quy tắc frontend (clean-oop)**: một `src/api/client.ts` duy nhất (`request()`, `sse()`); component không gọi `fetch`; interface `AgentStream`, `ApprovalApi`, `ThreadApi` trong `src/api/types.ts`, test dùng fake/MSW; feature folder `features/{chat,approval,threads,admin}`.
+**Thẻ duyệt (sửa N03)**: chỉ render từ render model do signer trả (`/api/intents/verify`); signer trả `display_fields` phủ **toàn bộ** `args_canonical` + `before/after`; signer từ chối (`422 intent_unrenderable`) nếu có trường không hiển thị được; UI render mọi field theo kiểu, kiểu lạ → không cho bấm Duyệt; hiển thị ký tự bidi/điều khiển dạng escape.
+**BFF**
+- OIDC Authorization Code + PKCE, client `chat-ui` (confidential, giữ tên). Cookie phiên `__Host-sid` (HttpOnly, Secure, SameSite=Strict; dev http dùng `sid`). Phiên ở `redis-state` key `bff:sess:{sid}` (idle 30 phút, tuyệt đối 8 giờ); refresh token mã hoá AES-GCM bằng `BFF_SESSION_KEY`. CSRF: SameSite=Strict + header `X-CSRF-Token` (double-submit) cho mọi request đổi trạng thái. CSP: `default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`.
+- Endpoint: `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout`, `GET /api/me`, `POST /api/chat` (SSE proxy tới agent), `GET /api/threads`, `DELETE /api/threads/{id}`, `POST /api/intents/verify`, `POST /api/approvals` (BFF gọi signer rồi resume agent với approval token), `GET /api/requests/{id}` (chi phí). M6: `/api/admin/*` (realm role `admin`, proxy admin API gateway).
+- Code: `AgentClient`, `SignerClient` là class HTTP thường (một implementation, D11); đổi token dùng lại port `TokenBroker` (adapter `oauth_token_exchange`); Redis dùng trực tiếp (hạ tầng cố định).
+**Luồng token (thay phần Keycloak của D13, sửa N01/N02)**
+- Token đăng nhập: `aud=chat-ui` (audience mapper trên chính client), **không** gửi cho agent.
+- BFF token-exchange: (a) → `aud=agent-service`, gửi cho agent mỗi request; (b) → `aud=approval-signer`, chỉ ở server-side session, không rời BFF. Đáp ứng luật Keycloak exchange V2 (client gọi exchange phải nằm trong `aud` của subject token) — xác minh ở spike C.
+- `agent-service` exchange token `aud=agent-service` của nó → `llm-gateway` + 3 MCP; **không** tới `approval-signer`.
+- Bỏ client `bff` riêng (BFF dùng client `chat-ui`); signer kiểm `aud ∋ approval-signer`, `azp == chat-ui`, `sub == intent.sub`.
+- Test D13/F22 phải dùng **chính token agent cầm** (`aud=agent-service`) gọi signer → 401/403, và agent-service exchange tới signer → Keycloak từ chối.
+**Hạ tầng/CI**: Redis ACL user `bff` `~bff:sess:*` trên redis-state; env `BFF_PUBLIC_URL`, `BFF_SESSION_KEY`, `BFF_OIDC_CLIENT_SECRET`, `BFF_AGENT_URL`, `BFF_SIGNER_URL`; CI job `web` (pnpm install --frozen-lockfile, lint, typecheck, vitest, build) + Playwright E2E chạy trên compose; image `bff` build multi-stage (node build SPA → python runtime).
+**Roadmap**: M1 gồm BFF + SPA tối thiểu (login, chat streaming, thẻ duyệt, trích nguồn, chi phí) — M1 dài thêm ~1–1,5 tuần. M6 đổi thành: trang admin (key, budget, chi phí theo phòng ban), polish UX, a11y, i18n. Spike Chainlit OIDC trong M0 bị bỏ, thay bằng spike "BFF OIDC + exchange 2 audience".
+
+## D16. Đồng bộ sau vòng D15 (orchestrator chốt)
+- Role quản trị: realm role **`admin`** (không dùng `acme-admin`).
+- Client scope: `agent:invoke` (BFF → agent, có trong token exchange `aud=agent-service`), `signer:approve` (BFF → signer). Agent/signer kiểm scope ngoài `aud`/`azp`.
+- `display_fields[].kind`: nguồn chuẩn là `05-approval-flow.md` (§ render model); 07 và 00 dùng đúng tập đó.
+- Chấp nhận các quyết định trong 07: BFF giữ `intent_jws` trong `bff:sess:{sid}:pend` (trình duyệt chỉ gửi `thread_id`/`interrupt_id`); approve phải kèm `intent_sha256` đã verify; `POST /api/resume`, `GET /api/threads/{id}/messages`; cookie `__Host-login` SameSite=Lax chỉ cho callback; bidi/control khoá nút Duyệt, zero-width chỉ cảnh báo; CSP thêm `object-src 'none'`; `TokenBroker`/`TokenVerifier` chuyển vào `acme_common`; Redis user `bff` chỉ lệnh đơn, không `MULTI/EVAL`.

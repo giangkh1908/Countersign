@@ -1,7 +1,7 @@
-# Lộ trình triển khai theo milestone (v1.2)
+# Lộ trình triển khai theo milestone (v1.3)
 
 > Dự án sản phẩm phát triển tự do, lộ trình theo **milestone** (không theo tuần cố định). Mỗi milestone kết thúc bằng một **bản chạy được** và test xanh, đạt **Definition of Done (DoD)** đo được. Ký hiệu agent: **R** = reader (Haiku), **W** = worker (Sonnet), **O** = orchestrator (quyết định + review).
-> Phiên bản 1.2, 2026-10-28. Khớp `design/DECISIONS-v1.2.md` (D0–D12).
+> Phiên bản 1.3, 2026-10-29. Khớp `design/DECISIONS-v1.2.md` (D0–D15). D15: UI = React + TS + BFF ngay từ M1 (Chainlit đã thay, ADR-002).
 
 ## Cấu trúc repo (uv workspace)
 
@@ -11,6 +11,7 @@ AI_EXAMPLE/
 ├─ docker-compose.yml
 ├─ models.lock               # model ML: repo, revision sha, sha256 từng file, license (D3)
 ├─ infra/                    # keycloak realm, postgres init (roles, RLS), redis ACL, prometheus, grafana
+├─ web/                      # SPA Vite + React 18 + TS strict (pnpm); build vào image bff (D15)
 ├─ packages/
 │  ├─ common/                # config, logging, JWT verify, Clock, audit hash-chain HMAC, schemas, testing/Fake*
 │  ├─ gateway/               # FastAPI LLM gateway (egress mỏng, không model ML)
@@ -20,7 +21,7 @@ AI_EXAMPLE/
 │  ├─ mcp_tickets/           # MCP ticket (prepare_* / commit_intent, ký intent)
 │  ├─ mcp_analytics/         # MCP DB read-only (tool tham số hoá)
 │  ├─ agent/                 # LangGraph graph + service
-│  ├─ ui/                    # Chainlit app (M6: BFF + SPA)
+│  ├─ bff/                   # FastAPI BFF :8300: phục vụ SPA + /auth + /api; giữ phiên + token (D15); không giữ khoá ký
 │  └─ mock_provider/         # mock LLM có độ trễ/lỗi cấu hình được
 ├─ data/                     # generator dữ liệu ACME giả lập + corpus độc + tập test PII viết tay
 ├─ eval/                     # benchmark (k6/vegeta), promptfoo, security regression (pytest), notebook phân tích
@@ -37,7 +38,7 @@ AI_EXAMPLE/
 | M3 v0.3 | Nghiệp vụ đầy đủ | M1, M2 (audit) |
 | M4 v0.4 | Policy sidecar & tối ưu chi phí | M2, M3 |
 | M5 v0.5 | Bộ đánh giá & red-team | M3, M4 |
-| M6 v0.6 | UI React + TS + BFF + admin | M3 (có thể song song M4–M5) |
+| M6 v0.6 | Trang admin + polish UX/a11y/i18n (BFF + SPA có từ M1) | M3 (có thể song song M4–M5) |
 | M7 v1.0 | Production hardening | M5, M6 |
 | Tuỳ chọn | Sau v1.0 | M7 |
 
@@ -52,17 +53,17 @@ Quy tắc: hết 2 ngày chưa đạt tiêu chí thì **chuyển sang phương �
 | Xác minh các mục "việc cần xác minh" ở SOLUTION §11 | R | Báo cáo có nguồn trong `docs/research/05-*.md` | — |
 | Khung uv workspace, ruff, pytest, pre-commit, docker compose (postgres+pgvector, redis, keycloak) | W | `docker compose up` chạy; `uv run pytest` xanh | — |
 | Spike A: MCP SDK stateless + identity: MCP server nhỏ kiểm JWT Keycloak, đọc claims trong tool | W | Tool trả `sub` và `department` của caller; sai audience bị 401 | **FastAPI tool server** tự viết (JSON-RPC tối giản) + middleware ASGI kiểm JWT; port `ToolServerHost` giữ nguyên |
-| Spike B: Chainlit OIDC + LangGraph `interrupt()` với nút Duyệt/Từ chối | W | Một luồng approve/reject qua đăng nhập OIDC | **Agent Chat UI** của LangChain, hoặc **FastAPI + HTMX tối giản** |
-| Spike C: Keycloak token exchange (RFC 8693) | W | Đổi token user lấy token `aud=tickets-mcp` | **client-credentials** + header `X-Acme-User-Token` đã verify; adapter `client_credentials_with_user_token` của `TokenBroker` |
+| Spike B: BFF OIDC + exchange 2 audience (xác minh luật Keycloak exchange V2): BFF (client `chat-ui`) đăng nhập code + PKCE, exchange ra `aud=agent-service` và `aud=approval-signer`; LangGraph `interrupt()` + resume qua BFF | W | Token đăng nhập `aud=chat-ui` (không có `agent-service`/`approval-signer`); cả 2 exchange thành công; token `aud=agent-service` gọi signer bị 401/403; `agent-service` exchange tới signer bị Keycloak từ chối; một luồng approve/reject qua BFF | Cấu hình audience mapper/permission theo luật V2 khác (ghi ADR); nếu exchange không khả thi: BFF dùng client-credentials + header user token đã verify (giới hạn ghi rõ) |
+| Spike C: Keycloak token exchange (RFC 8693) phía agent | W | Đổi token `aud=agent-service` lấy token `aud=tickets-mcp`, `aud=llm-gateway` | **client-credentials** + header `X-Acme-User-Token` đã verify; adapter `client_credentials_with_user_token` của `TokenBroker` |
 | Spike D: serializer mã hoá checkpoint LangGraph (`PostgresSaver`) | W | Checkpoint trong DB là ciphertext, resume sau `interrupt` đọc lại đúng | Mã hoá ở lớp lưu trữ (cột/ pgcrypto) + retention ngắn; ghi giới hạn |
 | Pilot Prompt Guard 2 tiếng Việt: 50 mẫu độc + 50 mẫu lành | W + R (thu thập mẫu) | Báo cáo TPR/FPR; quyết định bật/tắt ở M4 | Giữ guard tắt; dùng heuristic + spotlighting; xem lại ở M4 |
 | Chốt SDK MCP, UI, phương án token, serializer → ADR-001..004 | O | ADR được merge | — |
 
-**DoD M0:** 4 spike + pilot có kết luận bằng văn bản (đạt hoặc chuyển B), mỗi cái ≤ 2 ngày; `docker compose up` chạy; ADR đã merge.
+**DoD M0:** (D15) spike B xác minh được luật Keycloak V2 hoặc đã ghi phương án B; 4 spike + pilot có kết luận bằng văn bản (đạt hoặc chuyển B), mỗi cái ≤ 2 ngày; `docker compose up` chạy; ADR đã merge.
 
 ## M1 v0.1 — Walking skeleton
 
-**Mục tiêu:** `docker compose up` chạy đầu-cuối: Chainlit → agent (router + HITL) → gateway mỏng → docs-mcp + tickets-mcp, kể cả `close_ticket` qua luồng intent/approval.
+**Mục tiêu:** `docker compose up` chạy đầu-cuối: SPA React + BFF → agent (router + HITL) → gateway mỏng → docs-mcp + tickets-mcp, kể cả `close_ticket` qua luồng intent/approval.
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
@@ -73,10 +74,12 @@ Quy tắc: hết 2 ngày chưa đạt tiêu chí thì **chuyển sang phương �
 | tickets-mcp: tool đọc + `prepare_close_ticket` + `commit_intent`; khoá intent | W | Luồng intent → commit chạy; intent hết hạn/hash sai bị từ chối |
 | `approval-signer`: `/v1/intents/verify`, `/v1/approvals` | W | Token sai `aud`/`sub` bị từ chối; không phụ thuộc Redis/DB |
 | Agent: StateGraph (router + docs + ticket), token exchange (hoặc phương án B), `interrupt({intent_jws})` | W | 10 kịch bản mẫu chạy được |
-| Chainlit: login OIDC, thẻ duyệt render từ render model của signer | W | Demo đóng ticket có duyệt |
+| `bff` (FastAPI, `packages/bff`): OIDC code + PKCE (client `chat-ui`), cookie `__Host-sid` HttpOnly/SameSite=Strict, session `bff:sess:{sid}` (Redis ACL user `bff`), CSRF `X-CSRF-Token`, CSP, exchange `aud=agent-service` + `aud=approval-signer`, proxy SSE `/api/chat`, `/api/intents/verify`, `/api/approvals`, `/api/threads`, `/api/requests/{id}`; không giữ khoá ký | W | Test BFF với `FakeTokenBroker`/fake signer; token không có trong response tới trình duyệt |
+| `web/` SPA tối thiểu (Vite + React + TS strict, TanStack Query, shadcn/ui): login, chat streaming (SSE qua POST), thẻ duyệt render từ render model (mọi `display_fields`, bidi escape), trích nguồn, chi phí; một `src/api/client.ts` (`request()`, `sse()`), component không gọi `fetch`; markdown `rehype-sanitize` | W | Demo đóng ticket có duyệt trên SPA; Vitest + MSW xanh |
+| CI job `web` (pnpm frozen-lockfile, lint, typecheck, vitest, build) + Playwright E2E trên compose; image `bff` multi-stage | W | CI xanh |
 | Seed tối thiểu (ACME: 2 phòng ban, ~30 tài liệu, ~100 ticket) | W | Seed lặp lại được |
 
-**DoD M1:** (1) `docker compose up` rồi chạy kịch bản "đóng ticket" đầu-cuối thành công; (2) 5 kiểm thử bảo mật tối thiểu qua: sai `args` sau duyệt -> `intent_mismatch`, replay `jti` -> `approval_replayed`, intent hết hạn -> `intent_expired`, ticket đổi sau duyệt -> `conflict`, user khác phòng không đọc được tài liệu mật; **agent gọi `/v1/approvals` bằng token của mình (`aud=agent-service`/`azp=agent-service`) -> 403, và `agent-service` exchange tới `approval-signer` bị Keycloak từ chối (D13)**; (3) `uv run pytest` xanh, leak-grep rỗng; (4) README chạy từ máy sạch ≤ 15 phút.
+**DoD M1:** (1) `docker compose up` rồi chạy kịch bản "đóng ticket" đầu-cuối thành công; (2) 5 kiểm thử bảo mật tối thiểu qua: sai `args` sau duyệt -> `intent_mismatch`, replay `jti` -> `approval_replayed`, intent hết hạn -> `intent_expired`, ticket đổi sau duyệt -> `conflict`, user khác phòng không đọc được tài liệu mật; **agent gọi `/v1/approvals` bằng chính token agent cầm (`aud=agent-service`, nhận được từ BFF) -> 401/403, token đăng nhập không có `aud ∋ {agent-service, approval-signer}`, và `agent-service` exchange tới `approval-signer` bị Keycloak từ chối (D13/D15, sửa N01/N02; không dùng token dựng riêng)**; (3) `uv run pytest` xanh, leak-grep rỗng; (4) README chạy từ máy sạch ≤ 15 phút; **(5) UI/BFF (D15):** (a) quét token: không có access/refresh/signer token hay khoá trong JS, localStorage, cookie (ngoài `sid` HttpOnly) hay response tới trình duyệt; (b) Playwright approve và reject xanh trên compose; (c) CSP chặn ảnh/script ngoài (ca exfil qua markdown `![](https://evil/...)` không phát sinh request); (d) thẻ duyệt hiển thị đủ `display_fields`, signer trả `intent_unrenderable` thì nút Duyệt bị khoá; (e) leak-grep `web/src` rỗng, job CI `web` xanh. M1 dài thêm ~1–1,5 tuần so với bản Chainlit.
 
 ## M2 v0.2 — Gateway production-core
 
@@ -111,7 +114,7 @@ Quy tắc: hết 2 ngày chưa đạt tiêu chí thì **chuyển sang phương �
 | Dữ liệu ACME đầy đủ: 4 phòng ban, ~200 tài liệu, ~2.000 ticket, DB bán hàng | W | Seed lặp lại, seed cố định |
 | Security regression v1 (E6) trong CI | W | Bảng vượt quyền = 0 |
 
-**DoD M3:** (1) mọi tool ghi chạy qua intent/approval, 100% ghi có `tool_audit` cùng transaction, và ca "agent gọi `/v1/approvals` bằng token của mình -> 403" vẫn xanh với mọi MCP/audience mới (D13); (2) E6 = 0 truy cập trái phép trong ≥ 30 ca; (3) DB `agent` không chứa plaintext hội thoại; (4) routing accuracy ≥ 90% trên 150 câu; (5) `uv run pytest` xanh, leak-grep rỗng.
+**DoD M3:** (1) mọi tool ghi chạy qua intent/approval, 100% ghi có `tool_audit` cùng transaction, và ca "agent gọi `/v1/approvals` bằng chính token agent cầm -> 401/403" vẫn xanh với mọi MCP/audience mới (D13); (2) E6 = 0 truy cập trái phép trong ≥ 30 ca; (3) DB `agent` không chứa plaintext hội thoại; (4) routing accuracy ≥ 90% trên 150 câu; (5) `uv run pytest` xanh, leak-grep rỗng.
 
 ## M4 v0.4 — Policy sidecar & tối ưu chi phí
 
@@ -147,19 +150,19 @@ Quy tắc: hết 2 ngày chưa đạt tiêu chí thì **chuyển sang phương �
 
 **DoD M5:** (1) security regression chạy trong CI mỗi PR, fail build khi hồi quy; (2) fault-injection 100% bị từ chối, ASR thao tác ghi = 0%; (3) có số liệu E1–E8 theo SLO của SOLUTION §9 (đạt hoặc có issue theo dõi cho mục chưa đạt); (4) user study hoàn tất với ≥ 8 người, báo cáo tỉ lệ duyệt nhầm kèm CI; (5) kết quả công bố seed/prompt/phiên bản.
 
-## M6 v0.6 — UI React + TypeScript + BFF + trang admin
+## M6 v0.6 — Trang admin + polish UX/a11y/i18n
 
-> Quyết định ở `docs/adr/ADR-001-ui-chainlit-mvp.md`. Có thể chạy song song M4–M5 sau khi M3 xong.
+> BFF + SPA đã có từ M1 (D15, `docs/adr/ADR-002-ui-react-bff.md`, thay ADR-001/Chainlit). M6 mở rộng trên cùng codebase. Có thể chạy song song M4–M5 sau khi M3 xong.
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| BFF FastAPI tối giản: OIDC code flow + session cookie `HttpOnly`/`SameSite=Strict`, refresh token, proxy SSE tới agent, **gọi `approval-signer`** bằng token đã exchange `aud=approval-signer` (giữ trong session server, client `bff` được cấp quyền exchange; D13) (verify intent → render model, xin approval), không giữ khoá ký | W | Token không bao giờ xuống trình duyệt; BFF không có khoá ký |
-| SPA Vite + React + TS (TanStack Query, shadcn/ui): chat streaming, thẻ duyệt render từ render model (diff trước/sau, `risk_flags` đỏ), sửa tham số (gọi lại `prepare_*`), trích nguồn, chi phí | W | Thay được Chainlit, không sửa agent |
-| Markdown sanitize (chặn ảnh/link ngoài) + CSP chặt | W | Pass ca exfil qua markdown trong security regression |
-| Trang admin: quản lý key, budget, chi phí theo phòng ban, bật/tắt cache scope (gọi admin API gateway) | W | Thay thao tác curl/Swagger |
-| `AgentClient` dùng lại ở BFF | W | Một adapter `http_sse` cho cả hai UI |
+| Trang admin (`features/admin`, BFF `/api/admin/*` yêu cầu role `admin`, proxy admin API gateway): quản lý key, budget, chi phí theo phòng ban, bật/tắt cache scope | W | Thay thao tác curl/Swagger; user không có role nhận 403 |
+| Polish UX: sửa tham số (gọi lại `prepare_*`), diff trước/sau, `risk_flags` đỏ, lịch sử thread, trạng thái lỗi/tải | W | Review UX với ≥ 3 người dùng thử |
+| a11y: điều hướng bàn phím, ARIA cho thẻ duyệt, tương phản; kiểm tra axe trong Playwright | W | 0 lỗi axe mức serious/critical |
+| i18n (vi/en) cho toàn bộ chuỗi UI | W | Không còn chuỗi cứng trong component (lint) |
+| Test BFF/SPA bổ sung cho `/api/admin/*` và các lỗi §6.4 (`session_expired`, `csrf_failed`) | W | Vitest + Playwright xanh |
 
-**DoD M6:** (1) toàn bộ e2e "đóng ticket" chạy trên UI mới; (2) quét token: không token/khoá trong JS, localStorage hay response tới trình duyệt; (3) CSP + sanitize qua security regression; (4) Chainlit có thể gỡ khỏi compose mặc định.
+**DoD M6:** (1) e2e "đóng ticket" + e2e admin chạy trên SPA; (2) quét token như DoD M1 (5a) vẫn xanh với trang admin; (3) CSP + sanitize qua security regression; (4) axe sạch lỗi serious/critical; (5) i18n vi/en đầy đủ.
 
 ## M7 v1.0 — Production hardening
 

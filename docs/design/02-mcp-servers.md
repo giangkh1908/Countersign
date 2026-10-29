@@ -16,7 +16,7 @@
 | Bỏ port `ToolAuditSink` (dùng `EventSink`) và `ToolRateLimiter` (dùng `RateLimiter`); `ToolInvoker` là lớp thường; audit ghi của tickets đồng bộ cùng transaction | D6, D11 | 1.4, 3.1, 3.3 |
 | Taint docs-mcp là mô-đun thường `acme_common/services/taint.py` (dùng thẳng Redis client), không phải port | D8, §9 | 5.7 |
 | Bảng ca kiểm thử bảo mật E6 viết lại theo luồng mới; ca raw SQL chuyển xuống 13 | D1, D9 | 8, 13.3 |
-| Luồng cũ (ghi nhận lịch sử): `approval_token` ES256 gắn `(sub, tool, args_sha256)` ký bởi `ui`; đã bị loại vì lỗ hổng R01 (xem `05` mục 2) | R01 | — |
+| Luồng cũ (ghi nhận lịch sử): `approval_token` ES256 gắn `(sub, tool, args_sha256)` ký bởi `ui` (Chainlit, đã thay bằng SPA+BFF ở D15); đã bị loại vì lỗ hổng R01 (xem `05` mục 2) | R01 | — |
 | Bỏ ngôn ngữ đề tài trong toàn bộ tài liệu | D0 | — |
 
 ## 0. Tổng quan và các quyết định chính
@@ -1218,7 +1218,7 @@ Audit hành động ghi **đồng bộ, cùng transaction** (D6): không tồn t
 - `actor_sub` = `sub` người đã approve; `on_behalf_of = NULL` (agent hành động thay mặt; `azp` nằm trong audit MCP).
 - `before`/`after` chỉ chứa trường thay đổi và hash của văn bản dài, không sao chép `description`.
 - **Idempotency:** (a) UPDATE có điều kiện `updated_at` nên gọi lại không tác dụng kép; (b) `jti` một lần (ReplayGuard) **và** `UNIQUE(ticket_events.intent_id)` + `UNIQUE(approval_jti)` ở DB, độc lập Redis; (c) agent retry sau mất response → `approval_replayed` kèm `details = {"already_applied": true, "ticket_code": "…", "event_id": …}` từ `find_applied(intent_id)`, agent biết thao tác đã xong; (d) `create_ticket`: chính `intent_id` là khoá idempotency.
-- COMMIT thất bại sau `consume`: `jti` đã đốt, intent vẫn `pending` → trả `internal_error` + `details.needs_new_approval=true`; UI xin approval mới cho **cùng** intent nếu còn hạn.
+- COMMIT thất bại sau `consume`: `jti` đã đốt, intent vẫn `pending` → trả `internal_error` + `details.needs_new_approval=true`; BFF/SPA xin approval mới cho **cùng** intent nếu còn hạn.
 - Conflict (ticket đổi sau prepare): intent chuyển `aborted`; agent gọi lại `prepare_*` (lấy `updated_at` mới) và người dùng duyệt lại. Không có cách "ép" ghi qua `conflict`.
 
 ### 6.9 Mã lỗi riêng của tickets-mcp
@@ -1593,7 +1593,7 @@ tests_e2e/mcp_security/      bảng E6 (mục 8) chạy qua HTTP với JWKS stub
 
 | Lớp | Test chính |
 |---|---|
-| common | `test_canonical_vectors` (vector cố định dùng chung với ui); `test_spotlight` (nonce khác nhau, chuỗi giả bị thay, mark không còn trong nội dung gốc); `test_pinning_roundtrip`; `test_principal_claims` (regex, clearance, dept chuỗi/list); `test_tool_invoker` (schema, scope, timeout, cắt output, audit ở `finally`); `test_no_identity_params` (duyệt mọi `ToolSpec`); `test_rate_limiter_lua` (Redis thật) + fallback in-memory |
+| common | `test_canonical_vectors` (vector cố định dùng chung với signer); `test_spotlight` (nonce khác nhau, chuỗi giả bị thay, mark không còn trong nội dung gốc); `test_pinning_roundtrip`; `test_principal_claims` (regex, clearance, dept chuỗi/list); `test_tool_invoker` (schema, scope, timeout, cắt output, audit ở `finally`); `test_no_identity_params` (duyệt mọi `ToolSpec`); `test_rate_limiter_lua` (Redis thật) + fallback in-memory |
 | auth middleware | Ca 1–11 bằng `httpx.AsyncClient(transport=ASGITransport(app))` với `FakeTokenVerifier` và với `OidcJwksVerifier`+stub JWKS |
 | `ToolServerHost` | **Bộ test hợp đồng** `ToolHostContract` chạy cho từng adapter (`mcp_sdk`, `fastmcp`): `tools/list` có digest, `tools/call` qua middleware, stateless, `server/discover`, schema đầu vào/ra; dùng để chốt SDK sau spike |
 | docs | `test_acl_policy` (bảng clearance/dept/roles); `test_chunking` (kích thước 400–600, overlap ≈15%, NFC, bảng không bị cắt, tiếng Việt); `test_hybrid_sql` (integration: RRF kết hợp; ca "nghi phep nam" khớp; ca `đ`; ACL tường minh **và** RLS độc lập: bỏ `WHERE` tường minh trong test để chứng minh RLS đủ); `test_fts_only_degraded`; `test_embed_recall_parity` (marker `model`, fp32 vs int8 Δ ≤ 1 điểm); `test_taint_written_on_search`; `test_taint_fail_closed_for_classified` |
@@ -1717,7 +1717,7 @@ Mục đã chốt bởi D13/D14: C1, C3, C4 (D14), C2 (D13). Điểm lệch ho�
 | ID | Nội dung | Đề xuất |
 |---|---|---|
 | C1 | **Chốt D14:** `IntentIssuer.issue(op, target, draft, ctx)`; `draft` là args đã chuẩn hoá | Đóng; contracts §9.2 do worker khác cập nhật |
-| C2 | **Đã quyết D13:** token user gửi agent chỉ có `aud=agent-service`; UI backend tự token-exchange sang `approval-signer` (server-side, TTL ≤ 5 phút); Keycloak chỉ cho `chat-ui`/`bff` exchange tới signer; signer kiểm `azp ∈ {chat-ui, bff}` và `sub == intent.sub` | Đóng (`05` mục 5.1, 14 #1). MCP vẫn chỉ nhận `aud` của chính nó (ca 2, 3) |
+| C2 | **Đã quyết D15 (thay D13):** token đăng nhập `aud=chat-ui` không gửi cho agent; BFF token-exchange sang `aud=agent-service` (cho agent) và `aud=approval-signer` (server-side, TTL ≤ 5 phút); Keycloak chỉ cho `chat-ui` exchange tới signer; không có client `bff`; signer kiểm `azp == chat-ui` và `sub == intent.sub` | Đóng (`05` mục 5.1, 14 #1). MCP vẫn chỉ nhận `aud` của chính nó (ca 2, 3) |
 | C3 | **Chốt D14:** `tool_audit.intent_id` nullable (NULL cho tool đọc); role `tk_app` INSERT `tool_audit` cùng transaction (D6); role `mcp_audit_w` chỉ INSERT | Đóng; contracts §3.6 do worker khác cập nhật |
 | C4 | `ticket_events.args_sha256` của v1.1 thay bằng `intent_id uuid` + `intent_sha256 text` (UNIQUE `intent_id`); `tickets.classification` mặc định `INTERNAL` | Chốt bởi D14 |
 | C5 | Taint là mô-đun thường dùng Redis client, không phải port (đúng §9: không bọc Redis client) | Không cần đổi; ghi chú ở §9.2 để các package khác không tạo port `TaintStore` |

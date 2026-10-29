@@ -20,11 +20,12 @@ Chi tiết ở `docs/design/00-contracts.md` §9. Tóm tắt:
 - Business logic (`services/`, `api/`) chỉ import port và factory. Leak-grep (§9.1 mục 8) phải không có kết quả nào.
 - Không bọc hạ tầng cố định (Postgres, Redis client, FastAPI, LangGraph) hay chuẩn mở (OpenAI-compatible API, OIDC, OTel).
 - Thêm vendor mới = thêm file, **không sửa** code nghiệp vụ. Nếu buộc phải sửa thì thiết kế đang sai, cần báo orchestrator.
+- Frontend (`web/`, React + TS): một `src/api/client.ts` duy nhất (`request()`, `sse()`); component không gọi `fetch`; interface trong `src/api/types.ts`, test dùng fake/MSW. Token chỉ ở BFF, không bao giờ xuống trình duyệt.
 
 ## Tài liệu
 - `docs/design/00-contracts.md` — hợp đồng dùng chung (nguồn chân lý)
-- `docs/design/DECISIONS-v1.2.md` — các quyết định v1.2 (thắng khi mâu thuẫn)
-- `docs/design/01..06` — thiết kế chi tiết: 01 gateway, 02 MCP, 03 agent/UI, 04 hạ tầng/dữ liệu/đánh giá, 05 luồng phê duyệt, 06 policy-sidecar
+- `docs/design/DECISIONS-v1.2.md` — các quyết định D0–D15 (thắng khi mâu thuẫn)
+- `docs/design/01..07` — thiết kế chi tiết: 01 gateway, 02 MCP, 03 agent, 04 hạ tầng/dữ liệu/đánh giá, 05 luồng phê duyệt, 06 policy-sidecar, 07 web (React + TS) + BFF
 - `docs/SOLUTION.md` — giải pháp & kiến trúc
 - `docs/ROADMAP.md` — milestone M0–M7
 - `docs/adr/`, `docs/reviews/` — ADR và review

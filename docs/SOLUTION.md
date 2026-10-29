@@ -2,13 +2,13 @@
 
 > LangGraph điều phối agent · MCP kết nối hệ thống nghiệp vụ · LLM Gateway tự phát triển (bảo mật + kiểm soát chi phí) · Phê duyệt ràng buộc giao dịch
 >
-> Phiên bản 1.2, 2026-10-28. Đây là **dự án sản phẩm phát triển tự do**: nền tảng trợ lý AI nội bộ self-host, hướng tới chạy được thật trong doanh nghiệp. Lộ trình theo milestone (xem [`ROADMAP.md`](ROADMAP.md)); mục tiêu số là SLO/tiêu chí chấp nhận (acceptance). Research chi tiết nằm ở `docs/research/01..04`; lý do các thay đổi v1.2 ở `docs/reviews/review-01-opus.md` và `design/DECISIONS-v1.2.md`.
+> Phiên bản 1.3, 2026-10-29 (D15: UI React + TS + BFF thay Chainlit). Đây là **dự án sản phẩm phát triển tự do**: nền tảng trợ lý AI nội bộ self-host, hướng tới chạy được thật trong doanh nghiệp. Lộ trình theo milestone (xem [`ROADMAP.md`](ROADMAP.md)); mục tiêu số là SLO/tiêu chí chấp nhận (acceptance). Research chi tiết nằm ở `docs/research/01..04`; lý do các thay đổi v1.2 ở `docs/reviews/review-01-opus.md` và `design/DECISIONS-v1.2.md`.
 >
 > **Thiết kế chi tiết** (đọc theo thứ tự):
 > - [`design/00-contracts.md`](design/00-contracts.md): cổng, mạng, **Redis keyspace (2 instance)**, schema Postgres + RLS, JWT/Keycloak, intent + approval token, mã lỗi, env, luồng tổng
 > - [`design/01-gateway.md`](design/01-gateway.md): pipeline, Lua rate limit/breaker, adapter, PII, guard, cache, router, audit
 > - [`design/02-mcp-servers.md`](design/02-mcp-servers.md): auth middleware, RAG hybrid search, ticket + intent/approval, analytics tham số hoá
-> - [`design/03-agent-ui.md`](design/03-agent-ui.md): state, graph, prompt, HITL, token exchange, Chainlit
+> - [`design/03-agent-ui.md`](design/03-agent-ui.md): state, graph, prompt, HITL, token exchange; UI = React + TS + BFF xem `design/07-web-bff.md`, D15, ADR-002
 > - [`design/04-infra-data-eval.md`](design/04-infra-data-eval.md): docker compose, cấu hình Redis/Postgres/Keycloak, dữ liệu giả lập, bộ đánh giá
 > - [`design/DECISIONS-v1.2.md`](design/DECISIONS-v1.2.md): các quyết định D0–D12 (thắng khi mâu thuẫn)
 
@@ -42,13 +42,13 @@ Quyết định dựa trên **yêu cầu kiến trúc**, không dựa vào một
 
 | Milestone | Nội dung chính | Kết quả chạy được |
 |---|---|---|
-| **M0 Spikes** | Time-box 2 ngày/spike, mỗi spike có phương án B (SDK MCP + identity, token exchange, Chainlit OIDC + interrupt, serializer mã hoá checkpoint, pilot Prompt Guard 2 tiếng Việt) | ADR chốt công nghệ |
-| **M1 v0.1 Walking skeleton** | Chainlit → agent (router + HITL) → gateway mỏng (auth key + user token + 1 provider + mock + usage) → docs-mcp (search + ACL) + tickets-mcp (đọc + `close_ticket` qua intent/approval) | `docker compose up` chạy đầu-cuối |
+| **M0 Spikes** | Time-box 2 ngày/spike, mỗi spike có phương án B (SDK MCP + identity, token exchange, BFF OIDC + exchange 2 audience (luật Keycloak V2), serializer mã hoá checkpoint, pilot Prompt Guard 2 tiếng Việt) | ADR chốt công nghệ |
+| **M1 v0.1 Walking skeleton** | BFF + SPA tối thiểu (login, chat streaming, thẻ duyệt, trích nguồn, chi phí) → agent (router + HITL) → gateway mỏng (auth key + user token + 1 provider + mock + usage) → docs-mcp (search + ACL) + tickets-mcp (đọc + `close_ticket` qua intent/approval) | `docker compose up` chạy đầu-cuối |
 | **M2 v0.2 Gateway production-core** | Rate limit, budget, 2 provider + fallback/breaker, exact cache, PII regex VN, audit chain HMAC, Prometheus/Grafana | Gateway đủ dùng nội bộ |
 | **M3 v0.3 Nghiệp vụ đầy đủ** | tickets-mcp đủ tool ghi qua intent; analytics-mcp chỉ tool tham số hoá; checkpoint mã hoá + retention; taint | Đủ luồng nghiệp vụ |
 | **M4 v0.4 Policy sidecar & tối ưu chi phí** | policy-sidecar (embed/guard/NER); router `acme-auto`; semantic cache có kiểm soát; pilot guard tiếng Việt | Giảm chi phí đo được |
 | **M5 v0.5 Bộ đánh giá & red-team** | Benchmark, security regression suite trong CI, user study phê duyệt | Báo cáo đánh giá |
-| **M6 v0.6 UI React + TS + BFF + admin** | Thay Chainlit, BFF gọi approval-signer, trang admin | UI sản phẩm |
+| **M6 v0.6 Trang admin + polish UX** | Trang admin (key, budget, chi phí theo phòng ban), polish UX, a11y, i18n (BFF + SPA đã có từ M1) | UI sản phẩm |
 | **M7 v1.0 Production hardening** | TLS nội bộ, HA, secret manager, backup/PITR, runbook, SLO + alert | Phát hành 1.0 |
 | **Tuỳ chọn sau v1.0** | Raw SQL analytics (HMAC ctx), so sánh LiteLLM/Portkey, Langfuse, step-up WebAuthn/CIBA, Jira adapter | — |
 
@@ -60,10 +60,11 @@ Quyết định dựa trên **yêu cầu kiến trúc**, không dựa vào một
 
 ```mermaid
 flowchart LR
-  U[Nhân viên] -->|OIDC login| UI[Chat UI<br/>Chainlit / BFF]
-  UI --> AG[Agent service<br/>LangGraph]
-  KC[(Keycloak<br/>IdP / OAuth 2.1)] -.token.-> UI
-  UI -->|verify intent / xin chữ ký<br/>+ user token| SG[approval-signer<br/>giữ khoá ký approval]
+  U[Nhân viên] -->|cookie HttpOnly| SPA[SPA React + TS<br/>web/]
+  SPA -->|/api, /auth| BFF[BFF FastAPI :8300<br/>giữ phiên + token]
+  BFF -->|Bearer aud=agent-service| AG[Agent service<br/>LangGraph]
+  KC[(Keycloak<br/>IdP / OAuth 2.1)] -.OIDC + exchange.-> BFF
+  BFF -->|verify intent / xin chữ ký<br/>token aud=approval-signer| SG[approval-signer<br/>giữ khoá ký approval]
   AG -->|key nội bộ + user JWT| GW[LLM Gateway<br/>FastAPI, khoá provider]
   GW -->|HTTP nội bộ| SC[policy-sidecar<br/>embed / guard / NER<br/>không khoá, không egress]
   GW -->|key provider| P1[Anthropic<br/>Claude]
@@ -79,6 +80,7 @@ flowchart LR
   M3 -->|role SELECT + view + RLS| PG
   M1 -->|taint| RS[(redis-state)]
   M2 -->|intent, jti| RS
+  BFF -->|bff:sess| RS
   GW --> RS
   GW --> RC[(redis-cache)]
   GW --> PG
@@ -182,25 +184,25 @@ Node `approval` gọi `interrupt({"intent_jws": ...})`. Agent **không dựng pr
 ### 6.3 Phê duyệt ràng buộc giao dịch (What You See Is What You Sign)
 Đây là **điểm khác biệt chính của sản phẩm**. Giả định: agent có thể bị chiếm hoặc bị lừa hoàn toàn, nên người dùng không bao giờ ký trên dữ liệu do agent hay UI tự dựng.
 
-Thành phần: **`approval-signer`**, service riêng nhỏ (≤ ~300 dòng, không dependency nặng, mạng `core`, không egress, cổng 8310), giữ khoá riêng ES256 ký approval. Chainlit/BFF không giữ khoá.
+Thành phần: **`approval-signer`**, service riêng nhỏ (≤ ~300 dòng, không dependency nặng, mạng `core`, không egress, cổng 8310), giữ khoá riêng ES256 ký approval. BFF/SPA không giữ khoá.
 
 Luồng:
 1. Agent gọi `prepare_close_ticket(args)`; tickets-mcp **tự đọc DB**, tính intent `{intent_id, op, target, before, after, expected_updated_at, args_canonical, sub, risk_flags, iat, exp=iat+300}`, ký JWS bằng khoá intent của tickets-mcp, lưu hash + `sub` + `status` vào Redis (TTL 330s = `exp` + 30s).
 2. Agent `interrupt({intent_jws})`.
-3. UI backend token-exchange (RFC 8693) token user lấy token `aud=approval-signer` (chỉ `chat-ui`/`bff` được phép, giữ trong session server, agent không thấy), rồi gửi `intent_jws` tới `approval-signer /v1/intents/verify`; signer kiểm `aud`, `azp ∈ {chat-ui, bff}`, chữ ký MCP, `exp`, `sub == intent.sub`, trả **render model** (before/after/risk_flags). UI chỉ render từ đây.
-4. User bấm Duyệt -> UI gọi `/v1/approvals`; signer xác minh token đã exchange (JWKS, iss, aud, azp, exp) và ký **approval token** `{iss, aud:"tickets-mcp", sub, intent_id, intent_sha256, jti, iat, exp=iat+120}`.
+3. BFF token-exchange (RFC 8693) token đăng nhập lấy token `aud=approval-signer` (chỉ client `chat-ui` được phép, giữ trong session server, agent và trình duyệt không thấy), rồi gửi `intent_jws` tới `approval-signer /v1/intents/verify`; signer kiểm `aud`, `azp == chat-ui`, chữ ký MCP, `exp`, `sub == intent.sub`, trả **render model** (before/after/`display_fields` phủ toàn bộ trường được ký/risk_flags; trường không hiển thị được -> `422 intent_unrenderable`). SPA chỉ render từ đây.
+4. User bấm Duyệt -> SPA gọi BFF `/api/approvals`, BFF gọi signer `/v1/approvals`; signer xác minh token đã exchange (JWKS, iss, aud, azp, exp) và ký **approval token** `{iss, aud:"tickets-mcp", sub, intent_id, intent_sha256, jti, iat, exp=iat+120}`.
 5. Agent gọi `commit_intent(intent_id, approval_token)`. tickets-mcp kiểm chữ ký, `sub == caller.sub`, intent tồn tại + hash khớp + còn `pending`, `jti` dùng một lần; thực thi với `expected_updated_at` (TOCTOU -> `conflict`); ghi `ticket_events` + `tool_audit` trong cùng transaction.
 6. **Sửa:** agent gọi lại `prepare_*` để có intent mới; không bao giờ ký args do UI/agent dựng.
 
-**Tách token (D13):** token đăng nhập của `chat-ui` chỉ có `aud=agent-service`; Keycloak chỉ cho `chat-ui`/`bff` exchange sang `approval-signer`, còn `agent-service` chỉ exchange sang 3 MCP. Nhờ vậy agent bị chiếm cũng không có token hợp lệ để tự gọi `/v1/approvals` (nhận `403 forbidden`).
+**Tách token (D13, cập nhật theo D15; sửa N01/N02):** token đăng nhập (client `chat-ui`, BFF giữ) có `aud=chat-ui` và **không** gửi cho agent. BFF exchange thành `aud=agent-service` (gửi agent mỗi request) và `aud=approval-signer` (chỉ trong session server). `agent-service` exchange sang `llm-gateway` + 3 MCP, không tới signer. Signer kiểm `azp == chat-ui`. Agent bị chiếm vì vậy không có token hợp lệ để tự gọi `/v1/approvals` (nhận `401/403`); test regression dùng **chính token agent cầm**, không dùng token dựng riêng. Cấu hình phụ thuộc luật exchange V2 của Keycloak (client gọi exchange phải nằm trong `aud` của subject token), xác minh ở spike M0.
 
 Mã lỗi: `intent_not_found`, `intent_expired`, `intent_mismatch`, `approval_*`, `conflict`.
-**Rủi ro còn lại:** UI backend bị chiếm có thể xin chữ ký cho intent của chính user đang đăng nhập. Giảm thiểu bằng BFF tối giản ở M6; tuỳ chọn step-up (WebAuthn/CIBA) cho thao tác rủi ro cao sau v1.0.
+**Rủi ro còn lại:** BFF bị chiếm có thể xin chữ ký cho intent của chính user đang đăng nhập. Giảm thiểu bằng BFF tối giản, token không xuống trình duyệt, CSP chặt từ M1; tuỳ chọn step-up (WebAuthn/CIBA) cho thao tác rủi ro cao sau v1.0.
 
 ## 7. Giao diện & vận hành
-- **Chat UI: Chainlit** (M1–M5), đăng nhập OIDC với Keycloak, thẻ duyệt render từ render model của signer, hiển thị nguồn trích dẫn và chi phí. Phương án B nếu spike thất bại: Agent Chat UI của LangChain hoặc FastAPI + HTMX tối giản. M6 thay bằng React + TS + BFF (ADR-001).
+- **Chat UI: React 18 + TypeScript (Vite) SPA + BFF FastAPI** ngay từ MVP (D15, ADR-002; thay Chainlit/ADR-001). BFF (`packages/bff`, 8300) phục vụ SPA cùng origin, đăng nhập OIDC code + PKCE (client `chat-ui`), giữ phiên ở `redis-state` (`bff:sess:{sid}`) và token phía server; trình duyệt chỉ có cookie `HttpOnly`/`SameSite=Strict` + CSRF header. Thẻ duyệt render từ render model của signer (mọi trường được ký, ký tự bidi/điều khiển hiển thị dạng escape); markdown qua `react-markdown` + `rehype-sanitize`, CSP chặn ảnh/script ngoài. Hiển thị nguồn trích dẫn và chi phí. M6 thêm trang admin + polish UX/a11y/i18n.
 - **Observability:** Prometheus metrics từ mọi service (`/metrics` yêu cầu bearer `METRICS_TOKEN`), Grafana dashboard; **Langfuse self-host** là tuỳ chọn (profile `obs`, bản v3 nặng), chỉ nhận metadata hoặc nội dung đã mask; log không chứa nội dung hội thoại.
-- **Hạ tầng:** `docker compose` gồm postgres (pgvector), redis-state, redis-cache, keycloak, gateway, policy-sidecar, approval-signer, 3 MCP server, agent, ui, prometheus, grafana, mock-provider (+ langfuse profile `obs`). Issuer Keycloak cố định `http://keycloak.acme.local:8080/realms/acme` (dev, không TLS). M7: TLS nội bộ, HA, secret manager, backup/PITR.
+- **Hạ tầng:** `docker compose` gồm postgres (pgvector), redis-state, redis-cache, keycloak, gateway, policy-sidecar, approval-signer, 3 MCP server, agent, bff (kèm SPA), prometheus, grafana, mock-provider (+ langfuse profile `obs`). Issuer Keycloak cố định `http://keycloak.acme.local:8080/realms/acme` (dev, không TLS). M7: TLS nội bộ, HA, secret manager, backup/PITR.
 
 ## 8. Công nghệ
 
@@ -214,7 +216,7 @@ Mã lỗi: `intent_not_found`, `intent_expired`, `intent_mismatch`, `approval_*`
 | MCP | `mcp` 2.3 / `fastmcp` 4.1 (chốt sau spike) | Spec 2026-07-28 |
 | Agent | langgraph 1.2.x, langchain 1.4.x, langchain-openai | HITL `interrupt()` |
 | Auth | Keycloak (OIDC, token exchange) | OAuth 2.1 chuẩn, khớp spec MCP |
-| UI | Chainlit (M1–M5) -> React + TS + BFF (M6) | Nhanh lúc đầu, an toàn token về sau |
+| UI | React 18 + TS (Vite, TanStack Query, Tailwind + shadcn/ui) + BFF FastAPI (D15) | Thẻ duyệt WYSIWYS, token không xuống trình duyệt, CSP/sanitize chặt từ MVP |
 | Test / đánh giá | pytest, k6 hoặc Vegeta, promptfoo, garak, AgentDojo (tham khảo) | Xem mục 9 |
 
 ## 9. Bộ đánh giá: benchmark + security regression + user study
@@ -243,14 +245,14 @@ Bộ đánh giá gồm ba phần: **(a) benchmark hiệu năng/chi phí**, **(b)
 |---|---|
 | API lấy danh tính caller trong `mcp` 2.x / `fastmcp` 4.x chưa rõ; SDK stateless | Spike M0 (2 ngày); phương án B: FastAPI tool server + middleware ASGI kiểm JWT |
 | Keycloak token exchange cấu hình phức tạp | Phương án B: client-credentials + header `X-Acme-User-Token` đã verify; ghi rõ là giới hạn |
-| Chainlit OIDC/interrupt không đủ | Phương án B: Agent Chat UI hoặc FastAPI + HTMX tối giản |
+| Hai ngôn ngữ (Python + TS), thêm pipeline Node; M1 dài thêm ~1–1,5 tuần | Job CI `web` riêng (lockfile, lint, typecheck, vitest, build, Playwright); type TS sinh từ OpenAPI của BFF; quy tắc frontend (một `request()`, component không gọi `fetch`, leak-grep `web/src`) |
 | Serializer mã hoá checkpoint LangGraph không hỗ trợ như kỳ vọng | Spike M0; dự phòng: mã hoá cột ở lớp lưu trữ + retention ngắn |
 | Prompt Guard 2 kém trên tiếng Việt (nhiều false positive/negative) | Pilot 50+50 mẫu trước khi bật; mặc định tắt; fail-policy cấu hình được |
 | Sidecar chậm hoặc lỗi làm hỏng đường nóng của gateway | Timeout + fail-policy (`guard`: `fail_open\|fail_closed`, `ner`: `skip_on_error`); báo cáo độ trễ có/không sidecar |
 | Supply chain model (pickle độc, đổi revision) | `models.lock`, chỉ `*.safetensors`/`*.onnx`, `trust_remote_code=False`, verify hash lúc khởi động |
 | PII tiếng Việt khó nhận diện (tên người) | Regex cho định danh có cấu trúc + NER; test ≥ 300 câu viết tay; báo cáo precision/recall trung thực |
-| Agent tự xin approval (gọi `/v1/approvals` bằng token của mình) | Đã chặn bằng D13: token user gửi agent không có `aud=approval-signer`; Keycloak không cho `agent-service` exchange tới signer; signer kiểm `azp ∈ {chat-ui, bff}`; có ca security regression |
-| UI backend bị chiếm xin chữ ký cho intent của chính user | BFF tối giản (M6); tuỳ chọn step-up WebAuthn/CIBA; ghi là rủi ro còn lại |
+| Agent tự xin approval (gọi `/v1/approvals` bằng token của mình) | Đã chặn bằng D13/D15: token gửi agent (`aud=agent-service`) không dùng được cho signer; Keycloak không cho `agent-service` exchange tới signer; signer kiểm `azp == chat-ui`; test dùng chính token agent cầm; có ca security regression |
+| BFF bị chiếm xin chữ ký cho intent của chính user | **Rủi ro còn lại.** BFF tối giản (≤ vài trăm dòng logic), không giữ khoá ký, token không xuống trình duyệt, CSP chặt; tuỳ chọn step-up WebAuthn/CIBA sau v1.0 |
 | Cache rò chéo user hoặc bị dò | Khoá có `sub`, semantic cache chỉ từ nguồn tin cậy, ẩn header cache với user thường, canary test trong CI |
 | Redis state lỗi | Degraded mode có chặn trên chi tiêu, chỉ alias rẻ, hết 600s trả 503 |
 | Audit bị DBA sửa | HMAC khoá ngoài DB + anchor append-only; ghi giới hạn |
@@ -263,6 +265,6 @@ Bộ đánh giá gồm ba phần: **(a) benchmark hiệu năng/chi phí**, **(b)
 2. Tên 10 mục OWASP Agentic Top 10 2026 (trang chính thức).
 3. Keycloak bản hiện hành: token exchange (RFC 8693) đã GA chưa; có phát claim `act` không.
 4. Advisory gốc của sự cố gateway mã nguồn mở (GHSA/OSV, blog nhà phát hành) để thay các mục đang ghi "chưa xác minh" ở mục 1.
-5. Chainlit hoặc Agent Chat UI: hỗ trợ LangGraph `interrupt` đến đâu.
+5. Spike BFF: luật Keycloak exchange V2 với 2 audience (`agent-service`, `approval-signer`) từ client `chat-ui`; SSE qua POST + `interrupt` qua BFF.
 6. Serializer mã hoá của `langgraph-checkpoint-postgres` (API chính xác).
 7. Điều khoản license: Prompt Guard 2 (Llama license), underthesea (GPL?).

@@ -1,6 +1,6 @@
 # ADR-001: Chainlit cho MVP, React + TypeScript + BFF ở giai đoạn sau
 
-- **Trạng thái:** Đã chấp nhận (2026-10-28), sửa đổi v1.2 (2026-10-28) theo `docs/design/DECISIONS-v1.2.md` D0, D1
+- **Trạng thái:** **Bị thay thế bởi ADR-002 (2026-10-29).** Trước đó: đã chấp nhận (2026-10-28), sửa đổi v1.2 (2026-10-28) theo `docs/design/DECISIONS-v1.2.md` D0, D1
 - **Người quyết định:** chủ dự án
 
 ## Bối cảnh

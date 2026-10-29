@@ -2,10 +2,18 @@
 
 > **Nguồn chân lý duy nhất** cho tên dịch vụ, cổng, mạng, Redis keyspace, schema Postgres, JWT claims, mã lỗi, biến môi trường.
 > Mọi tài liệu thiết kế `01..04` và mọi dòng code phải khớp file này. Muốn đổi thì sửa file này trước và ghi ADR.
-> Phiên bản 1.2.1, 2026-10-29. Khi mâu thuẫn với `DECISIONS-v1.2.md` thì `DECISIONS-v1.2.md` thắng.
+> Phiên bản 1.3, 2026-10-29. Khi mâu thuẫn với `DECISIONS-v1.2.md` thì `DECISIONS-v1.2.md` thắng.
+
+### Changelog v1.3
+Tham chiếu: `D15` trong `design/DECISIONS-v1.2.md`, `docs/adr/ADR-002-ui-react-bff.md` (thay ADR-001); `N01`, `N02` trong `docs/reviews/review-02-opus.md`.
+- **D15 UI = React + TypeScript + BFF ngay từ MVP:** bỏ Chainlit (đã thay). Service `ui` đổi thành `bff` (`packages/bff`, 8300, `edge`+`core`), phục vụ SPA `web/` + `/auth/*` + `/api/*`; phiên ở `redis-state` key `bff:sess:{sid}`, Redis ACL user `bff` (§1, §2).
+- **Sửa N01/N02 (luồng token, thay phần Keycloak của D13):** token đăng nhập `aud=chat-ui` và không gửi cho agent; BFF exchange sang `aud=agent-service` (gửi agent mỗi request) và `aud=approval-signer` (chỉ trong session server); `agent-service` exchange sang `llm-gateway` + 3 MCP, không tới signer; bỏ client `bff` riêng; signer kiểm `azp == chat-ui`; test D13/F22 phải dùng chính token agent cầm (§4, §4.1, §8).
+- Mã lỗi mới `intent_unrenderable` (422, signer) và lỗi BFF (§6.3, §6.4); env BFF (§7); quy tắc frontend và leak-grep cho `web/src` (§9.1, §9.3).
+
+- **D16 đồng bộ sau D15:** role quản trị thống nhất `admin`; client scope `agent:invoke`, `signer:approve` (§4); tập `display_fields[].kind` chuẩn theo `05` mục 5.3; render model thêm `server_time`; khoá phụ phiên BFF `:pend/:lock/:gate/:rl` (§2.1); user Redis `bff` không `MULTI/WATCH/EVAL`; `TokenBroker`/`TokenVerifier` ở `acme_common` (§9.2); mã lỗi và env BFF bổ sung (§6.4, §7); endpoint BFF/agent bổ sung (§6.2); CSP thêm `object-src 'none'` (§9.3); realm `chat-ui` (§4). Đã đưa đủ 11 mục "Phụ thuộc contracts v1.3" của `07` §9 vào đây.
 
 ### Changelog v1.2.1
-Tham chiếu: `D13`, `D14` trong `design/DECISIONS-v1.2.md`.
+Tham chiếu: `D13` (phần Keycloak bị D15 thay), `D14` trong `design/DECISIONS-v1.2.md`.
 - **D13 Tách token cho approval-signer:** bỏ audience mapper `approval-signer` trên token đăng nhập của `chat-ui`; UI backend tự token-exchange (RFC 8693) lấy token `aud=approval-signer`, giữ trong session phía server; quyền exchange tới `approval-signer` chỉ cấp cho `chat-ui`/`bff`; `agent-service` chỉ exchange tới 3 MCP; signer kiểm `aud` + `azp ∈ {chat-ui, bff}` + `sub == intent.sub` (§4, §4.1, §8).
 - **D14 Gộp phụ thuộc v1.2:** port `AnchorStore`; `EventSink.flush()` + `append(record, sync=)`; `IntentIssuer.issue(op, target, draft, ctx)`; sidecar dùng `PiiDetector` adapter `underthesea_ner`; Redis TTL intent = `exp`+30s (330s); xoay khoá ES256 overlap 15 phút; EVAL trần 160 USD + key `eval-regression`; env `MODELS_LOCK_SHA256`, `SIDECAR_TOKEN_PREV`, `*_TLS_*`; cột `tickets.classification`, `tool_audit.intent_id`, `ticket_events.intent_id`; `acme-embed` -> `sidecar/embed`; admin cache API (§2, §3, §5, §6.2, §7, §9.2).
 - Đề xuất trong 01§21, 02§12, 03§15, 04§23, 05§14: chấp nhận trừ mục ghi ở cuối file này ("Đề xuất bị bác/hoãn v1.2.1").
@@ -64,13 +72,13 @@ Tham chiếu: `01§20.n` = mục n trong "Đề xuất sửa contracts" của `0
 | `redis-cache` | redis:8 (pin digest, có Query Engine/vector) | 6379 | — | core | `allkeys-lru`, không persistence |
 | `gateway` | `packages/gateway` | 8000 | 8000 (dev) | core, **egress** | **Service duy nhất được ra Internet** và giữ khoá provider. **Không** nạp onnxruntime/torch/tokenizers/model HF; PII regex thuần Python; gọi `policy-sidecar` qua HTTP nội bộ |
 | `policy-sidecar` | `packages/policy_sidecar` | 8010 | — | **core only** | Không giữ khoá nào, **không egress**. `/v1/embed` (bge-m3 ONNX), `/v1/guard` (Prompt Guard 2), `/v1/pii/ner` (underthesea CRF). Verify `models.lock` lúc khởi động (§7.1). Bearer nội bộ `SIDECAR_TOKEN` |
-| `approval-signer` | `packages/approval_signer` | 8310 | — | **core only** | Service nhỏ (≤ ~300 dòng; FastAPI + PyJWT/cryptography, không dependency nặng), không egress, không Redis. Giữ **khoá riêng ES256 ký approval token**; xác minh intent JWS của tickets-mcp; trả render model. Chainlit/BFF **không** giữ khoá |
+| `approval-signer` | `packages/approval_signer` | 8310 | — | **core only** | Service nhỏ (≤ ~300 dòng; FastAPI + PyJWT/cryptography, không dependency nặng), không egress, không Redis. Giữ **khoá riêng ES256 ký approval token**; xác minh intent JWS của tickets-mcp; trả render model. BFF **không** giữ khoá |
 | `mock-provider` | `packages/mock_provider` | 8900 | — | core | Giả lập OpenAI/Anthropic/Gemini |
 | `docs-mcp` | `packages/mcp_docs` | 8101 | — | core | Streamable HTTP `/mcp` |
 | `tickets-mcp` | `packages/mcp_tickets` | 8102 | — | core | Giữ khoá riêng ký **intent**; xác minh approval token bằng khoá công khai của signer |
 | `analytics-mcp` | `packages/mcp_analytics` | 8103 | — | core | MVP: chỉ tool tham số hoá (D9) |
 | `agent` | `packages/agent` | 8200 | — | core | LangGraph + API nội bộ |
-| `ui` | `packages/ui` (Chainlit; M6: BFF + SPA) | 8300 | 8300 | edge, core | Hiển thị thẻ duyệt từ render model của signer; gọi `approval-signer` bằng access token của user. **Không giữ khoá ký** |
+| `bff` | `packages/bff` (FastAPI; image multi-stage: build SPA `web/` bằng node, runtime python) | 8300 | 8300 | edge, core | Phục vụ SPA đã build (cùng origin, không CORS) + `/auth/*` + `/api/*` (D15). Giữ phiên OIDC, token-exchange, gọi `agent` và `approval-signer`. Token không xuống trình duyệt (chỉ cookie `HttpOnly`). **Không giữ khoá ký**. Dev: Vite 5173 proxy → 8300 |
 | `prometheus` | prom/prometheus | 9090 | 9090 (dev) | core, **edge** (dev) | Cần `edge` để publish 9090 (Docker không publish cổng của container chỉ thuộc network `internal`). Scrape `/metrics` bằng bearer `METRICS_TOKEN` |
 | `grafana` | grafana/grafana | 3000 | 3000 | edge, core | |
 | `langfuse` (profile `obs`, tuỳ chọn) | langfuse/langfuse (v3) | 3001 | 3001 | edge, core | v3 cần thêm ClickHouse, MinIO, Redis riêng -> **nặng, tuỳ chọn**. Chỉ nhận metadata hoặc nội dung đã mask (D7) |
@@ -81,7 +89,7 @@ Tham chiếu: `01§20.n` = mục n trong "Đề xuất sửa contracts" của `0
 **Compose profile:** mặc định (core), `obs` (langfuse), `bench`, `eval` (chỉ profile này đặt `ACME_ENV=eval` và cho phép adapter `permissive`).
 
 **Mạng Docker**
-- `edge`: thứ người dùng truy cập (ui, keycloak, grafana, prometheus dev, langfuse).
+- `edge`: thứ người dùng truy cập (bff, keycloak, grafana, prometheus dev, langfuse).
 - `core`: `internal: true`, không ra Internet. Gồm cả `policy-sidecar` và `approval-signer`.
 - `egress`: chỉ `gateway` tham gia, đây là đường duy nhất ra `api.anthropic.com` và `generativelanguage.googleapis.com`.
 
@@ -104,10 +112,11 @@ user gateway   on >${REDIS_GATEWAY_PASSWORD}   ~gw:*  &gw:events  +@read +@write
 user tickets   on >${REDIS_TICKETS_PASSWORD}   ~mcp:tickets:* ~mcp:rl:tickets-mcp:* %R~mcp:taint:*  +@read +@write +@scripting -@dangerous
 user docs      on >${REDIS_DOCS_PASSWORD}      ~mcp:rl:docs-mcp:* ~mcp:taint:*  +@read +@write +@scripting -@dangerous
 user analytics on >${REDIS_ANALYTICS_PASSWORD} ~mcp:rl:analytics-mcp:*  +@read +@write +@scripting -@dangerous
+user bff       on >${REDIS_BFF_PASSWORD}       ~bff:sess:*  +@read +@write -@dangerous   # chỉ trên redis-state (D15)
 user health    on >${REDIS_HEALTH_PASSWORD}    resetkeys +ping
 user ops       on >${REDIS_OPS_PASSWORD}       ~*  +@read +info +ping -@dangerous
 ```
-`+@scripting` là bắt buộc vì token bucket, breaker, concurrency và `taint_max` chạy bằng Lua (`EVALSHA`). `docs` cần quyền đọc+ghi `mcp:taint:*` vì Lua gộp `max` (đọc giá trị cũ, ghi giá trị mới); `tickets` chỉ **đọc** taint (`%R~`). `redis-cache` dùng user `gateway` với `~gwc:*` và quyền search (`+@search` hoặc liệt kê `FT.*`; kiểm thử ACL thật sớm). User `health` có ở cả hai instance.
+`+@scripting` là bắt buộc vì token bucket, breaker, concurrency và `taint_max` chạy bằng Lua (`EVALSHA`). `docs` cần quyền đọc+ghi `mcp:taint:*` vì Lua gộp `max` (đọc giá trị cũ, ghi giá trị mới); `tickets` chỉ **đọc** taint (`%R~`). `redis-cache` dùng user `gateway` với `~gwc:*` và quyền search (`+@search` hoặc liệt kê `FT.*`; kiểm thử ACL thật sớm). User `health` có ở cả hai instance. **User `bff` (D16) chỉ dùng lệnh đơn**: không có `MULTI/WATCH/EXEC/EVAL/EVALSHA` (ACL `+@read +@write -@dangerous` không cấp `@scripting`/`@transaction`); BFF chỉ dùng `GET/SET NX EX/HSET/HGETALL/EXPIRE/INCR/DEL`, không Lua.
 
 ### 2.1 `redis-state`
 
@@ -126,11 +135,18 @@ user ops       on >${REDIS_OPS_PASSWORD}       ~*  +@read +info +ping -@dangerou
 | `mcp:tickets:intent:{intent_id}` | HASH `{sha256, sub, status: pending\|committed\|cancelled}` | **330s** (= `exp` của intent 300s + 30s; D14) | tickets-mcp | `prepare_*`: `HSET` + `EXPIRE 330`; `commit_intent`: kiểm `sha256`, `sub`, `status=pending`, rồi đặt `committed` (Lua, atomic) | Ràng buộc intent đã phát hành với đúng người, đúng nội dung; dùng một lần. `sha256` = `intent_sha256` (§4) |
 | `mcp:tickets:jti:{jti}` | STRING "1" | 180s (> exp của approval token) | tickets-mcp | `SET NX EX 180`. Thất bại tức là **replay**, từ chối | Approval token chỉ dùng được một lần |
 | `mcp:taint:{sub}` | STRING int (max `classification` đã trả cho user) | **1800s** (30 phút), gia hạn mỗi lần ghi | docs-mcp (Lua `taint_max`) | docs-mcp ghi sau mỗi lần trả tài liệu có `classification` cao hơn; tickets-mcp **chỉ đọc** | Taint phía server (agent không giả được) để phát hiện `possible_downgrade` ở `prepare_*` (D8) |
+| `bff:sess:{sid}` | HASH `{v, sub, user (JSON hiển thị, không dùng để cấp quyền), created_at, csrf, access_enc, access_exp, refresh_token_enc, id_token_enc, agent_enc, agent_exp, signer_token (enc), signer_exp}` (+ `gw_admin_enc` ở M6); các trường `*_enc` mã hoá AES-GCM (`BFF_SESSION_KEY`, AAD = sid + tên trường) | idle 30 phút (trượt, `BFF_SESSION_IDLE_S=1800`), tuyệt đối 8 giờ (`BFF_SESSION_ABS_S=28800`) | bff | `HSET`/`EXPIRE`, xoá khi logout | Phiên BFF (D15). Token chỉ ở đây, không xuống trình duyệt; agent chỉ nhận token `aud=agent-service` mỗi request. TTL token signer ≤ `BFF_SIGNER_TOKEN_TTL_S` (≤ 300s) |
+| `bff:sess:{sid}:pend` | HASH `interrupt_id → JSON {thread_id, intent_id, intent_jws, op, expires_at, state, tries}`, tối đa 5 mục | cùng phiên | bff | `HSET`/`HGET`/`HDEL` | Interrupt BFF nhận từ agent; **BFF giữ `intent_jws` ở đây** (trình duyệt chỉ gửi `thread_id`/`interrupt_id`). Ngoại lệ có chủ đích duy nhất của quy tắc "không lưu intent JWS" bên dưới; xoá khi resume (D16) |
+| `bff:sess:{sid}:lock` | STRING `SET NX PX 10000` | 10s | bff | `SET NX PX` | Single-flight refresh/exchange |
+| `bff:sess:{sid}:gate:{interrupt_id}` | STRING `SET NX EX 150` | 150s | bff | `SET NX EX` | Chống bấm đúp Duyệt / hai tab |
+| `bff:sess:{sid}:rl:{bucket}` | STRING `INCR` + `EXPIRE NX` | cửa sổ 60s (`streams`: 330s) | bff | `INCR`/`DECR`/`EXPIRE` | Rate limit và số luồng SSE theo phiên |
+| `bff:sess:login:{state}` | STRING JSON `{verifier, nonce, return_to, created_at}` | 600s | bff | `SET EX`, đọc rồi `DEL` | Trạng thái đăng nhập OIDC (dùng một lần) |
+| `bff:sess:u:{sha256(sub)[:16]}:appr` | STRING `INCR` | 3600s | bff | `INCR`/`EXPIRE` | Trần 30 approval/giờ theo người dùng (lớp phụ) |
 | `mcp:rl:{server}:{sub}` | HASH token bucket | 120s | các MCP server (`server` ∈ `docs-mcp`, `tickets-mcp`, `analytics-mcp`) | Lua | Rate limit gọi tool theo user (chống agent chạy vòng lặp) |
 
 **Reconcile budget:** job mỗi 5 phút tính `SUM(cost_micro_usd)` từ `gateway.usage_events` trong tháng và ghi đè `gw:spend:*`. Postgres là nguồn chân lý, Redis là counter nóng.
 
-**Không bao giờ lưu trong Redis:** bảng ánh xạ PII (chỉ nằm trong RAM của request), plaintext API key, access token của user, nội dung prompt chưa mask, **intent JWS đầy đủ** (chỉ lưu hash, sub, status).
+**Không bao giờ lưu trong Redis:** bảng ánh xạ PII (chỉ nằm trong RAM của request), plaintext API key, access token của user, nội dung prompt chưa mask, **intent JWS đầy đủ** ở các key `mcp:*` (chỉ lưu hash, sub, status); ngoại lệ duy nhất là `bff:sess:{sid}:pend` của phiên BFF (D16).
 
 ### 2.2 `redis-cache`
 
@@ -339,17 +355,29 @@ Cột `intent_id uuid NULL` (D14) có trong `tool_audit` (null với tool đọc
 
 | Client | Loại | Dùng cho |
 |---|---|---|
-| `chat-ui` | confidential, Authorization Code + PKCE | Người dùng đăng nhập. Token đăng nhập chỉ có `aud=agent-service` (**không** có `approval-signer`, D13). Được phép token-exchange tới `approval-signer` |
-| `bff` (M6) | confidential | Thay `chat-ui` backend ở M6; cùng quyền exchange tới `approval-signer` |
-| `agent-service` | confidential, service account, **được phép token-exchange** | Đổi token user lấy token theo audience, **chỉ tới `docs-mcp`, `tickets-mcp`, `analytics-mcp`** (và `llm-gateway`); **không** được exchange tới `approval-signer` (D13) |
+| `chat-ui` | confidential, Authorization Code + PKCE; **client của BFF** (D15; không có client `bff` riêng) | Người dùng đăng nhập qua BFF. Token đăng nhập `aud=chat-ui` (audience mapper trên chính client; **không** có `agent-service` hay `approval-signer`), không gửi cho agent. Được phép token-exchange tới `agent-service` (xin scope `agent:invoke`) và `approval-signer` (xin scope `signer:approve`); luật exchange V2: client gọi exchange phải nằm trong `aud` của subject token (xác minh ở spike M0). `agent:invoke` và `signer:approve` là *optional* client scope của `chat-ui`, không có trong token đăng nhập. Bật *Revoke Refresh Token* (refresh xoay vòng) và đăng ký `post_logout_redirect_uri = BFF_PUBLIC_URL`. M6: exchange thứ ba tới `llm-gateway` (scope `llm:invoke`) **chỉ cho người có role `admin`** (proxy admin API) |
+| `agent-service` | confidential, service account, **được phép token-exchange**; cũng là audience | Đổi token `aud=agent-service` của user lấy token theo audience, **chỉ tới `docs-mcp`, `tickets-mcp`, `analytics-mcp` và `llm-gateway`**; **không** được exchange tới `approval-signer` (D13/D15). **Kiểm scope `agent:invoke`** trên token vào (cùng `aud=agent-service`, `azp=chat-ui`); thiếu ⇒ `403 forbidden` |
 | `llm-gateway` | bearer-only (audience) | Gateway xác minh danh tính user |
 | `docs-mcp`, `tickets-mcp`, `analytics-mcp` | bearer-only (audience) | Resource server |
-| `approval-signer` | bearer-only (audience) | Resource server của signer: xác minh token (JWKS, iss, exp) và kiểm `aud` chứa `approval-signer`, `azp ∈ {chat-ui, bff}`, `sub == intent.sub` (D13); ngược lại `403 forbidden` |
+| `approval-signer` | bearer-only (audience) | Resource server của signer: xác minh token (JWKS, iss, exp) và kiểm `aud` chứa `approval-signer`, scope chứa `signer:approve`, `azp == chat-ui`, `sub == intent.sub` (D13/D15/D16); ngược lại `403 forbidden` |
 
-**Client scopes:** `llm:invoke`, `docs:read`, `tickets:read`, `tickets:write`, `analytics:read`.
+**Client scopes:** `llm:invoke`, `docs:read`, `tickets:read`, `tickets:write`, `analytics:read`, `agent:invoke`, `signer:approve`.
 
-**Token của user** (do chat-ui nhận được): `aud=agent-service`, sống 5 phút, refresh 30 phút. **Token cho approval-signer (D13):** UI backend (Chainlit; BFF ở M6) tự token-exchange (RFC 8693) `subject_token=<token user>` -> `audience=approval-signer`; token này (`azp=chat-ui|bff`, TTL ≤ 5 phút) chỉ nằm trong **session phía server** (khoá theo `session_id`), không bao giờ gửi cho agent hay trình duyệt, không cache sang session khác. Agent không bao giờ nhìn thấy token này.
-**Issuer cố định (dev):** `http://keycloak.acme.local:8080/realms/acme` (so khớp chuỗi chính xác ở mọi resource server). **Token đã exchange** (RFC 8693, agent-service thực hiện, mỗi request lấy một token cho mỗi audience; cache in-process theo khoá `(sub, aud, sorted scopes)`, TTL = `exp − 30s`):
+| Scope | Cấp cho (client) | Ai kiểm | Ghi chú |
+|---|---|---|---|
+| `llm:invoke`, `docs:read`, `tickets:read`, `tickets:write`, `analytics:read` | `agent-service` (optional scope, xin theo từng exchange) | gateway / từng MCP server | `tickets:write` chỉ cho `prepare_*` + `commit_intent` |
+| `agent:invoke` | `chat-ui` (optional; BFF xin khi exchange `aud=agent-service`) | `agent-service` | Audience mapper `agent-service`; không nằm trong token đăng nhập |
+| `signer:approve` | `chat-ui` (optional; BFF xin khi exchange `aud=approval-signer`) | `approval-signer` | Audience mapper `approval-signer`; `agent-service` không có scope này nên không xin được |
+
+Cả hai resource server kiểm scope **ngoài** `aud`/`azp` (D16); khớp realm JSON ở `04`. Role `admin` là tên duy nhất của vai trò quản trị.
+
+**Luồng token (D15, thay D13 phần Keycloak; sửa N01/N02):**
+1. **Token đăng nhập** (BFF nhận qua Authorization Code + PKCE, client `chat-ui`): `aud=chat-ui`, sống 5 phút, refresh 30 phút (refresh token mã hoá AES-GCM trong session BFF). **Không** gửi cho agent; trình duyệt chỉ có cookie phiên `HttpOnly`.
+2. **BFF token-exchange** (RFC 8693, `azp=chat-ui`): (a) -> `aud=agent-service` + scope `agent:invoke`, gửi cho agent trong mỗi request; (b) -> `aud=approval-signer` + scope `signer:approve` (TTL ≤ 300s), chỉ nằm trong **session phía server**, không bao giờ gửi cho agent hay trình duyệt, không cache sang session khác.
+3. **`agent-service` exchange** token `aud=agent-service` của nó -> `llm-gateway` + `docs-mcp`/`tickets-mcp`/`analytics-mcp`. **Không** tới `approval-signer` (Keycloak từ chối).
+4. **Test bắt buộc (N02):** dùng **chính token agent cầm** (`aud=agent-service`) gọi `approval-signer` -> 401/403; assert token đăng nhập không có `aud ∋ {agent-service, approval-signer}`; `agent-service` exchange tới signer -> Keycloak từ chối.
+5. **Mã dùng chung (D16):** `TokenBroker` (adapter `oauth_token_exchange`, `static`) và `TokenVerifier` (adapter `oidc_jwks`) nằm trong `acme_common`; agent, approval-signer, BFF, gateway và MCP dùng chung (§9.2).
+**Issuer cố định (dev):** `http://keycloak.acme.local:8080/realms/acme` (so khớp chuỗi chính xác ở mọi resource server). **Token đã exchange** (RFC 8693, agent-service thực hiện cho gateway và 3 MCP, mỗi request lấy một token cho mỗi audience; cache in-process theo khoá `(sub, aud, sorted scopes)`, TTL = `exp − 30s`):
 ```json
 { "iss": "http://keycloak.acme.local:8080/realms/acme", "sub": "<user uuid>", "aud": "tickets-mcp",
   "azp": "agent-service", "exp": "<= 300s", "scope": "tickets:read tickets:write",
@@ -366,7 +394,7 @@ Cột `intent_id uuid NULL` (D14) có trong `tool_audit` (null với tool đọc
 | Khoá intent | `tickets-mcp` (`INTENT_PRIVATE_KEY_PATH`, `INTENT_KEY_ID`) | `approval-signer` (`INTENT_PUBLIC_KEYS_DIR`) | Ký intent JWS |
 | Khoá approval | `approval-signer` (`APPROVAL_SIGNER_PRIVATE_KEY_PATH`, `APPROVAL_SIGNER_KEY_ID`) | `tickets-mcp` (`APPROVAL_PUBLIC_KEY_PATH`) | Ký approval token |
 
-Agent, UI, Chainlit/BFF **không** giữ khoá riêng nào.
+Agent và BFF/SPA **không** giữ khoá riêng nào.
 
 **Intent JWS** (header `{"alg":"ES256","typ":"acme-intent+jws","kid":"<INTENT_KEY_ID>"}`), do `tickets-mcp` ký trong `prepare_<op>`:
 ```json
@@ -388,23 +416,23 @@ Agent, UI, Chainlit/BFF **không** giữ khoá riêng nào.
   "intent_id": "<uuid>", "intent_sha256": "<sha256 canonical payload của intent>",
   "jti": "<uuid>", "iat": 0, "exp": "iat + 120" }
 ```
-**API của approval-signer** (đều yêu cầu `Authorization: Bearer <token đã exchange cho approval-signer, D13>`; signer verify bằng JWKS, kiểm `iss`, `exp`, `aud` chứa `approval-signer`, `azp ∈ {chat-ui, bff}` và `sub == intent.sub`; sai -> `403 forbidden`; token của agent (`azp=agent-service`) bị từ chối):
-- `POST /v1/intents/verify {intent_jws}` -> xác minh chữ ký (public key MCP mount sẵn), `exp`, `sub == token.sub` -> trả **render model** `{intent_id, op, target, before, after, risk_flags, expires_at}`. UI chỉ render từ đây.
+**API của approval-signer** (đều yêu cầu `Authorization: Bearer <token đã exchange cho approval-signer, D13>`; signer verify bằng JWKS, kiểm `iss`, `exp`, `aud` chứa `approval-signer`, `azp == chat-ui` và `sub == intent.sub`; sai -> `403 forbidden`; token của agent (`azp=agent-service`) bị từ chối):
+- `POST /v1/intents/verify {intent_jws}` -> xác minh chữ ký (public key MCP mount sẵn), `exp`, `sub == token.sub` -> trả **render model** `{intent_id, op, target, before, after, risk_flags, expires_at, intent_sha256, server_time, display: {title, risk, display_fields, diff}}` (chi tiết `05` mục 5.3; BFF làm phẳng `display` khi trả cho SPA). `server_time` = giờ máy chủ signer (RFC 3339) để SPA bù lệch đồng hồ. `display_fields[] = {path, label, kind, before, after, changed, sensitive}` với `kind ∈ text|longtext|enum|datetime|ticket_ref` (**tập chuẩn duy nhất, định nghĩa ở `05` mục 5.3**; `07` mục 3.6 render đúng tập này). `display_fields` phủ **toàn bộ** `args_canonical` + `before/after` (N03); có trường không hiển thị được -> `422 intent_unrenderable` (cả `/v1/intents/verify` lẫn `/v1/approvals`). SPA chỉ render từ đây (kiểu lạ -> không cho bấm Duyệt; ký tự bidi/điều khiển hiển thị dạng escape).
 - `POST /v1/approvals {intent_jws}` -> như trên, rồi ký approval token. Signer không có state/Redis; chống replay do tickets-mcp đảm nhiệm.
 
 **Luồng ghi (thay hoàn toàn luồng cũ ký `args`):**
 1. Agent gọi `prepare_<op>(args)` trên tickets-mcp (scope `tickets:write`, **không** đổi dữ liệu) -> nhận `intent_jws`.
 2. Agent `interrupt({intent_jws})`.
-3. UI backend gọi `approval-signer /v1/intents/verify` -> render thẻ duyệt.
-4. User bấm Duyệt -> UI backend gọi `approval-signer /v1/approvals` -> `approval_token`.
-5. UI resume graph `Command(resume={decision:"approve", approval_token})`; agent gọi `commit_intent(intent_id, approval_token)`.
+3. BFF (`POST /api/intents/verify`) gọi `approval-signer /v1/intents/verify` -> SPA render thẻ duyệt.
+4. User bấm Duyệt -> BFF (`POST /api/approvals`) gọi `approval-signer /v1/approvals` -> `approval_token` (không trả về trình duyệt).
+5. BFF resume graph `Command(resume={decision:"approve", approval_token})`; agent gọi `commit_intent(intent_id, approval_token)`.
 6. tickets-mcp kiểm: chữ ký approval, `aud`, `exp`, `sub == caller.sub`, intent tồn tại + `sha256` khớp `intent_sha256` + `status=pending`, `jti` `SET NX` (replay -> `approval_replayed`), rồi thực thi trong một transaction với `expected_updated_at` (lệch -> `conflict`), ghi `ticket_events` + `tool_audit` cùng transaction, đặt intent `status=committed`; trả `approval_jti`.
-7. **Sửa (edit):** UI gửi args mới cho agent -> agent gọi lại `prepare_*` -> intent mới. Không bao giờ ký args do UI/agent tự dựng. **Từ chối:** intent hết TTL tự huỷ.
+7. **Sửa (edit):** SPA/BFF gửi args mới cho agent -> agent gọi lại `prepare_*` -> intent mới. Không bao giờ ký args do UI/agent tự dựng. **Từ chối:** intent hết TTL tự huỷ.
 8. Các tool ghi trực tiếp kiểu cũ (nhận `approval_token` theo `args`) **không còn**: tool ghi = cặp `prepare_<op>` + `commit_intent`.
 
 **Xoay khoá (D14):** khoá ES256 (intent, approval) xoay với overlap 15 phút; JWKS/thư mục khoá công khai công bố cả `kid` cũ và mới trong thời gian overlap.
 
-**Rủi ro còn lại (ghi rõ):** UI backend bị chiếm có thể xin chữ ký cho intent của chính user đang đăng nhập (sub khớp). Giảm thiểu ở M6 (BFF tối giản, token không xuống trình duyệt) và tuỳ chọn step-up (WebAuthn/CIBA) cho thao tác rủi ro cao (sau v1.0).
+**Rủi ro còn lại (ghi rõ):** BFF bị chiếm có thể xin chữ ký cho intent của chính user đang đăng nhập (sub khớp). Giảm thiểu: BFF tối giản, token không xuống trình duyệt, CSP chặt từ M1; và tuỳ chọn step-up (WebAuthn/CIBA) cho thao tác rủi ro cao (sau v1.0).
 
 **Gateway nhận danh tính user:** agent gọi gateway với `Authorization: Bearer <API key của agent-service>` và `X-Acme-User-Token: <JWT aud=llm-gateway>`. Gateway chỉ tin header này khi key có `trust_end_user_token = true`. Khi đó chi phí, budget và chính sách PII tính theo `dept` của user.
 
@@ -468,8 +496,32 @@ aliases:
 
 **Metric mới (D14; bảng đầy đủ ở 01 §7, 04 §6):** `gateway_sidecar_duration_seconds`, `gateway_sidecar_errors_total`, `gateway_sidecar_fail_policy_total`, `gateway_cache_ineligible_total`, `gw_degraded_overspend_max_usd`, `gateway_audit_anchor_age_seconds`, `gateway_audit_chain_verify_failed`, `approval_signer_requests_total{result}`, `approval_signer_sign_ms`, `mcp_approval_rejected_total{reason}`.
 
+**Endpoint BFF (D15/D16; cổng 8300; chi tiết `07` mục 2.6):** `GET /auth/login`, `GET /auth/callback` (cookie `__Host-login` SameSite=Lax, chỉ cho callback), `POST /auth/logout`, `GET /api/me`, `POST /api/chat` (SSE; `thread_id=null` tạo thread ngầm, event `thread`), `POST /api/resume` (edit/reject/refresh; `approve` không đi qua đây), `GET /api/threads`, `GET /api/threads/{id}/messages`, `DELETE /api/threads/{id}`, `POST /api/intents/verify`, `POST /api/approvals` (phải kèm `intent_sha256` đã verify; trả SSE của lượt resume), `GET /api/requests/{request_id}`, `GET /healthz`, `GET /readyz`, `GET /metrics`; M6: `/api/admin/*` (role `admin`).
+
+**Endpoint agent bổ sung (D16):** `GET /v1/requests/{request_id}` (agent giữ API key sở hữu request, kiểm request thuộc thread của `sub` rồi gọi `GET /v1/requests/{id}` của gateway) phục vụ `GET /api/requests/{id}`; `POST /v1/internal/evict` (`sub` lấy từ token Bearer, không nhận tham số). Chi tiết `03` mục 1.3.
+
 ### 6.3 Mã lỗi tool MCP (chuẩn hoá; trả trong kết quả tool lỗi, trường `code`; approval-signer dùng cùng mã trong body lỗi HTTP)
-`unauthorized`, `forbidden`, `not_found`, `invalid_argument`, `rate_limited`, `approval_required`, `approval_invalid`, `approval_expired`, `approval_mismatch`, `approval_replayed`, **`intent_not_found`** (không có intent, đã `committed`/hết TTL bị xoá), **`intent_expired`** (quá `exp` của intent), **`intent_mismatch`** (`sha256` không khớp `intent_sha256`, chữ ký intent sai, hoặc `sub` của intent khác `sub` của caller), `conflict` (optimistic concurrency, `expected_updated_at` lệch), `query_rejected`, `query_timeout`, `upstream_unavailable`.
+`unauthorized`, `forbidden`, `not_found`, `invalid_argument`, `rate_limited`, `approval_required`, `approval_invalid`, `approval_expired`, `approval_mismatch`, `approval_replayed`, **`intent_not_found`** (không có intent, đã `committed`/hết TTL bị xoá), **`intent_expired`** (quá `exp` của intent), **`intent_mismatch`** (`sha256` không khớp `intent_sha256`, chữ ký intent sai, hoặc `sub` của intent khác `sub` của caller), **`intent_unrenderable`** (422; signer: intent có trường không hiển thị được trong `display_fields`, D15/N03), `conflict` (optimistic concurrency, `expected_updated_at` lệch), `query_rejected`, `query_timeout`, `upstream_unavailable`.
+
+### 6.4 Lỗi BFF (D15/D16; JSON `{"error":{"code","message","retryable","request_id"}}`, không lộ chi tiết; mọi response có `X-Request-Id`)
+| HTTP | `code` | Khi nào |
+|---|---|---|
+| 400 | `invalid_request` | Body sai schema; `type=approve` ở `/api/resume` |
+| 401 | `session_expired` | Không có cookie phiên, phiên hết idle (30 phút)/tuyệt đối (8 giờ), refresh thất bại; SPA chuyển tới `/auth/login` |
+| 403 | `csrf_failed` | Request đổi trạng thái thiếu/sai `X-CSRF-Token` hoặc `Origin` |
+| 403 | `forbidden` | Thiếu role (vd `/api/admin/*` cần role `admin`) hoặc signer trả `forbidden` |
+| 404 | `not_found` | Thread/request không tồn tại hoặc không thuộc người dùng |
+| 404 | `interrupt_not_found` | Không có `pend`/khác thread; SPA gọi lại `GET /messages` |
+| 409 | `conflict` | Run khác đang chạy / interrupt không khớp |
+| 410 | `intent_expired` | Chuyển tiếp từ signer |
+| 413 | `request_too_large` | Body > 64 KiB |
+| 422 | `intent_unrenderable` | Chuyển tiếp từ signer; SPA không cho Duyệt |
+| 422 | `intent_mismatch` | Chuyển tiếp từ signer, hoặc `intent_sha256` gửi lên khác thẻ đã verify |
+| 429 | `rate_limited` | Vượt hạn mức theo phiên/IP/người dùng (+ `Retry-After`) |
+| 502 | `upstream_unavailable` | `agent`/`approval-signer`/Keycloak lỗi (503 khi Redis lỗi, fail-closed) |
+| SSE `error` | `upstream_timeout` (`retryable=true`) | Vượt `BFF_STREAM_MAX_S`/`BFF_STREAM_IDLE_S` |
+
+Mã nhận từ agent qua SSE (`budget_exceeded`, `provider_unavailable`, ...) được chuyển nguyên `code`/`retryable`.
 
 ## 7. Biến môi trường
 
@@ -490,9 +542,9 @@ aliases:
 |---|---|
 | gateway | `GW_DATABASE_URL`, `GW_REDIS_STATE_URL`, `GW_REDIS_CACHE_URL` (user `gateway`), `GW_KEY_PEPPER` (>= 32 byte), `GW_KEY_PEPPER_PREV` (tuỳ chọn), `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GW_SIDECAR_URL=http://policy-sidecar:8010`, `SIDECAR_TOKEN`, `SIDECAR_TOKEN_PREV` (tuỳ chọn, xoay token), `GW_SIDECAR_TIMEOUT_MS`, `GW_GUARD_FAIL_POLICY=fail_open\|fail_closed`, `GW_NER_FAIL_POLICY=skip_on_error`, `GW_WORKERS`, `GW_INSTANCES`, `GW_DEGRADED_MAX_S=600`, `AUDIT_HMAC_KEY`, `AUDIT_HMAC_KEY_ID`, `AUDIT_ANCHOR_DIR` (dev) / `AUDIT_ANCHOR_BUCKET` (prod), `GW_PROVIDER_OVERRIDE=mock` (factory thay MỌI phần tử của mọi chain bằng adapter `mock`, giữ tên model gốc để tính giá; không `if` trong business code), `GW_FEATURES=auth,ratelimit,budget,pii,guard,cache,router` (ablation; thứ tự stage cố định, `router` trước `cache`; `auth` chỉ tắt được khi `ACME_ENV=bench`), `GW_PII_STRICT`, `METRICS_TOKEN` |
 | policy-sidecar | `SIDECAR_PORT=8010`, `SIDECAR_TOKEN` (bearer nội bộ), `SIDECAR_TOKEN_PREV` (tuỳ chọn, chấp nhận token cũ khi xoay), `MODELS_LOCK_PATH=/app/models.lock`, `MODELS_LOCK_SHA256` (hash của `models.lock`; lệch -> từ chối khởi động), `SIDECAR_MODELS_DIR`, `SIDECAR_EMBED_ENABLED`, `SIDECAR_GUARD_ENABLED`, `SIDECAR_NER_ENABLED`, `SIDECAR_WORKERS`, `METRICS_TOKEN`. Không có khoá provider, DB hay Redis |
-| approval-signer | `SIGNER_PORT=8310`, `SIGNER_AUDIENCE=approval-signer`, `SIGNER_ALLOWED_AZP` (mặc định `chat-ui,bff`; D13: signer kiểm `aud` + `azp` + `sub == intent.sub`), `APPROVAL_SIGNER_PRIVATE_KEY_PATH`, `APPROVAL_SIGNER_KEY_ID`, `INTENT_PUBLIC_KEYS_DIR` (khoá công khai intent của tickets-mcp, mount read-only), `APPROVAL_TTL_S=120`, `METRICS_TOKEN`. Không có DB, Redis hay secret nào khác |
+| approval-signer | `SIGNER_PORT=8310`, `SIGNER_AUDIENCE=approval-signer`, `SIGNER_ALLOWED_AZP` (mặc định `chat-ui`; D13/D15: signer kiểm `aud` + `azp == chat-ui` + `sub == intent.sub`), `APPROVAL_SIGNER_PRIVATE_KEY_PATH`, `APPROVAL_SIGNER_KEY_ID`, `INTENT_PUBLIC_KEYS_DIR` (khoá công khai intent của tickets-mcp, mount read-only), `APPROVAL_TTL_S=120`, `METRICS_TOKEN`. Không có DB, Redis hay secret nào khác |
 | agent | `AGENT_GATEWAY_URL=http://gateway:8000/v1`, `AGENT_GATEWAY_KEY`, `AGENT_KC_CLIENT_ID`, `AGENT_KC_CLIENT_SECRET`, `AGENT_DATABASE_URL` (`ag_app`), `AGENT_DATABASE_OWNER_URL` (`ag_owner`, chỉ job migrate/setup), `MCP_DOCS_URL=http://docs-mcp:8101/mcp`, `MCP_TICKETS_URL`, `MCP_ANALYTICS_URL`, `AGENT_MAX_TOOL_CALLS_TURN`, `AGENT_MAX_TURN_COST_USD`, `AGENT_RECURSION_LIMIT`, `AGENT_CONF_MIN`, `AGENT_CHECKPOINT_ENCRYPTION_KEY` (**bắt buộc** ngoài `ACME_ENV=test`), `AGENT_THREAD_RETENTION_DAYS=30`, `LANGFUSE_HOST/PUBLIC_KEY/SECRET_KEY` (profile `obs`), `LANGFUSE_CAPTURE_CONTENT=false` (mặc định, chỉ metadata), `METRICS_TOKEN`. Agent **không** có `APPROVAL_SIGNER_URL` và không được cấp quyền exchange tới `approval-signer` (D13) |
-| ui | `UI_KC_CLIENT_ID`, `UI_KC_CLIENT_SECRET`, `APPROVAL_SIGNER_URL=http://approval-signer:8310`, `AGENT_URL=http://agent:8200`, `CHAINLIT_AUTH_SECRET`, `UI_PUBLIC_URL`, `UI_SIGNER_TOKEN_TTL_S=300` (D13: TTL token exchange cho signer, ≤ 300), `METRICS_TOKEN`. UI token-exchange lấy `aud=approval-signer` và giữ trong session server, không gửi cho agent/trình duyệt. **Không còn** `UI_APPROVAL_PRIVATE_KEY_PATH`/`UI_APPROVAL_KEY_ID` |
+| bff | `BFF_PUBLIC_URL`, `BFF_SESSION_KEY` (khoá AES-GCM mã hoá refresh token), `BFF_OIDC_CLIENT_SECRET` (client `chat-ui`), `BFF_AGENT_URL=http://agent:8200`, `BFF_SIGNER_URL=http://approval-signer:8310`, `BFF_REDIS_URL=redis://bff@redis-state:6379/0`, `BFF_SIGNER_TOKEN_TTL_S=300` (≤ 300), `BFF_SESSION_IDLE_S=1800`, `BFF_SESSION_ABS_S=28800`, `BFF_STREAM_MAX_S=300`, `BFF_STREAM_IDLE_S=45`, `BFF_LINK_ALLOWLIST` (host cho phép trong markdown; mặc định rỗng), `BFF_GATEWAY_URL` (M6, proxy admin), `BFF_COOKIE_INSECURE_DEV=false` (chỉ `ACME_ENV=dev`), `BFF_TRUSTED_PROXY=false`, `REDIS_BFF_PASSWORD` (user `bff` trên redis-state, `~bff:sess:*`), `METRICS_TOKEN`. BFF exchange lấy `aud=agent-service` và `aud=approval-signer`; token signer chỉ ở session server. **Không có** khoá ký (D15) |
 | docs-mcp | `MCP_AUDIENCE=docs-mcp`, `MCP_HOST` (tên adapter `mcp_sdk\|fastmcp`), `MCP_PORT=8101`, `MCP_PUBLIC_URL`, `MCP_DATABASE_URL` (`kn_app`), `MCP_REDIS_URL` (user `docs`; gồm taint), `DOCS_GATEWAY_URL`, `DOCS_GATEWAY_KEY` (key `owner_type=service`, `allowed_models={acme-embed}`, PII `allow`), `DOCS_RERANK`, `DOCS_RETRIEVER`, `MCP_TAINT_TTL_S=1800`, `MCP_ALLOWED_AZP`, `MCP_ALLOWED_ORIGINS`, `MCP_RL_CAPACITY`, `MCP_RL_REFILL_PER_S`, `MCP_MAX_OUTPUT_BYTES`, `MCP_AUDIT_DATABASE_URL`, `AUDIT_HMAC_KEY`, `AUDIT_HMAC_KEY_ID`, `METRICS_TOKEN` |
 | tickets-mcp | như docs-mcp (không có `DOCS_*`, `MCP_TAINT_TTL_S`), `MCP_AUDIENCE=tickets-mcp`, `MCP_PORT=8102`, `MCP_DATABASE_URL` (`tk_app`), `MCP_REDIS_URL` (user `tickets`), `INTENT_PRIVATE_KEY_PATH`, `INTENT_KEY_ID`, `INTENT_TTL_S=300` (khoá Redis TTL = `INTENT_TTL_S`+30), `APPROVAL_PUBLIC_KEY_PATH`, `TAINT_POLICY=warn\|block`, `TICKETS_REPOSITORY`, `INTENT_ISSUER` (`es256_jws`), `APPROVAL_VERIFIER` (`es256_jwt`), `AUDIT_HMAC_KEY`, `AUDIT_ANCHOR_DIR`. Adapter `permissive` (của `IntentIssuer`/`ApprovalVerifier`) chỉ khi `ACME_ENV=eval`, nếu không factory raise lúc khởi động; WARNING mỗi lần dùng |
 | analytics-mcp | như docs-mcp (không có `DOCS_*`), `MCP_AUDIENCE=analytics-mcp`, `MCP_PORT=8103`, `MCP_DATABASE_URL` (`an_reader`), `MCP_REDIS_URL` (user `analytics`). *Tuỳ chọn sau v1.0:* `ANALYTICS_ENABLE_RAW_SQL`, `ANALYTICS_CTX_HMAC_KEY` (>= 32 byte) |
@@ -522,7 +574,8 @@ Quy tắc: (1) tải bằng `huggingface_hub` với `revision` cố định, `tr
 sequenceDiagram
   autonumber
   actor U as Nhân viên (CS)
-  participant UI as ui (Chainlit/BFF)
+  participant SPA as Trình duyệt (SPA React)
+  participant UI as bff
   participant KC as Keycloak
   participant AG as agent (LangGraph)
   participant GW as gateway
@@ -531,11 +584,15 @@ sequenceDiagram
   participant SG as approval-signer
   participant RS as redis-state
   participant PG as Postgres
-  U->>UI: login (OIDC + PKCE)
-  UI->>KC: auth code → token (aud=agent-service only)
-  U->>UI: "Đóng ticket TCK-000123, đã xử lý xong"
-  UI->>AG: POST /threads/{id}/runs (user token, aud=agent-service)
-  AG->>KC: token-exchange → aud=llm-gateway, aud=tickets-mcp
+  U->>SPA: mở web, bấm đăng nhập
+  SPA->>UI: GET /auth/login (OIDC code + PKCE)
+  UI->>KC: auth code → token đăng nhập (aud=chat-ui); lưu session Redis bff:sess:{sid}
+  UI-->>SPA: Set-Cookie __Host-sid (HttpOnly); không có token trong JS
+  U->>SPA: "Đóng ticket TCK-000123, đã xử lý xong"
+  SPA->>UI: POST /api/chat (cookie + X-CSRF-Token)
+  UI->>KC: token-exchange → aud=agent-service
+  UI->>AG: POST /threads/{id}/runs (Bearer aud=agent-service)
+  AG->>KC: token-exchange (subject aud=agent-service) → aud=llm-gateway, aud=tickets-mcp
   AG->>GW: chat.completions (acme-fast, router) + X-Acme-User-Token
   GW->>LLM: request đã mask PII
   LLM-->>GW: {"route":"ticket"}
@@ -549,13 +606,15 @@ sequenceDiagram
   TK->>TK: tính intent {before, after, expected_updated_at, risk_flags}; ký JWS (khoá intent)
   TK->>RS: HSET mcp:tickets:intent:{intent_id} {sha256, sub, pending} EX 330
   TK-->>AG: {intent_jws} (chưa đổi dữ liệu)
-  AG-->>UI: interrupt {intent_jws}
-  UI->>KC: token-exchange (subject=user token) → aud=approval-signer (chỉ chat-ui/bff; giữ trong session server, agent không thấy)
+  AG-->>UI: interrupt {intent_jws} (SSE)
+  UI->>KC: token-exchange (subject=token đăng nhập) → aud=approval-signer (azp=chat-ui; giữ trong session server, agent không thấy)
   UI->>SG: POST /v1/intents/verify {intent_jws} + token signer
-  SG->>SG: verify aud, azp ∈ {chat-ui,bff}, chữ ký MCP, exp, sub == intent.sub
-  SG-->>UI: render model {before, after, risk_flags}
-  UI-->>U: Thẻ xác nhận (chỉ render từ render model) [Duyệt][Sửa][Từ chối]
-  U->>UI: Duyệt
+  SG->>SG: verify aud, azp == chat-ui, chữ ký MCP, exp, sub == intent.sub, display_fields phủ đủ
+  SG-->>UI: render model {before, after, display_fields, risk_flags}
+  UI-->>SPA: render model (SSE/JSON)
+  SPA-->>U: Thẻ xác nhận (chỉ render từ render model) [Duyệt][Sửa][Từ chối]
+  U->>SPA: Duyệt
+  SPA->>UI: POST /api/approvals (cookie + CSRF)
   UI->>SG: POST /v1/approvals {intent_jws} + token signer
   SG->>SG: verify token (JWKS, aud, azp), intent chưa hết hạn
   SG-->>UI: approval_token (ES256; intent_id, intent_sha256, jti, exp 120s)
@@ -569,8 +628,9 @@ sequenceDiagram
   TK-->>AG: {ok, ticket, approval_jti}
   AG->>GW: final answer (acme-fast)
   AG-->>UI: "Đã đóng TCK-000123" + chi phí
+  UI-->>SPA: SSE stream về trình duyệt
 ```
-Nhánh phụ: **Sửa** -> UI gửi tham số mới cho agent -> agent gọi lại `prepare_close_ticket` -> intent mới (lặp lại từ bước `prepare`). **Từ chối** -> graph quay lại `ticket_agent`, intent tự hết hạn sau 300s (khoá Redis dọn sau 330s). **Agent tự xin approval** (gọi `/v1/approvals` bằng token của mình) -> `403 forbidden` (D13). **TOCTOU** (ticket đổi sau khi duyệt) -> `UPDATE` 0 dòng -> `conflict`, rollback, không ghi audit thành công. **Agent độc đổi tham số/ticket sau duyệt** -> `intent_mismatch` (hash không khớp) hoặc `intent_not_found`.
+Nhánh phụ: **Sửa** -> UI gửi tham số mới cho agent -> agent gọi lại `prepare_close_ticket` -> intent mới (lặp lại từ bước `prepare`). **Từ chối** -> graph quay lại `ticket_agent`, intent tự hết hạn sau 300s (khoá Redis dọn sau 330s). **Agent tự xin approval** (gọi `/v1/approvals` bằng chính token `aud=agent-service` mình cầm) -> `401/403` (D13/D15). **TOCTOU** (ticket đổi sau khi duyệt) -> `UPDATE` 0 dòng -> `conflict`, rollback, không ghi audit thành công. **Agent độc đổi tham số/ticket sau duyệt** -> `intent_mismatch` (hash không khớp) hoặc `intent_not_found`.
 
 ## 9. Kiến trúc code: Ports & Adapters (BẮT BUỘC)
 
@@ -599,8 +659,9 @@ Nhánh phụ: **Sửa** -> UI gửi tham số mới cho agent -> agent gọi l�
 6. **Mối quan tâm cắt ngang dùng decorator cùng port:** `RetryingProvider(inner)`, `CircuitBreakingProvider(inner, breaker)`, `FallbackProvider([a, b])`, `MeteredProvider(inner)` (metrics/trace, chỉ ghi metadata, không ghi payload). Factory bọc sẵn, nên vendor mới được hưởng các lớp này mà không phải viết thêm.
 7. **Plumbing dùng chung bằng composition:** `RetryingHttpClient` (timeout → phân loại `timeout|connection|http_<status>` → 4xx khác 429 thì fail fast → backoff có jitter → giới hạn số lần thử). Adapter giữ một instance chứ không kế thừa. Độ sâu kế thừa tối đa: port ABC → (base trừu tượng dùng chung, khi có ≥2 adapter chung luồng) → adapter.
 8. **Business logic chỉ import port và factory.** Kiểm tra bằng leak-grep trong CI (cả hai lệnh phải **không có kết quả nào**):
-   `grep -rniE "anthropic|gemini|google|keycloak|presidio|underthesea|pgvector|qdrant|chainlit|fastmcp|langfuse" packages/*/src --include=*.py | grep -vE "/adapters/|factory\.py|settings\.py"`
-   và (gateway không nạp model nặng, D2): `grep -rniE "onnxruntime|torch|tokenizers|transformers|sentence_transformers|huggingface_hub" packages/gateway/src --include=*.py`.
+   `grep -rniE "anthropic|gemini|google|keycloak|presidio|underthesea|pgvector|qdrant|fastmcp|langfuse" packages/*/src --include=*.py | grep -vE "/adapters/|factory\.py|settings\.py"`
+   (gateway không nạp model nặng, D2): `grep -rniE "onnxruntime|torch|tokenizers|transformers|sentence_transformers|huggingface_hub" packages/gateway/src --include=*.py`,
+   và (frontend, D15; chỉ `src/api/client.ts` được dùng `fetch`/SSE): `grep -rnE "\bfetch\(|XMLHttpRequest|EventSource|fetch-event-source|axios|keycloak-js|oidc-client" web/src --include=*.ts --include=*.tsx | grep -vE "src/api/client\.ts|\.test\.tsx?$"`.
 9. **Test:** `Fake<Port>` trong `packages/common/testing/` kế thừa port (gồm `FakeClock`). Test nghiệp vụ dùng fake; test HTTP chỉ dành cho chính adapter. Mỗi factory có một test (tên đúng thì chạy, tên lạ thì báo lỗi). Không test cơ chế của ngôn ngữ.
 10. **Không trừu tượng hoá quá mức (D11).** Mỗi port phải có (a) adapter thứ hai thật hoặc đã lên kế hoạch, hoặc (b) fake thay thế I/O, hoặc (c) có tác dụng chặn tên vendor lan vào business logic. Thứ không đạt thì là **module thường**. **Không bọc:** Postgres/SQLAlchemy, client Redis, FastAPI, chính LangGraph, `BaseCheckpointSaver`, giao thức OpenAI-compatible giữa agent và gateway, OpenTelemetry. Không DI container, không plugin auto-discovery.
 11. **Adapter `permissive`** (bỏ qua kiểm tra approval/intent, phục vụ ablation) chỉ được tạo khi `ACME_ENV=eval`; factory raise lúc khởi động nếu env khác.
@@ -623,7 +684,7 @@ Nhánh phụ: **Sửa** -> UI gửi tham số mới cho agent -> agent gọi l�
 | common (job anchor hằng giờ; gateway, tickets-mcp) | **`AnchorStore`** (D14; tên thống nhất, không đặt tên theo vendor hay "Audit...Sink") | `put(anchor)`, `latest()` | `file_append_only` (dev), `s3_object_lock` (prod, sau) | — | — |
 | gateway | `PipelineStage` | `async __call__(ctx, call_next)` | auth, ratelimit, budget, pii, guard, cache, router | — | Thứ tự và bật/tắt theo `GW_FEATURES` (registry) |
 | common | **`Clock`** | `now() -> datetime`, `monotonic()` | `system`, `fake` (test `exp`/`jti`/degraded/TTL) | — | — |
-| common | `TokenVerifier` | `verify(token, audience) -> Principal` | `oidc_jwks` (chuẩn OIDC) | — | — |
+| common (agent, approval-signer, bff, gateway, mcp) | `TokenVerifier` | `verify(token, audience) -> Principal` (D16: ở `acme_common`; kiểm `iss`, `aud`, `exp`, `azp`, scope theo cấu hình từng service) | `oidc_jwks` (chuẩn OIDC) | — | — |
 | docs-mcp | `DocumentRetriever` | `search(query, principal, k)` | `pgvector_hybrid` | qdrant, elasticsearch | Reranking(inner, `Reranker`) |
 | docs-mcp | `Reranker` | `rerank(query, chunks)` | `none`, `bge_reranker` | viranker | — |
 | docs-mcp | `DocumentLoader` | `load(path) -> Document` | `markdown`, `pdf`, `docx` (registry theo đuôi file) | html, confluence | — |
@@ -635,15 +696,27 @@ Nhánh phụ: **Sửa** -> UI gửi tham số mới cho agent -> agent gọi l�
 | tickets-mcp | `ReplayGuard` | `consume(jti, ttl) -> bool` | `redis`, `in_memory` | — | — |
 | analytics-mcp | `AnalyticsRepository` | `sales_summary`, `top_customers`, `customer_lookup`, ... (*tuỳ chọn sau v1.0:* `run_readonly(safe_query)`) | `postgres` | clickhouse, bigquery | — |
 | mcp (all) | `ToolServerHost` | `register(tool_spec, handler)`, `asgi_app()` | `mcp_sdk` **hoặc** `fastmcp` (chốt sau spike M0; phương án B: FastAPI tool server) | — | — |
-| agent | `TokenBroker` | `token_for(user_token, audience, scopes)` | `oauth_token_exchange` (RFC 8693) | `static` (test), `client_credentials_with_user_token` (phương án B) | Caching(inner; khoá `(sub, aud, sorted scopes)`, TTL `exp-30s`, in-process) |
+| common (agent, bff) | `TokenBroker` (D16: ở `acme_common`, không còn ở `agent/ports`) | `token_for(user_token, audience, scopes)` | `oauth_token_exchange` (RFC 8693) | `static` (test), `client_credentials_with_user_token` (phương án B) | Caching(inner; khoá `(sub, aud, sorted scopes)`, TTL `exp-30s`, in-process) |
 | agent | `ToolProvider` | `tools_for(agent_name, principal)` | `mcp_http` | — | — |
-| ui (và BFF M6) | `AgentClient` | `run(...)`, `resume(...)`, `history(...)` | `http_sse` | — | — |
+| bff | `AgentClient` (D15: class HTTP thường, một implementation, không phải port) | `run(...)`, `resume(...)`, `history(...)` | `http_sse` | — | — |
+| bff | `SignerClient` (class HTTP thường, một implementation) | `verify_intent(...)`, `approve(...)` | — | — | — |
+| bff | `TokenBroker` (dùng port của `acme_common`, cùng dòng trên) | `token_for(subject_token, audience, scopes)` | `oauth_token_exchange` | `static` (test) | Caching theo session |
 
-**Đã bỏ khỏi bảng v1.1 (D11):** `UsageSink`, `AuditSink` (-> `EventSink`); `ToolAuditSink` (-> `EventSink`); `ToolRateLimiter` (dùng lại `RateLimiter`); `ChatModelFactory` (-> hàm thường `make_chat_model(role)` trong agent); `Chunker` (module thường `chunking.py`); `SqlValidator` (module thường, chỉ tồn tại khi bật raw SQL tuỳ chọn); `ToolInvoker` (class cụ thể bọc handler: schema -> scope -> rate limit -> timeout -> cắt output -> audit; không phải port). `ApprovalSigner` chuyển từ `ui` sang `approval-signer`. `Pseudonymizer` vẫn là service cụ thể dùng `PiiDetector`.
+**Đã bỏ khỏi bảng v1.1 (D11):** `UsageSink`, `AuditSink` (-> `EventSink`); `ToolAuditSink` (-> `EventSink`); `ToolRateLimiter` (dùng lại `RateLimiter`); `ChatModelFactory` (-> hàm thường `make_chat_model(role)` trong agent); `Chunker` (module thường `chunking.py`); `SqlValidator` (module thường, chỉ tồn tại khi bật raw SQL tuỳ chọn); `ToolInvoker` (class cụ thể bọc handler: schema -> scope -> rate limit -> timeout -> cắt output -> audit; không phải port). `ApprovalSigner` chuyển từ UI sang `approval-signer`. `Pseudonymizer` vẫn là service cụ thể dùng `PiiDetector`.
 
 > Ví dụ cho thấy giá trị của thiết kế: muốn chuyển sang Jira thì chỉ cần thêm `adapters/jira.py` + `"jira": _load_jira` + block `tickets.jira.*` trong config. Toàn bộ quy tắc phân quyền, intent/approval và audit trong `TicketService` giữ nguyên.
 
 ### 9.3 Cấu trúc thư mục chuẩn cho mỗi package
+Repo: `packages/bff` (Python, cùng layout bên dưới; image multi-stage) và `web/` (pnpm; Vite + React + TS strict). `packages/ui` không còn (Chainlit đã thay, D15).
+
+**Quy tắc frontend (D15, clean-oop áp dụng cho TS):**
+- Một `web/src/api/client.ts` duy nhất chứa `request()` (JSON, CSRF header, xử lý `session_expired`, zod validate) và `sse()` (`fetch-event-source`); **component không gọi `fetch`** hay SDK mạng.
+- Interface `AgentStream`, `ApprovalApi`, `ThreadApi` trong `src/api/types.ts`; implementation HTTP một nơi; test dùng fake hoặc MSW. Type API sinh từ OpenAPI của BFF (`openapi-typescript`).
+- Feature folder `features/{chat,approval,threads,admin}`; markdown qua `react-markdown` + `rehype-sanitize` (chặn ảnh/link ngoài trừ allowlist). Không lưu token ở JS/localStorage.
+- CSP do BFF đặt: `default-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'`. Cookie `__Host-sid` (dev http: `sid`), HttpOnly, Secure, SameSite=Strict; CSRF double-submit `X-CSRF-Token`.
+- CI job `web`: `pnpm install --frozen-lockfile`, lint, typecheck, vitest, build; Playwright E2E trên compose.
+
+Layout Python:
 ```
 packages/<svc>/src/<svc>/
 ├─ ports/          # ABC + neutral types + errors (không import vendor)
