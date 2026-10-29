@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "acme-gateway"
+version = "0.0.0"
+description = "LLM Gateway (bảo mật + kiểm soát chi phí)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "acme-common",
+    # M1/M4: thêm sqlalchemy/asyncpg, redis, httpx, anthropic/google-genai SDK (chỉ trong adapters), pyyaml, prometheus-client.
+    # CẤM (D2): onnxruntime, torch, tokenizers, transformers, sentence-transformers, huggingface_hub.
+]
+
+[tool.uv.sources]
+acme-common = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gateway"]

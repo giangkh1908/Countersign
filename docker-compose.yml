@@ -1,0 +1,568 @@
+# docker-compose.yml  (Compose Spec; không dùng khoá "version")
+# Nguồn: docs/design/04-infra-data-eval.md §1.3. Chạy: xem infra/README.md.
+# Bước 0: `bash infra/scripts/gen-secrets.sh` (sinh ./secrets và .env).
+name: acme
+
+x-hardened: &hardened
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:size=64m,mode=1777"]
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+x-pyapp-env: &pyapp-env
+  ACME_ENV: ${ACME_ENV:-dev}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://keycloak.acme.local:8080/realms/acme}
+  METRICS_TOKEN_FILE: /run/secrets/metrics_token            # /metrics yêu cầu bearer (contracts §1/§7)
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+
+networks:
+  edge:   { driver: bridge }
+  core:   { driver: bridge, internal: true }
+  egress: { driver: bridge }              # chỉ gateway tham gia
+
+volumes:
+  pg_data: {}
+  redis_state_data: {}
+  prom_data: {}
+  grafana_data: {}
+  backups: {}
+  # Anchor audit append-only (D6). Dev: bind mount ./audit-anchors (chattr +a ở host).
+  # Prod: bucket object-lock (AUDIT_ANCHOR_BUCKET), mục 22.2.
+
+secrets:                                   # sinh bởi infra/scripts/gen-secrets.sh (./secrets, gitignore)
+  pg_superuser_password:   { file: ./secrets/pg_superuser_password }
+  gw_owner_password:       { file: ./secrets/gw_owner_password }
+  gw_app_password:         { file: ./secrets/gw_app_password }
+  gw_database_url:         { file: ./secrets/gw_database_url }          # URL đầy đủ dựng từ gw_app_password (ghi chú 1)
+  kn_owner_password:       { file: ./secrets/kn_owner_password }
+  kn_app_password:         { file: ./secrets/kn_app_password }
+  kn_ingest_password:      { file: ./secrets/kn_ingest_password }
+  tk_owner_password:       { file: ./secrets/tk_owner_password }
+  tk_app_password:         { file: ./secrets/tk_app_password }
+  an_owner_password:       { file: ./secrets/an_owner_password }
+  an_reader_password:      { file: ./secrets/an_reader_password }
+  ag_app_password:         { file: ./secrets/ag_app_password }
+  ag_owner_password:       { file: ./secrets/ag_owner_password }
+  mcp_audit_password:      { file: ./secrets/mcp_audit_password }
+  kc_app_password:         { file: ./secrets/kc_app_password }
+  lf_app_password:         { file: ./secrets/lf_app_password }
+  gw_report_password:      { file: ./secrets/gw_report_password }       # role đọc usage cho Grafana
+  redis_gateway_password:  { file: ./secrets/redis_gateway_password }
+  redis_tickets_password:  { file: ./secrets/redis_tickets_password }
+  redis_docs_password:     { file: ./secrets/redis_docs_password }
+  docs_gateway_key:        { file: ./secrets/docs_gateway_key }         # API key service cho docs-mcp -> gateway (acme-embed)
+  redis_analytics_password: { file: ./secrets/redis_analytics_password }
+  metrics_token:           { file: ./secrets/metrics_token }
+  redis_ops_password:      { file: ./secrets/redis_ops_password }
+  redis_health_password:   { file: ./secrets/redis_health_password }    # user chỉ có +ping
+  gw_key_pepper:           { file: ./secrets/gw_key_pepper }            # >= 32 byte ngẫu nhiên
+  gw_admin_token:          { file: ./secrets/gw_admin_token }
+  anthropic_api_key:       { file: ./secrets/anthropic_api_key }
+  gemini_api_key:          { file: ./secrets/gemini_api_key }
+  kc_admin_password:       { file: ./secrets/kc_admin_password }
+  kc_agent_client_secret:  { file: ./secrets/kc_agent_client_secret }
+  bff_oidc_client_secret:  { file: ./secrets/bff_oidc_client_secret }   # secret của client Keycloak `chat-ui` (D15)
+  bff_session_key:         { file: ./secrets/bff_session_key }          # 32 byte, AES-GCM mã hoá refresh token trong phiên
+  redis_bff_password:      { file: ./secrets/redis_bff_password }
+  agent_gateway_key:       { file: ./secrets/agent_gateway_key }        # API key của agent-service (tạo sau khi gateway chạy)
+  approval_signer_private_key: { file: ./secrets/approval_es256_private.pem }   # CHỈ mount vào approval-signer
+  approval_public_key:     { file: ./secrets/approval_es256_public.pem }        # mount vào tickets-mcp
+  intent_private_key:      { file: ./secrets/intent_es256_private.pem }         # CHỈ mount vào tickets-mcp
+  # intent_es256_public.pem: mount vào approval-signer qua bind ./secrets/intent-keys (INTENT_PUBLIC_KEYS_DIR)
+  audit_hmac_key:          { file: ./secrets/audit_hmac_key }                   # >= 32 byte; khoá ngoài DB (D6)
+  agent_checkpoint_key:    { file: ./secrets/agent_checkpoint_key }             # khoá mã hoá checkpoint LangGraph (D7)
+  sidecar_token:           { file: ./secrets/sidecar_token }                    # bearer nội bộ gateway -> policy-sidecar
+  grafana_admin_password:  { file: ./secrets/grafana_admin_password }
+  lf_nextauth_secret:      { file: ./secrets/lf_nextauth_secret }
+  lf_salt:                 { file: ./secrets/lf_salt }
+
+services:
+  # ───────────── dữ liệu ─────────────
+  postgres:
+    image: pgvector/pgvector:pg17           # TODO(M7): pin digest
+    <<: *hardened
+    read_only: false                        # PGDATA ghi nhiều; giữ volume riêng
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]   # entrypoint chuyển quyền sang user postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_superuser_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --data-checksums"
+    command: >
+      postgres -c hba_file=/etc/postgresql/pg_hba.conf
+               -c password_encryption=scram-sha-256
+               -c shared_buffers=256MB -c max_connections=200
+               -c log_connections=on -c log_min_duration_statement=500
+    secrets: [pg_superuser_password, gw_owner_password, gw_app_password, kn_owner_password, kn_app_password,
+              kn_ingest_password, tk_owner_password, tk_app_password, an_owner_password, an_reader_password,
+              ag_app_password, ag_owner_password, mcp_audit_password, kc_app_password, lf_app_password, gw_report_password]
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./infra/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - backups:/backups
+    networks: [core]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    deploy: { resources: { limits: { cpus: "2", memory: 1g } } }
+
+  redis-state:
+    image: redis:8                          # TODO(M7): pin digest
+    <<: *hardened
+    user: "999:999"                         # cap_drop ALL => root không có DAC_OVERRIDE; chạy thẳng user redis
+    entrypoint: ["/bin/sh", "/etc/redis/entrypoint.sh"]       # render users.acl từ secret (mục 2.3)
+    command: ["redis-server", "/etc/redis/redis-state.conf"]
+    secrets: [redis_gateway_password, redis_tickets_password, redis_docs_password, redis_analytics_password, redis_bff_password, redis_ops_password, redis_health_password]
+    volumes:
+      - redis_state_data:/data
+      - ./infra/redis/redis-state.conf:/etc/redis/redis-state.conf:ro
+      - ./infra/redis/users-state.acl.tmpl:/etc/redis/users.acl.tmpl:ro
+      - ./infra/redis/entrypoint.sh:/etc/redis/entrypoint.sh:ro
+    networks: [core]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_health_password) redis-cli --user health ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { cpus: "0.5", memory: 384m } } }
+
+  redis-cache:
+    image: redis:8                          # TODO(M7): pin digest; redis:8 đã gộp Query Engine (FT.*) [cần xác minh]
+    <<: *hardened
+    user: "999:999"
+    entrypoint: ["/bin/sh", "/etc/redis/entrypoint.sh"]
+    command: ["redis-server", "/etc/redis/redis-cache.conf"]
+    secrets: [redis_gateway_password, redis_health_password]
+    volumes:
+      - ./infra/redis/redis-cache.conf:/etc/redis/redis-cache.conf:ro
+      - ./infra/redis/users-cache.acl.tmpl:/etc/redis/users.acl.tmpl:ro
+      - ./infra/redis/entrypoint.sh:/etc/redis/entrypoint.sh:ro
+    networks: [core]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_health_password) redis-cli --user health ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { cpus: "1", memory: 768m } } }
+
+  # ───────────── danh tính ─────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4   # TODO(M7): pin digest; phiên bản cần xác minh, mục 4.3
+    <<: *hardened
+    read_only: false                        # dev mode ghi vào /opt/keycloak/data
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        export KC_DB_PASSWORD="$$(cat /run/secrets/kc_app_password)"
+        export KC_BOOTSTRAP_ADMIN_PASSWORD="$$(cat /run/secrets/kc_admin_password)"
+        export AGENT_KC_CLIENT_SECRET="$$(cat /run/secrets/kc_agent_client_secret)"
+        export BFF_OIDC_CLIENT_SECRET="$$(cat /run/secrets/bff_oidc_client_secret)"
+        exec /opt/keycloak/bin/kc.sh start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: kc_app
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_HOSTNAME: http://keycloak.acme.local:8080           # issuer cố định, thống nhất trong và ngoài container (4.4)
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_FEATURES: token-exchange-standard                  # [cần xác minh] tên feature theo bản Keycloak (>= 26.2 mặc định đã bật)
+    secrets: [kc_app_password, kc_admin_password, kc_agent_client_secret, bff_oidc_client_secret]
+    volumes:
+      - ./infra/keycloak/realm-acme.json:/opt/keycloak/data/import/realm-acme.json:ro
+    ports: ["8080:8080"]
+    networks:
+      edge: { aliases: [keycloak.acme.local] }     # cùng issuer cho trình duyệt (qua hosts) và container
+      core: { aliases: [keycloak.acme.local] }
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:                             # image không có curl → /dev/tcp tới management port 9000
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    deploy: { resources: { limits: { cpus: "1.5", memory: 1g } } }
+
+  # ───────────── migration job ─────────────
+  migrate:
+    build: { context: ., dockerfile: Dockerfile, target: migrate }
+    image: acme/migrate:dev
+    <<: *hardened
+    restart: "no"
+    environment:
+      <<: *pyapp-env
+      PG_HOST: postgres                      # URL dựng trong entrypoint từ các secret *_owner_password
+    secrets: [gw_owner_password, kn_owner_password, tk_owner_password, an_owner_password, ag_owner_password]
+    networks: [core]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # ───────────── gateway ─────────────
+  gateway:
+    build: { context: ., dockerfile: Dockerfile, target: gateway }
+    image: acme/gateway:dev
+    <<: *hardened
+    environment:
+      <<: *pyapp-env
+      GW_DATABASE_URL_FILE: /run/secrets/gw_database_url       # URL dựng từ gw_app_password (ghi chú 1)
+      GW_REDIS_STATE_URL: redis://gateway@redis-state:6379/0
+      GW_REDIS_STATE_PASSWORD_FILE: /run/secrets/redis_gateway_password
+      GW_REDIS_CACHE_URL: redis://gateway@redis-cache:6379/0
+      GW_REDIS_CACHE_PASSWORD_FILE: /run/secrets/redis_gateway_password
+      GW_KEY_PEPPER_FILE: /run/secrets/gw_key_pepper
+      GW_ADMIN_TOKEN_FILE: /run/secrets/gw_admin_token
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
+      GW_PROVIDER_OVERRIDE: ${GW_PROVIDER_OVERRIDE:-}          # "mock" → factory chọn adapter `mock` (contracts §9.1 mục 5)
+      GW_FEATURES: ${GW_FEATURES:-auth,ratelimit,budget,pii,guard,cache,router}
+      GW_SIDECAR_URL: http://policy-sidecar:8010                # gateway KHÔNG nạp model; gọi sidecar qua HTTP nội bộ (D2)
+      SIDECAR_TOKEN_FILE: /run/secrets/sidecar_token
+      GW_SIDECAR_TIMEOUT_MS: ${GW_SIDECAR_TIMEOUT_MS:-150}
+      GW_GUARD_TOOL_FAIL_POLICY: ${GW_GUARD_TOOL_FAIL_POLICY:-redact}   # D17: redact|closed (không có open)
+      GW_GUARD_USER_FAIL_POLICY: ${GW_GUARD_USER_FAIL_POLICY:-open}     # D17: open|redact|closed
+      GW_NER_EXTERNAL_FAIL_POLICY: ${GW_NER_EXTERNAL_FAIL_POLICY:-closed} # D17
+      GW_NER_FAIL_POLICY: skip_on_error
+      GW_INSTANCES: ${GW_INSTANCES:-1}                          # N_instance cho degraded mode (D5)
+      GW_WORKERS: ${GW_WORKERS:-2}
+      GW_DEGRADED_MAX_S: "600"
+      AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key          # khoá ngoài DB (D6)
+      AUDIT_HMAC_KEY_ID: ${AUDIT_HMAC_KEY_ID:-1}
+      AUDIT_ANCHOR_DIR: /anchors                                # dev; prod dùng AUDIT_ANCHOR_BUCKET
+    secrets: [gw_app_password, gw_database_url, gw_key_pepper, gw_admin_token, anthropic_api_key, gemini_api_key,
+              redis_gateway_password, sidecar_token, audit_hmac_key, metrics_token]
+    volumes:
+      - ./audit-anchors:/anchors                # file anchor mở O_APPEND; `chattr +a` đặt ở host
+    ports: ["8000:8000"]                      # dev; publish được vì gateway có mặt ở network egress (non-internal)
+    networks: [core, egress]
+    depends_on:
+      postgres:    { condition: service_healthy }
+      redis-state: { condition: service_healthy }
+      redis-cache: { condition: service_healthy }
+      migrate:     { condition: service_completed_successfully }
+      keycloak:    { condition: service_healthy }
+      policy-sidecar: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+    deploy: { resources: { limits: { cpus: "1", memory: 1g } } }
+
+  # ───────────── policy sidecar (D2, D3) ─────────────
+  policy-sidecar:
+    build: { context: ., dockerfile: Dockerfile, target: policy_sidecar }
+    image: acme/policy-sidecar:dev
+    <<: *hardened
+    environment:
+      <<: *pyapp-env
+      SIDECAR_PORT: "8010"
+      SIDECAR_TOKEN_FILE: /run/secrets/sidecar_token
+      MODELS_LOCK_PATH: /app/models.lock
+      SIDECAR_MODELS_DIR: /models
+      SIDECAR_EMBED_ENABLED: "true"
+      SIDECAR_GUARD_ENABLED: "true"
+      SIDECAR_NER_ENABLED: "true"
+      SIDECAR_POOL_ONLINE_GUARD_NER: "2"
+      SIDECAR_POOL_EMBED_QUERY: "2"
+      SIDECAR_POOL_EMBED_INGEST: "1"
+      SIDECAR_MAXINFLIGHT_ONLINE_GUARD_NER: "16"
+      SIDECAR_MAXINFLIGHT_EMBED_QUERY: "8"
+      SIDECAR_MAXINFLIGHT_EMBED_INGEST: "4"
+    secrets: [sidecar_token, metrics_token]
+    volumes:
+      - ./models:/models:ro                       # tải bằng `make models` theo models.lock; chỉ đọc
+      - ./models.lock:/app/models.lock:ro
+    networks: [core]                              # KHÔNG egress, KHÔNG khoá provider, KHÔNG DB/Redis
+    healthcheck:                                  # xanh chỉ khi đã verify sha256 mọi file trong models.lock
+      test: ["CMD", "python", "-m", "policy_sidecar.healthcheck", "--require-lock-verified"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+    deploy: { resources: { limits: { cpus: "2", memory: 2g } } }
+
+  # ───────────── approval signer (D1) ─────────────
+  approval-signer:
+    build: { context: ., dockerfile: Dockerfile, target: approval_signer }
+    image: acme/approval-signer:dev
+    <<: *hardened
+    environment:
+      <<: *pyapp-env
+      SIGNER_PORT: "8310"
+      SIGNER_AUDIENCE: approval-signer
+      SIGNER_ALLOWED_AZP: chat-ui                 # D15: BFF dùng client chat-ui; không có client bff
+      APPROVAL_SIGNER_PRIVATE_KEY_PATH: /run/secrets/approval_signer_private_key
+      APPROVAL_SIGNER_KEY_ID: ${APPROVAL_SIGNER_KEY_ID:-ap-1}
+      INTENT_PUBLIC_KEYS_DIR: /run/intent-keys    # public key intent của tickets-mcp, read-only
+      APPROVAL_TTL_S: "120"
+    secrets:
+      - metrics_token
+      - approval_signer_private_key
+    volumes:
+      - ./secrets/intent-keys:/run/intent-keys:ro   # gen-secrets.sh đặt tickets-mcp-1.pem (bind mount thay vì `target:` ngoài /run/secrets)
+    networks: [core]                              # KHÔNG egress, KHÔNG Redis, KHÔNG DB
+    depends_on:
+      keycloak: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8310/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 15
+    deploy: { resources: { limits: { cpus: "0.25", memory: 128m } } }
+
+  mock-provider:
+    profiles: ["bench"]
+    build: { context: ., dockerfile: Dockerfile, target: mock_provider }
+    image: acme/mock-provider:dev
+    <<: *hardened
+    environment:
+      <<: *pyapp-env
+      MOCK_TTFT_MS: ${MOCK_TTFT_MS:-300}
+      MOCK_TOKENS_PER_SEC: ${MOCK_TOKENS_PER_SEC:-50}
+      MOCK_OUTPUT_TOKENS: ${MOCK_OUTPUT_TOKENS:-50}
+      MOCK_CONTROL_TOKEN_FILE: /run/secrets/gw_admin_token     # API chaos /__control
+    secrets: [gw_admin_token]
+    networks: [core]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8900/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { cpus: "1", memory: 256m } } }
+
+  # ───────────── MCP servers ─────────────
+  docs-mcp:
+    build: { context: ., dockerfile: Dockerfile, target: mcp_docs }
+    image: acme/mcp-docs:dev
+    <<: *hardened
+    environment:
+      <<: *pyapp-env
+      MCP_AUDIENCE: docs-mcp
+      MCP_DATABASE_URL_FILE: /run/secrets/kn_app_password      # URL dựng ở entrypoint; role kn_app (SELECT)
+      MCP_REDIS_URL: redis://docs@redis-state:6379/0
+      MCP_REDIS_PASSWORD_FILE: /run/secrets/redis_docs_password
+      DOCS_GATEWAY_URL: http://gateway:8000/v1                 # embedding qua alias acme-embed
+      DOCS_GATEWAY_KEY_FILE: /run/secrets/docs_gateway_key     # key owner_type=service, allowed_models={acme-embed}
+      MCP_HOST: ${MCP_HOST:-mcp_sdk}
+      MCP_PORT: "8101"
+      MCP_TAINT_RETENTION_DAYS: "30"                           # D17
+      MCP_TAINT_RECENT_TTL_S: "86400"                          # D17
+      AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key
+    secrets: [kn_app_password, redis_docs_password, docs_gateway_key, audit_hmac_key, metrics_token]
+    networks: [core]
+    depends_on:
+      postgres:    { condition: service_healthy }
+      redis-state: { condition: service_healthy }
+      gateway:     { condition: service_healthy }
+      migrate:     { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8101/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { cpus: "0.5", memory: 512m } } }
+
+  tickets-mcp:
+    build: { context: ., dockerfile: Dockerfile, target: mcp_tickets }
+    image: acme/mcp-tickets:dev
+    <<: *hardened
+    environment:
+      <<: *pyapp-env
+      MCP_AUDIENCE: tickets-mcp
+      MCP_DATABASE_URL_FILE: /run/secrets/tk_app_password
+      MCP_REDIS_URL: redis://tickets@redis-state:6379/0
+      MCP_REDIS_PASSWORD_FILE: /run/secrets/redis_tickets_password
+      APPROVAL_PUBLIC_KEY_PATH: /run/secrets/approval_public_key     # verify approval token do approval-signer ký
+      INTENT_PRIVATE_KEY_PATH: /run/secrets/intent_private_key       # ký intent JWS (D1)
+      INTENT_KEY_ID: ${INTENT_KEY_ID:-in-1}
+      INTENT_TTL_S: "300"
+      TAINT_POLICY: ${TAINT_POLICY:-warn}                            # warn|block (D8)
+      MCP_TAINT_RETENTION_DAYS: "30"
+      MCP_TAINT_RECENT_TTL_S: "86400"
+      AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key
+      AUDIT_ANCHOR_DIR: /anchors
+    secrets: [tk_app_password, redis_tickets_password, approval_public_key, intent_private_key, audit_hmac_key, metrics_token]
+    volumes:
+      - ./audit-anchors:/anchors
+    networks: [core]
+    depends_on:
+      postgres:    { condition: service_healthy }
+      redis-state: { condition: service_healthy }
+      migrate:     { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8102/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { cpus: "0.5", memory: 512m } } }
+
+  analytics-mcp:
+    build: { context: ., dockerfile: Dockerfile, target: mcp_analytics }
+    image: acme/mcp-analytics:dev
+    <<: *hardened
+    environment:
+      <<: *pyapp-env
+      MCP_AUDIENCE: analytics-mcp
+      MCP_DATABASE_URL_FILE: /run/secrets/an_reader_password
+      MCP_REDIS_URL: redis://analytics@redis-state:6379/0
+      MCP_REDIS_PASSWORD_FILE: /run/secrets/redis_analytics_password
+      MCP_TAINT_RETENTION_DAYS: "30"
+      MCP_TAINT_RECENT_TTL_S: "86400"
+    secrets: [an_reader_password, redis_analytics_password, metrics_token]
+    networks: [core]
+    depends_on:
+      postgres:    { condition: service_healthy }
+      redis-state: { condition: service_healthy }
+      migrate:     { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8103/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { cpus: "0.5", memory: 512m } } }
+
+  # ───────────── agent + bff ─────────────
+  agent:
+    build: { context: ., dockerfile: Dockerfile, target: agent }
+    image: acme/agent:dev
+    <<: *hardened
+    environment:
+      <<: *pyapp-env
+      AGENT_GATEWAY_URL: http://gateway:8000/v1
+      AGENT_GATEWAY_KEY_FILE: /run/secrets/agent_gateway_key
+      AGENT_KC_CLIENT_SECRET_FILE: /run/secrets/kc_agent_client_secret
+      AGENT_DATABASE_URL_FILE: /run/secrets/ag_app_password
+      MCP_DOCS_URL: http://docs-mcp:8101/mcp
+      MCP_TICKETS_URL: http://tickets-mcp:8102/mcp
+      MCP_ANALYTICS_URL: http://analytics-mcp:8103/mcp
+      AGENT_CHECKPOINT_ENCRYPTION_KEY_FILE: /run/secrets/agent_checkpoint_key   # checkpoint mã hoá mặc định (D7)
+      AGENT_THREAD_RETENTION_DAYS: "30"
+    secrets: [agent_gateway_key, kc_agent_client_secret, ag_app_password, agent_checkpoint_key, metrics_token]
+    networks: [core]                           # KHÔNG có egress
+    depends_on:
+      postgres:      { condition: service_healthy }
+      gateway:       { condition: service_healthy }
+      keycloak:      { condition: service_healthy }
+      docs-mcp:      { condition: service_healthy }
+      tickets-mcp:   { condition: service_healthy }
+      analytics-mcp: { condition: service_healthy }
+      migrate:       { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8200/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 15
+    deploy: { resources: { limits: { cpus: "1", memory: 1g } } }
+
+  bff:                                          # D15: thay `ui` (Chainlit đã bỏ)
+    build: { context: ., dockerfile: Dockerfile, target: bff }   # multi-stage: node build web/ -> python runtime phục vụ static
+    image: acme/bff:dev
+    <<: *hardened
+    environment:
+      <<: *pyapp-env
+      BFF_PUBLIC_URL: http://localhost:8300
+      BFF_OIDC_CLIENT_SECRET_FILE: /run/secrets/bff_oidc_client_secret
+      BFF_SESSION_KEY_FILE: /run/secrets/bff_session_key
+      BFF_REDIS_URL: redis://bff@redis-state:6379/0             # ACL user `bff` chỉ ~bff:sess:*
+      REDIS_BFF_PASSWORD_FILE: /run/secrets/redis_bff_password
+      BFF_SESSION_IDLE_S: "1800"                                # D15/D16: idle 30 phút
+      BFF_SESSION_ABS_S: "28800"                                # tuyệt đối 8 giờ
+      BFF_SIGNER_TOKEN_TTL_S: "300"                             # token signer ≤ 5 phút
+      BFF_REJECTED_TTL_S: "600"                                 # D17/N13
+      BFF_MAX_CARDS_PER_THREAD_HOUR: "10"                       # D17/N13: vượt => 429 rate_limited
+      BFF_AGENT_URL: http://agent:8200
+      BFF_SIGNER_URL: http://approval-signer:8310               # BFF KHÔNG giữ khoá ký (D1)
+    secrets: [bff_oidc_client_secret, bff_session_key, redis_bff_password, metrics_token]
+    ports: ["8300:8300"]
+    networks: [edge, core]
+    depends_on:
+      agent:    { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+      approval-signer: { condition: service_healthy }
+      redis-state: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8300/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 15
+    deploy: { resources: { limits: { cpus: "0.5", memory: 512m } } }
+
+  # ───────────── quan sát ─────────────
+  prometheus:
+    image: prom/prometheus:v3.5.0           # TODO(M7): pin digest
+    <<: *hardened
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle=false
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/rules:/etc/prometheus/rules:ro
+      - prom_data:/prometheus
+    networks: [core, edge]                     # contracts v1.1: core + edge (dev) để publish 9090
+    ports: ["9090:9090"]                       # dev; scrape /metrics bằng bearer METRICS_TOKEN
+    secrets: [metrics_token]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { cpus: "0.5", memory: 512m } } }
+
+  grafana:
+    image: grafana/grafana:12.2.0           # TODO(M7): pin digest
+    <<: *hardened
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      # mật khẩu gw_report nạp trong provisioning datasource bằng $__file{/run/secrets/gw_report_password}
+    secrets: [grafana_admin_password, gw_report_password]
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    networks: [edge, core]
+    depends_on:
+      prometheus: { condition: service_healthy }
+      postgres:   { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { cpus: "0.5", memory: 256m } } }
+
+  # Langfuse (profile `obs`, TUỲ CHỌN, NẶNG): v3 cần web + worker + ClickHouse + MinIO + Redis riêng.
+  # TODO(M5): thêm infra/langfuse/ (compose chính thức đã pin) rồi:
+  #   include: [{ path: ./infra/langfuse/docker-compose.langfuse.yml, project_directory: ./infra/langfuse }]
+  # KHÔNG dùng lại redis-state/redis-cache. Ước lượng thêm ~3-4 GB RAM; tắt khi bench.
+
+  seed:
+    profiles: ["seed"]
+    build: { context: ., dockerfile: Dockerfile, target: seed }
+    image: acme/seed:dev
+    <<: *hardened
+    restart: "no"
+    environment:
+      <<: *pyapp-env
+      SEED: "20261028"
+      GATEWAY_URL: http://gateway:8000/v1
+      SEED_LLM_CACHE_DIR: /cache
+    secrets: [kn_ingest_password, tk_owner_password, an_owner_password, gw_admin_token]
+    volumes: ["./data/.llm_cache:/cache"]
+    networks: [core]
+    depends_on:
+      gateway: { condition: service_healthy }

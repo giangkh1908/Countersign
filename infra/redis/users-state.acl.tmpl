@@ -1,0 +1,15 @@
+# infra/redis/users-state.acl.tmpl  (docs/design/04 §2.3; contracts §2)
+# ACL file KHÔNG hỗ trợ comment cuối dòng (sẽ bị parse thành rule); comment ở dòng riêng.
+# Placeholder @@REDIS_*@@ được entrypoint.sh thay bằng SHA256 của mật khẩu.
+# tickets: ~mcp:tickets:* gồm intent:{id} và jti:{jti}; taint: đọc (prepare_*) + GHI (get_ticket, N12). Chỉ user này có ~mcp:tickets:intent:*
+# docs: đọc+ghi taint (Lua taint_max) gồm {thread_id} và :recent; forget xoá key thread
+# analytics: ghi taint; không có ~mcp:tickets:*
+# bff: phiên BFF (D15/D16); không chạm gw:*/mcp:*; không MULTI/WATCH/EVAL
+user default off nopass -@all
+user gateway on #@@REDIS_GATEWAY@@ ~gw:* &gw:events +@read +@write +@scripting +@pubsub -@dangerous
+user tickets on #@@REDIS_TICKETS@@ ~mcp:tickets:* ~mcp:rl:tickets-mcp:* ~mcp:taint:* +@read +@write +@scripting -@dangerous
+user docs on #@@REDIS_DOCS@@ ~mcp:rl:docs-mcp:* ~mcp:taint:* +@read +@write +@scripting -@dangerous
+user analytics on #@@REDIS_ANALYTICS@@ ~mcp:rl:analytics-mcp:* ~mcp:taint:* +@read +@write +@scripting -@dangerous
+user bff on #@@REDIS_BFF@@ ~bff:sess:* +@read +@write -@dangerous
+user ops on #@@REDIS_OPS@@ ~* +@read +info +ping -@dangerous
+user health on #@@REDIS_HEALTH@@ resetkeys +ping

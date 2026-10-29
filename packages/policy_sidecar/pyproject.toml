@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "acme-policy-sidecar"
+version = "0.0.0"
+description = "Policy sidecar (embed, guard, PII NER)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "acme-common",
+    # M1/M4: thêm onnxruntime, tokenizers, huggingface_hub (chỉ lúc build model), underthesea, numpy.
+    # Không khóa provider, không DB, không Redis, không egress.
+]
+
+[tool.uv.sources]
+acme-common = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/policy_sidecar"]

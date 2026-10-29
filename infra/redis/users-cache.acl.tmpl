@@ -1,0 +1,6 @@
+# infra/redis/users-cache.acl.tmpl  (docs/design/04 §2.4)
+# TODO spike M0 [cần xác minh]: nếu category +@search không tồn tại ở bản pin, thay bằng
+# +FT.CREATE +FT.SEARCH +FT.INFO +FT.DROPINDEX.
+user default off nopass -@all
+user gateway on #@@REDIS_GATEWAY@@ ~gwc:* +@read +@write +@scripting +@search -@dangerous
+user health on #@@REDIS_HEALTH@@ resetkeys +ping

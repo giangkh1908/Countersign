@@ -1,0 +1,22 @@
+[project]
+name = "acme-bff"
+version = "0.1.0"
+description = "BFF cho web UI (OIDC, phiên, proxy SSE tới agent)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "acme-common",
+]
+# M1: redis, httpx (RetryingHttpClient), cryptography (AES-GCM), SSE parsing
+
+[tool.uv.sources]
+acme-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bff"]

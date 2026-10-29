@@ -1,0 +1,23 @@
+# Overlay bench (docs/design/04 §1.4). Cần Docker Compose >= 2.24 (`!override`).
+# docker compose -f docker-compose.yml -f docker-compose.bench.yml --profile bench up -d gateway mock-provider
+# Số đo E1 phải chạy trên Linux; `cpuset` chỉ có nghĩa trên Linux VM (>= 8 vCPU).
+services:
+  gateway:
+    environment:
+      ACME_ENV: bench
+      GW_PROVIDER_OVERRIDE: mock               # factory.build_provider("mock") → adapter `mock` (ChatProvider)
+      GW_MOCK_BASE_URL: http://mock-provider:8900   # block config providers.mock.* (contracts §9.1 mục 5)
+    networks: !override [core]                 # gỡ egress
+    depends_on: !override
+      postgres:      { condition: service_healthy }
+      redis-state:   { condition: service_healthy }
+      redis-cache:   { condition: service_healthy }
+      migrate:       { condition: service_completed_successfully }
+      mock-provider: { condition: service_healthy }   # bench không cần keycloak (xác thực bằng API key)
+      policy-sidecar: { condition: service_healthy }  # luôn chạy; cấu hình không gọi sidecar chỉ tắt tính năng bằng GW_FEATURES
+    cpuset: "2-3"                              # ghim CPU (Linux VM)
+  mock-provider:
+    cpuset: "4-5"
+  policy-sidecar:
+    cpuset: "6-7"
+  # TODO(M5): thêm `gateway-b` (cùng image gateway, chỉ trong overlay) cho E5 nhiều instance.

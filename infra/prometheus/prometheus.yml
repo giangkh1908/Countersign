@@ -1,0 +1,40 @@
+# infra/prometheus/prometheus.yml  (docs/design/04 §6.1)
+global:
+  # bench cần mịn; demo 15s
+  scrape_interval: 5s
+  evaluation_interval: 15s
+  external_labels: { env: dev }
+rule_files: ["/etc/prometheus/rules/*.yml"]
+scrape_configs:
+  - job_name: gateway
+    metrics_path: /metrics
+    static_configs: [{ targets: ["gateway:8000"] }]
+    authorization: { credentials_file: /run/secrets/metrics_token }
+  - job_name: mcp
+    metrics_path: /metrics
+    authorization: { credentials_file: /run/secrets/metrics_token }
+    static_configs:
+      - { targets: ["docs-mcp:8101"],      labels: { server: docs } }
+      - { targets: ["tickets-mcp:8102"],   labels: { server: tickets } }
+      - { targets: ["analytics-mcp:8103"], labels: { server: analytics } }
+  - job_name: agent
+    authorization: { credentials_file: /run/secrets/metrics_token }
+    static_configs: [{ targets: ["agent:8200"] }]
+  - job_name: bff
+    authorization: { credentials_file: /run/secrets/metrics_token }
+    static_configs: [{ targets: ["bff:8300"] }]
+  - job_name: policy-sidecar
+    authorization: { credentials_file: /run/secrets/metrics_token }
+    static_configs: [{ targets: ["policy-sidecar:8010"] }]
+  - job_name: approval-signer
+    authorization: { credentials_file: /run/secrets/metrics_token }
+    static_configs: [{ targets: ["approval-signer:8310"] }]
+  - job_name: mock-provider
+    # chỉ có ở profile bench
+    static_configs: [{ targets: ["mock-provider:8900"] }]
+  - job_name: keycloak
+    metrics_path: /metrics
+    # management port
+    static_configs: [{ targets: ["keycloak:9000"] }]
+  - job_name: prometheus
+    static_configs: [{ targets: ["localhost:9090"] }]

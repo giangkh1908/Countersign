@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "acme-common"
+version = "0.0.0"
+description = "Thư viện dùng chung (ports, audit, testing, http)"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic",
+    "pydantic-settings",
+    # M1/M2: thêm pyjwt/cryptography (TokenVerifier), httpx (RetryingHttpClient), redis, sqlalchemy/psycopg khi triển khai adapter.
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/acme_common"]

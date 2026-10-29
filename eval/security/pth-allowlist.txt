@@ -1,0 +1,4 @@
+# Glob theo tên file (một dòng một mẫu). Thêm có chủ đích, kèm lý do trong PR.
+_virtualenv.pth
+_acme_*.pth
+__editable__*

@@ -1,0 +1,110 @@
+# CI theo docs/design/04-infra-data-eval.md §5.5.
+# TODO(hardening): pin mọi action theo commit SHA đầy đủ (hiện dùng tag major).
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+  workflow_dispatch:
+  schedule: [{ cron: "17 2 * * *" }]
+permissions: { contents: read }
+concurrency: { group: "ci-${{ github.ref }}", cancel-in-progress: true }
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync --frozen
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+
+  architecture:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Leak-grep (contracts §9.1 mục 8)
+        run: bash scripts/leak-grep.sh
+      - name: Gateway không chứa model runtime trong cây phụ thuộc (D2)
+        run: |
+          if uv tree --package acme-gateway | grep -iE "onnxruntime|torch|tokenizers|transformers|underthesea"; then
+            echo "::error::gateway dependency tree contains model runtime"; exit 1
+          fi
+      # TODO(M1): import-linter (importlinter.ini) sau khi có packages/*
+
+  web:
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: web } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: web/pnpm-lock.yaml }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  compose-config:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash infra/scripts/gen-secrets.sh --ci
+      - run: docker compose -f docker-compose.yml config -q
+
+  # ---- Job nặng: giữ chỗ, bật theo milestone ----
+  e2e:  # TODO(M1/M6): Playwright trên compose (BFF + Keycloak + mock-provider)
+    if: false
+    runs-on: ubuntu-24.04
+    needs: [web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: web/pnpm-lock.yaml }
+      - run: bash infra/scripts/gen-secrets.sh --ci
+      - run: docker compose -f docker-compose.yml -f docker-compose.bench.yml --profile eval up -d --wait --wait-timeout 300
+      - run: pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
+        working-directory: web
+      - run: pnpm e2e
+        working-directory: web
+        env: { E2E_BASE_URL: "http://localhost:8300" }
+      - if: always()
+        run: docker compose logs --no-color > compose-e2e.log && docker compose down -v
+
+  security-regression:  # TODO(M5): R1-R8, fail build nếu hồi quy
+    if: false
+    runs-on: ubuntu-24.04
+    needs: [python, architecture]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - run: bash infra/scripts/gen-secrets.sh --ci
+      - run: docker compose -f docker-compose.yml -f docker-compose.bench.yml --profile eval --profile bench up -d --wait --wait-timeout 300
+      - run: uv run pytest eval/security -m security -q
+      - if: always()
+        run: docker compose logs --no-color > compose-sr.log && docker compose down -v
+
+  models-verify:  # TODO(M4): tải + verify models.lock (D3)
+    if: false
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv run python infra/scripts/fetch_models.py --lock models.lock --out models
+      - run: uv run python -m policy_sidecar.verify --lock models.lock --models models
+
+  supply-chain:  # TODO(M2): pip-audit, osv-scanner, SBOM
+    if: false
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv export --frozen --no-dev --format requirements-txt --hashes -o req.txt
+      - run: uvx pip-audit -r req.txt --require-hashes --strict

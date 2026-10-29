@@ -1,0 +1,1 @@
+"""Verify `models.lock` lúc khởi động: sha256 của mọi file model, hash của chính models.lock so với MODELS_LOCK_SHA256; lệch -> từ chối khởi động. Milestone: M4. Xem docs/design/00-contracts.md §7.1 (D3) và docs/design/06-policy-sidecar.md."""

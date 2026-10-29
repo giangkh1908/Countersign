@@ -1,0 +1,21 @@
+# docs/design/04 §6.3 — hai datasource: prometheus và gw-postgres (db gateway, role gw_report)
+apiVersion: 1
+datasources:
+  - name: prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+  - name: gw-postgres
+    uid: gw-postgres
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: postgres:5432
+    user: gw_report
+    jsonData:
+      database: gateway
+      sslmode: disable
+      postgresVersion: 1700
+    secureJsonData:
+      password: $__file{/run/secrets/gw_report_password}
