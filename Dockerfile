@@ -14,12 +14,12 @@ COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY packages ./packages
-# check_pth.sh (liệt kê .pth/sitecustomize lạ, fail nếu ngoài allowlist) do worker khác tạo.
-COPY eval/security/check_pth.sh ./eval/security/check_pth.sh
+# check_pth.sh: liệt kê .pth/sitecustomize lạ, fail nếu ngoài allowlist (pth-allowlist.txt cùng thư mục).
+COPY eval/security/check_pth.sh eval/security/pth-allowlist.txt ./eval/security/
 
 # ───────────── gateway (8000) ─────────────
 FROM base AS gateway
-RUN uv sync --frozen --no-dev --package acme-gateway
+RUN uv sync --frozen --no-dev --no-editable --package acme-gateway
 RUN bash eval/security/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
@@ -28,7 +28,7 @@ CMD ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8000", "--no
 # ───────────── policy-sidecar (8010) ─────────────
 FROM base AS policy_sidecar
 # onnxruntime/tokenizers/underthesea CHỈ ở target này
-RUN uv sync --frozen --no-dev --package acme-policy-sidecar
+RUN uv sync --frozen --no-dev --no-editable --package acme-policy-sidecar
 RUN bash eval/security/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
@@ -38,7 +38,7 @@ CMD ["uvicorn", "policy_sidecar.main:app", "--host", "0.0.0.0", "--port", "8010"
 # ───────────── approval-signer (8310) ─────────────
 FROM base AS approval_signer
 # chỉ fastapi + pyjwt + cryptography
-RUN uv sync --frozen --no-dev --package acme-approval-signer
+RUN uv sync --frozen --no-dev --no-editable --package acme-approval-signer
 RUN bash eval/security/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
@@ -46,7 +46,7 @@ CMD ["uvicorn", "approval_signer.main:app", "--host", "0.0.0.0", "--port", "8310
 
 # ───────────── mock-provider (8900) ─────────────
 FROM base AS mock_provider
-RUN uv sync --frozen --no-dev --package acme-mock-provider
+RUN uv sync --frozen --no-dev --no-editable --package acme-mock-provider
 RUN bash eval/security/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
@@ -54,21 +54,21 @@ CMD ["uvicorn", "mock_provider.main:app", "--host", "0.0.0.0", "--port", "8900",
 
 # ───────────── MCP servers (8101/8102/8103) ─────────────
 FROM base AS mcp_docs
-RUN uv sync --frozen --no-dev --package acme-mcp-docs
+RUN uv sync --frozen --no-dev --no-editable --package acme-mcp-docs
 RUN bash eval/security/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "mcp_docs.main:app", "--host", "0.0.0.0", "--port", "8101", "--no-server-header"]
 
 FROM base AS mcp_tickets
-RUN uv sync --frozen --no-dev --package acme-mcp-tickets
+RUN uv sync --frozen --no-dev --no-editable --package acme-mcp-tickets
 RUN bash eval/security/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "mcp_tickets.main:app", "--host", "0.0.0.0", "--port", "8102", "--no-server-header"]
 
 FROM base AS mcp_analytics
-RUN uv sync --frozen --no-dev --package acme-mcp-analytics
+RUN uv sync --frozen --no-dev --no-editable --package acme-mcp-analytics
 RUN bash eval/security/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
@@ -76,7 +76,7 @@ CMD ["uvicorn", "mcp_analytics.main:app", "--host", "0.0.0.0", "--port", "8103",
 
 # ───────────── agent (8200) ─────────────
 FROM base AS agent
-RUN uv sync --frozen --no-dev --package acme-agent
+RUN uv sync --frozen --no-dev --no-editable --package acme-agent
 RUN bash eval/security/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
@@ -94,7 +94,7 @@ COPY web/ ./
 RUN pnpm build
 
 FROM base AS bff
-RUN uv sync --frozen --no-dev --package acme-bff
+RUN uv sync --frozen --no-dev --no-editable --package acme-bff
 RUN bash eval/security/check_pth.sh /app/.venv
 # BFF phục vụ SPA cùng origin
 COPY --from=web_build /web/dist /app/static

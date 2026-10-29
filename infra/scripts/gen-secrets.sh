@@ -29,9 +29,10 @@ done
 mkdir -p "$SEC/intent-keys"
 chmod 755 "$SEC" "$SEC/intent-keys" 2>/dev/null || true
 
-rand_pw()  { openssl rand -base64 33 | tr -d '=+/\n' | cut -c1-40; }
-rand_b64() { openssl rand -base64 "$1" | tr -d '\n'; }
-rand_hex() { openssl rand -hex "$1" | tr -d '\n'; }
+# tr -d '\r': openssl trên Git Bash/Windows in CRLF; ký tự CR lọt vào secret làm hỏng env/JSON (vd import realm Keycloak).
+rand_pw()  { openssl rand -base64 33 | tr -d '=+/\r\n' | cut -c1-40; }
+rand_b64() { openssl rand -base64 "$1" | tr -d '\r\n'; }
+rand_hex() { openssl rand -hex "$1" | tr -d '\r\n'; }
 
 # Có cần (tạo lại) secret NAME không?
 should_write() {

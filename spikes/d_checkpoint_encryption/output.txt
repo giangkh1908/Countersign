@@ -1,0 +1,49 @@
+
+=== enc thread enc-8d26b376-5d3d-4f6e-8f81-ea824698af4b
+[enc/phase1 pid-separate rc=0]
+  phase1 interrupt: [Interrupt(value={'intent_id': 'i1', 'payload': 'SECRET-TCK-000123-salary-interrupt'}, id='691af78c50a9695d5f2859ce78d28913', response_schema=None)]
+ after phase1 (graph paused at interrupt):
+  checkpoints.checkpoint: rows=3 with_secret=1
+  checkpoints.metadata(metadata): rows=3 with_secret=3
+  checkpoint_blobs.blob: rows=5 with_secret=0
+  checkpoint_writes.blob: rows=10 with_secret=0
+  checkpoints.checkpoint channel_values: {'note': 'SECRET-TCK-000123-salary-note', 'decision': '', 'branch:to:B': None}
+  latest metadata: {"step": 1, "source": "loop", "parents": {}, "user_note": "SECRET-TCK-000123-salary-configurable"}
+  blob types/channels: [('__start__', 'msgpack+aes', 64), ('messages', 'msgpack+aes', 33), ('box', 'msgpack+aes', 33), ('messages', 'msgpack+aes', 251), ('box', 'msgpack+aes', 62)]
+  writes channels: [('messages', 'msgpack+aes'), ('note', 'msgpack+aes'), ('box', 'msgpack+aes'), ('decision', 'msgpack+aes'), ('branch:to:A', 'null+aes'), ('messages', 'msgpack+aes'), ('note', 'msgpack+aes'), ('box', 'msgpack+aes'), ('branch:to:B', 'null+aes'), ('__interrupt__', 'msgpack+aes')]
+[enc/wrongkey pid-separate rc=0]
+  ERROR builtins.ValueError MAC check failed
+[enc/resume pid-separate rc=0]
+  resume final messages: ['SECRET-TCK-000123-salary luong cua nhan vien', 'C ran, decision=approved'] decision: approved
+
+=== plain thread plain-b133f75a-99ab-4a52-b478-a82502156ea3
+[plain/phase1 pid-separate rc=0]
+  phase1 interrupt: [Interrupt(value={'intent_id': 'i1', 'payload': 'SECRET-TCK-000123-salary-interrupt'}, id='9ca475d820bf2fdf651ca758b8971d8f', response_schema=None)]
+ after phase1 (graph paused at interrupt):
+  checkpoints.checkpoint: rows=3 with_secret=1
+  checkpoints.metadata(metadata): rows=3 with_secret=3
+  checkpoint_blobs.blob: rows=5 with_secret=2
+  checkpoint_writes.blob: rows=10 with_secret=4
+  checkpoints.checkpoint channel_values: {'note': 'SECRET-TCK-000123-salary-note', 'decision': '', 'branch:to:B': None}
+  latest metadata: {"step": 1, "source": "loop", "parents": {}, "user_note": "SECRET-TCK-000123-salary-configurable"}
+  blob types/channels: [('__start__', 'msgpack', 32), ('messages', 'msgpack', 1), ('box', 'msgpack', 1), ('messages', 'msgpack', 219), ('box', 'msgpack', 30)]
+  writes channels: [('messages', 'msgpack'), ('note', 'msgpack'), ('box', 'msgpack'), ('decision', 'msgpack'), ('branch:to:A', 'null'), ('messages', 'msgpack'), ('note', 'msgpack'), ('box', 'msgpack'), ('branch:to:B', 'null'), ('__interrupt__', 'msgpack')]
+[plain/resume pid-separate rc=0]
+  resume final messages: ['SECRET-TCK-000123-salary luong cua nhan vien', 'C ran, decision=approved'] decision: approved
+
+=== b64 thread b64-2ccdd43d-b3a5-4c78-bb64-fa3aa28c5171
+[b64/phase1 pid-separate rc=0]
+  phase1 interrupt: [Interrupt(value={'intent_id': 'i1', 'payload': 'SECRET-TCK-000123-salary-interrupt'}, id='b4777f388072a202e7c880b6b47c28df', response_schema=None)]
+ after phase1 (graph paused at interrupt):
+  checkpoints.checkpoint: rows=3 with_secret=1
+  checkpoints.metadata(metadata): rows=3 with_secret=3
+  checkpoint_blobs.blob: rows=5 with_secret=0
+  checkpoint_writes.blob: rows=10 with_secret=0
+  checkpoints.checkpoint channel_values: {'note': 'SECRET-TCK-000123-salary-note', 'decision': '', 'branch:to:B': None}
+  latest metadata: {"step": 1, "source": "loop", "parents": {}, "user_note": "SECRET-TCK-000123-salary-configurable"}
+  blob types/channels: [('__start__', 'msgpack+aes', 64), ('messages', 'msgpack+aes', 33), ('box', 'msgpack+aes', 33), ('messages', 'msgpack+aes', 251), ('box', 'msgpack+aes', 62)]
+  writes channels: [('messages', 'msgpack+aes'), ('note', 'msgpack+aes'), ('box', 'msgpack+aes'), ('decision', 'msgpack+aes'), ('branch:to:A', 'null+aes'), ('messages', 'msgpack+aes'), ('note', 'msgpack+aes'), ('box', 'msgpack+aes'), ('branch:to:B', 'null+aes'), ('__interrupt__', 'msgpack+aes')]
+[b64/wrongkey pid-separate rc=0]
+  ERROR builtins.ValueError MAC check failed
+[b64/resume pid-separate rc=0]
+  resume final messages: ['SECRET-TCK-000123-salary luong cua nhan vien', 'C ran, decision=approved'] decision: approved
