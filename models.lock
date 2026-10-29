@@ -17,7 +17,7 @@ files    = [
 name     = "prompt-guard-2"
 repo     = "meta-llama/Llama-Prompt-Guard-2-86M"   # TODO(M0-spike): xác nhận repo/biến thể
 revision = "TODO-commit-sha-40-chars"
-license  = "Llama (cần kiểm điều khoản trước khi phân phối)"
+license  = "Llama 4 Community License (model gated trên HF; ngưỡng 700M MAU, Acceptable Use Policy; kèm notice khi phân phối)"
 files    = [
   { path = "model.safetensors", sha256 = "TODO-64-hex" },   # TODO: hoặc bản ONNX đã convert
 ]
@@ -26,7 +26,7 @@ files    = [
 name     = "underthesea"
 repo     = "undertheseanlp/underthesea"   # TODO: xác nhận nguồn model CRF (không phải repo HF chuẩn)
 revision = "TODO-commit-sha-or-version"
-license  = "TODO: kiểm tra GPL trước khi phân phối image"
+license  = "Apache-2.0 (underthesea 9.5.0, underthesea_core 3.3.2); TODO: giấy phép trọng số NER deep (undertheseanlp/vietnamese-ner-*) chưa xác minh"
 files    = [
   { path = "ner/crf.model", sha256 = "TODO-64-hex" },   # TODO: đường dẫn/hash thật
 ]

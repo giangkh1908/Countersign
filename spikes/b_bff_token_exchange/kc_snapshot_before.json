@@ -1,0 +1,13 @@
+{
+"chat-ui": {  "clientId" : "chat-ui",  "redirectUris" : [ "http://localhost:8300/auth/callback" ],  "attributes" : {    "realm_client" : "false",    "standard.token.exchange.enabled" : "true",    "post.logout.redirect.uris" : "http://localhost:8300/*",    "pkce.code.challenge.method" : "S256"  }},
+"approval-signer": {  "clientId" : "approval-signer",  "enabled" : true,  "bearerOnly" : true,  "standardFlowEnabled" : false,  "serviceAccountsEnabled" : false,  "publicClient" : false,  "attributes" : {    "realm_client" : "false",    "post.logout.redirect.uris" : "+"  },  "defaultClientScopes" : [ ],  "optionalClientScopes" : [ ]},
+"an.nguyen": {"id": "d6afa1fc-db1a-445f-917a-a6275e593cc3",
+"user": {  "username" : "an.nguyen",  "emailVerified" : true,  "enabled" : true,  "requiredActions" : [ ]},
+"credentials": [ ]}
+,
+"binh.tran": {"id": "3d1d7eef-f56b-4ba1-af45-b89370c96adf",
+"user": {  "username" : "binh.tran",  "emailVerified" : true,  "enabled" : true,  "requiredActions" : [ ]},
+"credentials": [ ]}
+,
+"spike_b_clients": ""
+}

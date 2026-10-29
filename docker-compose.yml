@@ -155,7 +155,7 @@ services:
 
   # ───────────── danh tính ─────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4   # TODO(M7): pin digest; phiên bản cần xác minh, mục 4.3
+    image: quay.io/keycloak/keycloak:26.8.1   # TODO(M7): pin digest; 26.8.1 vá CVE-2026-97846 (04 §4.3)
     <<: *hardened
     read_only: false                        # dev mode ghi vào /opt/keycloak/data
     entrypoint: ["/bin/bash", "-c"]

@@ -33,8 +33,8 @@ Quyết định dựa trên **yêu cầu kiến trúc**, không dựa vào một
 4. **Bề mặt tấn công nhỏ.** Gateway là nơi tập trung toàn bộ khoá provider. Giữ nó nhỏ: không có endpoint cấu hình động, không nạp model ML nặng (đẩy sang `policy-sidecar` không có khoá, không egress), ít dependency, lock có hash, image pin digest.
 
 **Bối cảnh rủi ro chuỗi cung ứng.** Các sự cố gateway mã nguồn mở năm 2026 cho thấy rủi ro của một thành phần giữ toàn bộ khoá:
-- Phần **có advisory chính thức**: CVE-2026-42208 (SQL injection trước xác thực, giá trị header `Authorization` ghép thẳng vào câu SQL; có GHSA/OSV, cần ghi lại mã định danh khi đối chiếu) và sự cố phát hành 10/2026 trên PyPI/Docker chứa mã đánh cắp credential (Microsoft Security Blog, 23/10/2026).
-- Phần còn lại, gồm vụ 03/2026 (v1.82.7–1.82.8 bị cài mã độc qua credential PyPI bị đánh cắp, liên quan chuỗi TeamPCP/Trivy) và các CVE khác: **theo báo cáo của báo chí bảo mật, chưa xác minh** với advisory gốc. Chi tiết ở `research/01`; mục 11 liệt kê việc đối chiếu.
+- Phần **có advisory chính thức**: CVE-2026-42208 (SQL injection trước xác thực, giá trị header `Authorization` ghép thẳng vào câu SQL; GHSA-r75f-5x8p-qvmc, bản vá 1.83.7) và sự cố phát hành 21/10/2026 (v1.107.0 trên PyPI/Docker có backdoor RCE: `cook.pth`, `sitecustomize.py`; nguồn: trang sự cố của LiteLLM `docs.litellm.ai/blog/security-incident-oct-21-2026`, MAL-2026-2144).
+- Vụ 03/2026 (v1.82.7–1.82.8 chứa mã độc đánh cắp credential, `litellm_init.pth`): GHSA-5mg7-485q-xm76 / MAL-2026-2144. Đã đối chiếu ở `research/05` §4; không tìm thấy nguồn Microsoft nào cho sự cố 10/2026. Các CVE khác: xem `research/01`.
 
 Đây là ngữ cảnh chứ không phải luận cứ chính. Lựa chọn tự xây phải tự chứng minh bằng bộ đánh giá (mục 9): overhead, chịu lỗi, và security regression.
 
@@ -91,7 +91,7 @@ flowchart LR
 Mạng `core` là `internal`; chỉ `gateway` có đường ra Internet. `policy-sidecar` và `approval-signer` chỉ ở `core`.
 
 **Nguyên tắc xuyên suốt**
-- **Danh tính đi xuyên suốt:** user đăng nhập qua Keycloak. Agent dùng **token exchange (RFC 8693)** để lấy token riêng cho từng MCP server (audience riêng), không chuyển tiếp nguyên token của user (đúng yêu cầu spec MCP 2026-07-28). Gateway cũng nhận danh tính user để tính chi phí, PII và audit.
+- **Danh tính đi xuyên suốt:** user đăng nhập qua Keycloak. Agent dùng **token exchange (RFC 8693, Keycloak Standard Token Exchange V2, ADR-005)** để lấy token riêng cho từng MCP server (mỗi request một audience, dùng `azp` thay `act`), không chuyển tiếp nguyên token của user (đúng yêu cầu spec MCP 2026-07-28). Gateway cũng nhận danh tính user để tính chi phí, PII và audit.
 - **Phân quyền nằm ở server, không nằm ở prompt.** LLM có bị injection thì cũng chỉ làm được những gì user đó vốn được phép.
 - **Giả định đe doạ: agent có thể bị chiếm hoàn toàn.** Vì vậy mọi thao tác ghi phải có người duyệt trên dữ liệu do **server tính và ký** (mục 6.3).
 - **Ít phụ thuộc, pin bằng hash:** gọi provider bằng `httpx` trực tiếp, `uv.lock` có hash, image Docker pin digest, model ML pin revision + sha256 trong `models.lock`.
@@ -125,7 +125,7 @@ Request ─► [1] AuthN key ─► [2] AuthZ model/budget ─► [3] Rate limit
 
 **Degraded mode khi Redis state lỗi:** hạn mức in-memory = limit / (số worker × số instance), chỉ phục vụ alias rẻ `acme-fast`, TTL L1 của key ≤ 30s để thu hồi vẫn có hiệu lực, metric `gw_degraded_overspend_max_usd`; sau 600s trả 503 `service_unavailable`.
 
-**policy-sidecar** (cổng 8010, `core` only, không khoá, không egress): `/v1/embed` (bge-m3 ONNX), `/v1/guard` (Prompt Guard 2), `/v1/pii/ner` (underthesea). Gateway **không** nạp onnxruntime/torch/tokenizers/model HF. Ingest của docs-mcp và query dùng **cùng một runtime embedding** (qua alias `acme-embed`). Supply chain model: `models.lock` (revision commit sha, sha256 từng file, license), tải bằng `huggingface_hub` với `trust_remote_code=False`, chỉ `*.safetensors`/`*.onnx`; sidecar verify hash khi khởi động; ghi rõ license (Prompt Guard 2: Llama license; bge-m3: MIT; underthesea: kiểm tra GPL).
+**policy-sidecar** (cổng 8010, `core` only, không khoá, không egress): `/v1/embed` (bge-m3 ONNX), `/v1/guard` (Prompt Guard 2), `/v1/pii/ner` (underthesea). Gateway **không** nạp onnxruntime/torch/tokenizers/model HF. Ingest của docs-mcp và query dùng **cùng một runtime embedding** (qua alias `acme-embed`). Supply chain model: `models.lock` (revision commit sha, sha256 từng file, license), tải bằng `huggingface_hub` với `trust_remote_code=False`, chỉ `*.safetensors`/`*.onnx`; sidecar verify hash khi khởi động; ghi rõ license (Prompt Guard 2: Llama 4 Community License, model gated, ngưỡng 700M MAU + Acceptable Use Policy; bge-m3: MIT; underthesea: Apache-2.0, giấy phép trọng số NER deep chưa xác minh).
 
 **Bảng model đề xuất** (giá USD/1M token in/out, lấy ngày 2026-10-28, phải kiểm tra lại trước khi phát hành):
 
@@ -140,7 +140,7 @@ Request ─► [1] AuthN key ─► [2] AuthZ model/budget ─► [3] Rate limit
 
 ## 5. Lớp 2: MCP servers
 
-Ba server dùng SDK Python (`mcp` 2.x hoặc `fastmcp` 4.x, **chốt sau spike M0**; phương án B: FastAPI tool server tự viết), transport Streamable HTTP, đóng vai OAuth resource server: có Protected Resource Metadata, kiểm tra `aud`, `iss`, `exp`, scope.
+Ba server dùng SDK Python chỉ để **host giao thức** (`mcp` 2.3 `MCPServer` mặc định, `fastmcp` 4.1 thay thế; stateless, ADR-003), transport Streamable HTTP. Xác thực **không** dùng auth của SDK: mỗi server bọc `AuthMiddleware` ASGI dùng port `TokenVerifier` (kiểm `iss`, `aud`, `exp`, `sub`, `azp`, scope; 401 có `error_description` và `resource_metadata`), đóng vai OAuth resource server với Protected Resource Metadata.
 
 | Server | Tool | Kiểm soát quyền |
 |---|---|---|
@@ -176,7 +176,7 @@ flowchart TD
 - **LangGraph 1.2.x**, `StateGraph` tự viết: node classifier + `add_conditional_edges`, mỗi agent con là một subgraph. Không dùng `langgraph-supervisor`, vì router đơn giản thì dễ đo routing accuracy hơn.
 - LLM: `ChatOpenAI(base_url=GATEWAY_URL, api_key=<key của service agent>, model="acme-smart", stream_usage=True, default_headers={"X-Acme-User-Token": ...})`, dựng qua hàm `make_chat_model(role)`.
 - MCP: `langchain-mcp-adapters`, **tạo client theo request** để gắn token đã exchange cho đúng user.
-- Checkpointer: `PostgresSaver` với **serializer mã hoá mặc định**, `thread_id` = phiên chat; retention 30 ngày + API xoá thread.
+- Checkpointer: `PostgresSaver`/`AsyncPostgresSaver` dựng tường minh với `EncryptedSerializer` (AES-EAX, ADR-004; **không** mã hoá mặc định), `thread_id` = phiên chat; `checkpoints.checkpoint`/`metadata` vẫn có phần plaintext nên nội dung nhạy cảm chỉ đặt trong `messages` hoặc channel non-primitive; retention 30 ngày + API xoá thread.
 
 ### 6.2 Human-in-the-loop
 Node `approval` gọi `interrupt({"intent_jws": ...})`. Agent **không dựng preview**: mọi trường hiển thị lấy từ intent do tickets-mcp ký và được approval-signer xác minh. Code trước `interrupt()` phải idempotent vì node chạy lại khi resume.
@@ -194,7 +194,7 @@ Luồng:
 5. Agent gọi `commit_intent(intent_id, approval_token)`. tickets-mcp kiểm chữ ký, `sub == caller.sub`, intent tồn tại + hash khớp + còn `pending`, `jti` dùng một lần; thực thi với `expected_updated_at` (TOCTOU -> `conflict`); ghi `ticket_events` + `tool_audit` trong cùng transaction.
 6. **Sửa:** agent gọi lại `prepare_*` để có intent mới; không bao giờ ký args do UI/agent dựng.
 
-**Tách token (D13, cập nhật theo D15; sửa N01/N02):** token đăng nhập (client `chat-ui`, BFF giữ) có `aud=chat-ui` và **không** gửi cho agent. BFF exchange thành `aud=agent-service` (gửi agent mỗi request) và `aud=approval-signer` (chỉ trong session server). `agent-service` exchange sang `llm-gateway` + 3 MCP, không tới signer. Signer kiểm `azp == chat-ui`. Agent bị chiếm vì vậy không có token hợp lệ để tự gọi `/v1/approvals` (nhận `401/403`); test regression dùng **chính token agent cầm**, không dùng token dựng riêng. Cấu hình phụ thuộc luật exchange V2 của Keycloak (client gọi exchange phải nằm trong `aud` của subject token), xác minh ở spike M0.
+**Tách token (D13, cập nhật theo D15; sửa N01/N02):** token đăng nhập (client `chat-ui`, BFF giữ) có `aud=chat-ui` và **không** gửi cho agent. BFF exchange thành `aud=agent-service` (gửi agent mỗi request) và `aud=approval-signer` (chỉ trong session server). `agent-service` exchange sang `llm-gateway` + 3 MCP, không tới signer. Signer kiểm `azp == chat-ui`. Agent bị chiếm vì vậy không có token hợp lệ để tự gọi `/v1/approvals` (nhận `401/403`); test regression dùng **chính token agent cầm**, không dùng token dựng riêng. Luật exchange V2 (client gọi exchange phải nằm trong `aud` của subject token) đã xác minh ở Spike B/C (ADR-005): mỗi request một audience, `TokenBroker` kiểm hậu điều kiện `aud`/`scope`, `agent-service` tắt service account; tác vụ nền dùng client `agent-maintenance`.
 
 Mã lỗi: `intent_not_found`, `intent_expired`, `intent_mismatch`, `approval_*`, `conflict`.
 **HITL, taint, guard sau D17 (N05–N07, N12, N13, N15).** Intent đang chờ nằm ở Redis cùng JWS (ACL chỉ user `tickets`) và `commit_intent` verify lại chữ ký; việc commit đi qua một máy trạng thái `pending -> committing -> committed | failed` (định nghĩa duy nhất ở 00 §4.2), nên hai commit song song chỉ có một thành công và crash giữa chừng được khôi phục từ `ticket_events.intent_id UNIQUE`. Từ chối không có tool huỷ: BFF nhớ intent đã từ chối 10 phút và giới hạn 10 thẻ/thread/giờ. Taint theo thread + phòng ban nên không còn hết hạn sau 30 phút. Khi sidecar lỗi, đoạn tool/RAG chưa kiểm tra bị che thay vì lọt qua, và request tới provider ngoài bị từ chối (`503 policy_unavailable`) nếu không chạy được NER.
@@ -215,7 +215,7 @@ Mã lỗi: `intent_not_found`, `intent_expired`, `intent_mismatch`, `approval_*`
 | policy-sidecar | FastAPI + onnxruntime, bge-m3 ONNX, Prompt Guard 2 ONNX, underthesea | Tách phụ thuộc nặng khỏi tiến trình giữ khoá |
 | approval-signer | FastAPI + PyJWT + cryptography | Nhỏ, dễ kiểm toán |
 | Embedding / vector | bge-m3 (hoặc `AITeamVN/Vietnamese_Embedding`), pgvector | Dữ liệu không rời hệ thống; ACL trong SQL |
-| MCP | `mcp` 2.3 / `fastmcp` 4.1 (chốt sau spike) | Spec 2026-07-28 |
+| MCP | `mcp` 2.3 (mặc định) / `fastmcp` 4.1, chỉ host giao thức (ADR-003) | Spec 2026-07-28 |
 | Agent | langgraph 1.2.x, langchain 1.4.x, langchain-openai | HITL `interrupt()` |
 | Auth | Keycloak (OIDC, token exchange) | OAuth 2.1 chuẩn, khớp spec MCP |
 | UI | React 18 + TS (Vite, TanStack Query, Tailwind + shadcn/ui) + BFF FastAPI (D15) | Thẻ duyệt WYSIWYS, token không xuống trình duyệt, CSP/sanitize chặt từ MVP |
@@ -239,16 +239,16 @@ Bộ đánh giá gồm ba phần: **(a) benchmark hiệu năng/chi phí**, **(b)
 
 **Phương pháp dữ liệu:** ≥ 100 mẫu gán nhãn bởi người; đo độ đồng thuận người–người và người–judge (κ); judge khác họ với agent (`acme-judge`, Gemini trước); báo cáo riêng trên phần viết tay; công bố seed, prompt, phiên bản. **Guard pilot** (50+50 mẫu tiếng Việt) là điều kiện để bật guard ở M4.
 
-Ánh xạ kết quả vào **OWASP Top 10 for LLM 2025** (LLM01, 02, 03, 05, 06, 08, 10) và **OWASP Agentic Top 10 2026**.
+Ánh xạ kết quả vào **OWASP Top 10 for LLM 2025** (LLM01, 02, 03, 05, 06, 08, 10) và **OWASP Top 10 for Agentic Applications 2026** (ASI01 Agent Goal Hijack, ASI02 Tool Misuse & Exploitation, ASI03 Identity & Privilege Abuse, ASI04 Agentic Supply Chain Vulnerabilities, ASI05 Unexpected Code Execution, ASI06 Memory & Context Poisoning, ASI07 Insecure Inter-Agent Communication, ASI08 Cascading Failures, ASI09 Human-Agent Trust Exploitation, ASI10 Rogue Agents; tên lấy từ nguồn thứ cấp, trang chính thức chưa truy cập được).
 
 ## 10. Rủi ro & hướng giảm thiểu
 
 | Rủi ro | Giảm thiểu |
 |---|---|
-| API lấy danh tính caller trong `mcp` 2.x / `fastmcp` 4.x chưa rõ; SDK stateless | Spike M0 (2 ngày); phương án B: FastAPI tool server + middleware ASGI kiểm JWT |
-| Keycloak token exchange cấu hình phức tạp | Phương án B: client-credentials + header `X-Acme-User-Token` đã verify; ghi rõ là giới hạn |
+| API lấy danh tính caller trong `mcp` 2.x / `fastmcp` 4.x khác nhau giữa SDK | Đã chốt (Spike A, ADR-003): auth bằng middleware ASGI riêng, SDK chỉ host giao thức; M1 kiểm `mcp` 2.3 stateless trong ≤ 0,5 ngày |
+| Keycloak token exchange: không chặn gộp audience, lọt scope, `exp` không theo subject | Đã chốt V2 (ADR-005); phương án B **không dùng**. Adapter `TokenBroker` kiểm hậu điều kiện + test hồi quy; cache TTL theo `exp` subject |
 | Hai ngôn ngữ (Python + TS), thêm pipeline Node; M1 dài thêm ~1–1,5 tuần | Job CI `web` riêng (lockfile, lint, typecheck, vitest, build, Playwright); type TS sinh từ OpenAPI của BFF; quy tắc frontend (một `request()`, component không gọi `fetch`, leak-grep `web/src`) |
-| Serializer mã hoá checkpoint LangGraph không hỗ trợ như kỳ vọng | Spike M0; dự phòng: mã hoá cột ở lớp lưu trữ + retention ngắn |
+| Checkpoint chỉ mã hoá một phần (`checkpoint`/`metadata` JSONB plaintext với channel đơn giản) | ADR-004: `EncryptedSerializer` + quy tắc state + test canary trong CI; rủi ro còn lại (không AAD, xoay khoá M7) đã ghi |
 | Prompt Guard 2 kém trên tiếng Việt (nhiều false positive/negative) | Pilot 50+50 mẫu trước khi bật; mặc định tắt; fail-policy cấu hình được |
 | Sidecar chậm hoặc lỗi làm hỏng đường nóng của gateway | Timeout + fail-policy theo loại nội dung (D17, N15): tool/RAG `redact` theo đoạn, prompt user `open`, NER ra provider ngoài `closed` (`503 policy_unavailable`); sidecar có pool và `max_inflight` riêng theo lớp ưu tiên (guard/NER online > embed truy vấn > embed ingest); metric `gw_policy_skipped_total`/`gw_policy_redacted_total`, alert khi skipped > 0 trong 5 phút; báo cáo độ trễ có/không sidecar |
 | Taint hết hạn/ trốn bằng `thread_id` giả hoặc qua phòng ban (N12) | Đã giảm thiểu: khoá `mcp:taint:{sub}:{thread_id}` (TTL = retention thread) + `:recent` 24h; `docs`, `analytics`, `tickets.get_ticket` đều ghi; `possible_downgrade` tính theo `acme.ticket_audience(draft)` cả mức lẫn phòng ban; ca regression qua ngày/qua phòng ban ở M3/M5 |
@@ -264,7 +264,7 @@ Bộ đánh giá gồm ba phần: **(a) benchmark hiệu năng/chi phí**, **(b)
 | Spec/SDK thay đổi nhanh (MCP stateless 2026-07-28) | Pin version, ghi ADR, lớp adapter mỏng |
 | Phạm vi lớn | Đi theo milestone M0–M7, mỗi milestone có Definition of Done; mục "Tuỳ chọn sau v1.0" tách riêng |
 
-## 11. Việc cần xác minh thêm (reader)
+## 11. Việc cần xác minh thêm (reader) — mục 1–6 đã xong ở M0 (`research/05-m0-verification.md`, ADR-003/004/005); còn mở: pilot Prompt Guard 2 tiếng Việt, giấy phép trọng số NER deep của underthesea (mục 7)
 1. API danh tính/auth của `mcp` 2.3.0 và `fastmcp` 4.1.4; hành vi stateless.
 2. Tên 10 mục OWASP Agentic Top 10 2026 (trang chính thức).
 3. Keycloak bản hiện hành: token exchange (RFC 8693) đã GA chưa; có phát claim `act` không.

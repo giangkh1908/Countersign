@@ -31,7 +31,7 @@
 | `ui` không còn khoá ES256 và không tự ký; gọi `approval-signer` (`/v1/intents/verify`, `/v1/approvals`) bằng token người dùng; bỏ adapter `es256_jwt` và port `ApprovalSigner` của ui | D1, D12 | 1.1, 1.2b, 7.4 |
 | Nhánh "Sửa" = gọi lại `prepare_*` với giá trị đã sửa (intent mới), không ký lại trên args mới | D1 | 7.3 |
 | Bỏ `decode_unverified` khi đăng nhập; phiên UI khoá theo `session_id` (không theo `sub`, tránh đè phiên khi một người mở nhiều tab/thiết bị) | R05 | 9.1, 9.3 |
-| Checkpoint **mã hoá mặc định** (AES-GCM, [SPIKE] API serializer), retention 30 ngày (`AGENT_THREAD_RETENTION_DAYS`), API xoá thread | D7, R12 | 8.4, 1.3 |
+| Checkpoint mã hoá bằng `EncryptedSerializer` dựng **tường minh** (không mã hoá mặc định; quy tắc state; ADR-004), retention 30 ngày (`AGENT_THREAD_RETENTION_DAYS`), API xoá thread | D7, R12 | 8.4, 1.3 |
 | Langfuse chỉ gửi metadata + nội dung đã mask; mặc định không gửi nội dung hội thoại | D7 | 10.1 |
 | `ChatModelFactory` (port) → hàm `make_chat_model(role)` (không có adapter thứ hai) | D11 | 1.1, 5.1 |
 | E8: khoảng tin cậy Wilson, ≥ 2 model, tối thiểu 20% ca có reject/edit | R23 | 11 |
@@ -57,7 +57,7 @@
 
 | Service | Port (ABC) | Method | Adapter | Decorator |
 |---|---|---|---|---|
-| agent, bff (port đặt ở `acme_common`, D16) | `TokenBroker` | `async token_for(user_token: str, audience: str, scopes: frozenset[str]) -> AccessToken` | `oauth_token_exchange` (RFC 8693 tới Keycloak, mục 6.1), `static` (test/dev), `self_signed_sts` (phương án B nếu Keycloak không đáp ứng) | `CachingTokenBroker(inner)` (mục 6.2) |
+| agent, bff (port đặt ở `acme_common`, D16) | `TokenBroker` | `async token_for(principal: Principal, user_token: str, audience: str, scopes: Sequence[str]) -> AccessToken` (lỗi `TokenExchangeDenied`; ADR-005) | `oauth_token_exchange` (RFC 8693 tới Keycloak, mục 6.1), `static` (test/dev); `client_credentials_with_user_token` (phương án B) chỉ là ghi chú dự phòng, **chưa cài** | `CachingTokenBroker(inner)` (mục 6.2) |
 | agent | `ToolProvider` | `async tools_for(agent_name, principal, user_token) -> list[BaseTool]`; `async commit_intent(intent_id, approval_token, *, principal, user_token) -> dict` (chỉ `execute_write` gọi; không nạp cho LLM) | `mcp_http` (bọc **sự khác biệt** giữa `langchain.mcp.MCPAdapter` và `langchain-mcp-adapters`: đổi thư viện chỉ sửa file này) | `PinnedToolProvider(inner)` (băm mô tả tool, phát hiện rug pull) |
 
 Kiểu trung lập (`ports/types.py`): `Principal(sub, depts, roles, clearance)`, `AccessToken(value, expires_at)`, `AgentEvent` (union các event mục 1.4). Lỗi trung lập (`ports/errors.py`): `TokenInvalid`, `TokenExchangeDenied`, `ToolUnavailable(server, retryable)`, `GatewayError(code, retryable, user_message)` (mục 5.3). Message lỗi **không** chứa URL, header, token hay nội dung người dùng.
@@ -66,7 +66,7 @@ Kiểu trung lập (`ports/types.py`): `Principal(sub, depts, roles, clearance)`
 # agent/ports/token.py
 class TokenBroker(ABC):
     @abstractmethod
-    async def token_for(self, user_token: str, audience: str, scopes: frozenset[str]) -> AccessToken: ...
+    async def token_for(self, principal: Principal, user_token: str, audience: str, scopes: Sequence[str]) -> AccessToken: ...
     async def evict(self, sub: str) -> None: ...          # mặc định no-op, Caching ghi đè
 # agent/ports/tools.py
 class ToolProvider(ABC):
@@ -83,7 +83,7 @@ class ToolProvider(ABC):
 ```python
 _TOKEN_BROKERS: dict[str, Callable[[Settings], TokenBroker]] = {
     "oauth_token_exchange": _load_oauth_token_exchange,   # lazy: from .adapters.oauth_token_exchange import ...
-    "static": _load_static, "self_signed_sts": _load_self_signed_sts}
+    "static": _load_static}
 _TOOL_PROVIDERS = {"mcp_http": _load_mcp_http}
 
 def build_token_broker(s: Settings) -> TokenBroker:
@@ -103,7 +103,7 @@ Factory nối vào FastAPI qua `Depends`; test override đúng một chỗ bằn
 packages/agent/src/agent/
   ports/            # token.py tools.py types.py errors.py  (ABC + kiểu trung lập)
   adapters/
-    oauth_token_exchange.py   static_token.py   self_signed_sts.py
+    oauth_token_exchange.py   static_token.py
     mcp_http.py               # chỉ file này import langchain.mcp / langchain_mcp_adapters
     openai_gateway_chat.py    # make_chat_model(role): chỉ file này import langchain_openai + httpx hook chi phí
     langfuse_tracing.py       # callback Langfuse (mục 10.1); không là port vì chưa có adapter thứ hai
@@ -676,7 +676,7 @@ Không bao giờ in `message` thô từ gateway cho người dùng. Mọi lỗi 
 
 ### 6.1 Luồng RFC 8693 (Keycloak)
 
-Agent nhận user token (aud=`agent-service`) từ `Authorization`. Cho mỗi audience cần dùng:
+Agent nhận user token (`aud=agent-service`, `azp=chat-ui`, scope `agent:invoke`) từ `Authorization`; `agent-service` **không** có service account (ADR-005). Cho mỗi audience cần dùng, **mỗi request exchange đúng một `audience`** qua `TokenBroker` (không gộp nhiều audience; Keycloak vẫn cấp token nhiều `aud` nếu bị xin, nên adapter kiểm hậu điều kiện):
 
 ```http
 POST /realms/acme/protocol/openid-connect/token HTTP/1.1
@@ -692,21 +692,21 @@ grant_type=urn:ietf:params:oauth:grant-type:token-exchange
 &scope=tickets:read
 ```
 
-Các audience: `llm-gateway` (scope `llm:invoke`), `docs-mcp` (`docs:read`), `tickets-mcp` (`tickets:read`, và `tickets:write` chỉ cho `execute_write`), `analytics-mcp` (`analytics:read`). **[SPIKE]** Keycloak (standard token exchange v2 hay legacy v1) có cho phép yêu cầu scope hẹp hơn scope của client mapping không; có phát claim `act` không (contracts §4 đã ghi chú dùng `azp` nếu không).
+Các audience: `llm-gateway` (scope `llm:invoke`), `docs-mcp` (`docs:read`), `tickets-mcp` (`tickets:read`, và `tickets:write` chỉ cho `execute_write`), `analytics-mcp` (`analytics:read`). (Đã xác minh M0, ADR-005.) Standard token exchange V2: giữ `sub`/`dept`/`clearance`/`sid`, **không** phát `act` (dùng `azp` = `agent-service`), TTL 300 s, `exp` không bị chặn bởi `exp` của subject. **Hậu điều kiện bắt buộc** trong adapter `oauth_token_exchange`: token trả về có `aud == [audience]` (đúng một phần tử) và `scope` ⊆ scope đã xin (Keycloak để lọt scope của đích khác); sai ⇒ `TokenExchangeDenied`, không dùng token. Lỗi Keycloak là 400 (`invalid_scope`/`invalid_request`/`Invalid token`) hoặc 403 (`not within the token audience`) tuỳ ca; adapter dịch hết sang `TokenExchangeDenied`, không lộ chi tiết.
 
 ### 6.2 `CachingTokenBroker` (decorator của `TokenBroker`)
 
-Code dưới là hợp của adapter `oauth_token_exchange` (gọi Keycloak) và decorator `CachingTokenBroker` (dict, TTL, single-flight); khi cài thì tách hai lớp. Adapter `static` (token cố định cho test/dev) và `self_signed_sts` (STS tự ký, phương án B) dùng chung decorator.
+Code dưới là hợp của adapter `oauth_token_exchange` (gọi Keycloak) và decorator `CachingTokenBroker` (dict, TTL, single-flight); khi cài thì tách hai lớp. Adapter `static` (token cố định cho test/dev) dùng chung decorator.
 
 
 ```python
 # auth/token_exchange.py
 class TokenExchanger:
     def __init__(self, http, settings, max_entries=2000, skew=30):
-        self._cache: dict[tuple[str,str,str], tuple[str,float]] = {}   # (sub, aud, scope) -> (token, expiry_epoch)
+        self._cache: dict[tuple, tuple[str,float]] = {}   # (sub, sid, aud, sorted scopes) -> (token, expiry_epoch) (ADR-005)
         self._locks: dict[tuple, asyncio.Lock] = {}                    # single-flight
     async def get(self, subject_token: str, caller: Caller, aud: str, scope: str) -> str:
-        key = (caller.sub, aud, scope)
+        key = (caller.sub, caller.sid, aud, tuple(sorted(scope.split())))
         hit = self._cache.get(key)
         if hit and hit[1] - self.skew > time.time(): return hit[0]
         async with self._locks.setdefault(key, asyncio.Lock()):
@@ -720,8 +720,8 @@ class TokenExchanger:
             return tok
 ```
 
-- **TTL < exp:** dùng `exp − 30s` skew; token còn <30s thì xin mới.
-- Khoá cache = `(sub, aud, sorted scopes)` (contracts v1.1 §4/§9.2; in-process; TTL `exp − 30s`); có **scope** (mở rộng so với "(sub, aud)" trong yêu cầu) để token đọc và token ghi không lẫn; token `tickets:write` **không cache** (cấp tại chỗ cho `prepare_*` và `commit_intent`).
+- **TTL:** `min(exp, exp_subject) − 30s` (token đổi ra không được sống lâu hơn token người dùng, vì Keycloak không chặn; ADR-005); token còn <30s thì xin mới.
+- Khoá cache = `(sub, sid, aud, sorted scopes)` (contracts §4/§9.2, ADR-005; in-process; TTL `min(exp, exp_subject) − 30s`); có **scope** (mở rộng so với "(sub, aud)" trong yêu cầu) để token đọc và token ghi không lẫn; token `tickets:write` **không cache** (cấp tại chỗ cho `prepare_*` và `commit_intent`).
 - **Không lưu Redis** (contracts §2.1: không lưu access token của user). Chỉ dict trong RAM, giới hạn 2000 mục LRU, xoá theo `sub` khi gặp 401, khi user logout (endpoint nội bộ `POST /v1/internal/evict` (`sub` lấy từ token Bearer) do BFF gọi, hoặc để token tự hết hạn ≤5 phút). Cache là **per process**: nhiều instance mỗi cái cache riêng, chấp nhận.
 - Hết hạn user token trong lúc run dài: agent chỉ cần subject token để *exchange*; nếu subject token đã hết hạn thì exchange lỗi → `error{auth}`; BFF refresh/exchange lại và gửi lại. Trong giai đoạn chờ duyệt (có thể hàng giờ) không giữ token nào; ở `resume`, BFF gửi token `aud=agent-service` mới trong header.
 
@@ -933,19 +933,23 @@ graph = build_graph(checkpointer, deps)
 
 ### 8.4 PII, mã hoá at-rest và retention (D7)
 
-Gateway che PII **trước khi ra provider** (pii_policy), nhưng lịch sử trong checkpoint là văn bản gốc của user (gateway giải mã ánh xạ ở response). v1.2 chuyển từ "chấp nhận văn bản gốc" sang **mã hoá mặc định**:
+Gateway che PII **trước khi ra provider** (pii_policy), nhưng lịch sử trong checkpoint là văn bản gốc của user (gateway giải mã ánh xạ ở response). v1.2 chuyển từ "chấp nhận văn bản gốc" sang mã hoá checkpoint. **Lưu ý (ADR-004, Spike D):** `langgraph-checkpoint` mặc định dùng `JsonPlusSerializer`, **không mã hoá**; mã hoá chỉ có khi dựng saver tường minh với `EncryptedSerializer`:
 
 | Phương án | Ưu | Nhược | Quyết định |
 |---|---|---|---|
 | Văn bản gốc, DB nội bộ | Đơn giản, debug được | Lộ nếu lộ DB/backup/dump | Chỉ cho `ACME_ENV=test` |
 | Mã hoá volume/disk | Rẻ | Không bảo vệ khỏi người có quyền DB hoặc dump logic | Bổ sung ở môi trường thật, không thay thế |
-| **Mã hoá serializer của checkpoint (AES-GCM, khoá từ secret)** | Dump DB không đọc được nội dung; `thread_id` và metadata vẫn dùng được | Không tìm kiếm trong DB được; quản lý khoá | **Mặc định bật.** `AGENT_CHECKPOINT_ENCRYPTION_KEY` bắt buộc ngoài `ACME_ENV=test`; thiếu thì agent từ chối khởi động |
+| **Mã hoá serializer của checkpoint (AES-GCM, khoá từ secret)** | Dump DB không đọc được nội dung; `thread_id` và metadata vẫn dùng được | Không tìm kiếm trong DB được; quản lý khoá | **Bắt buộc bật, dựng tường minh** (không phải mặc định của thư viện). `AGENT_CHECKPOINT_ENCRYPTION_KEY` bắt buộc ngoài `ACME_ENV=test`; thiếu thì agent từ chối khởi động |
 | Lưu bản đã mask | Ít PII nhất | Mất chất lượng ngữ cảnh | Không chọn |
 
-- **[SPIKE]** Cách cắm mã hoá: `langgraph-checkpoint` 1.x có serde ghép được (`EncryptedSerializer`/`with_encryption` hoặc lớp `SerializerProtocol` tự viết bọc `JsonPlusSerializer` bằng AES-GCM). Phải xác minh tên API, việc nonce ngẫu nhiên mỗi bản ghi, và AAD = `thread_id` để bản mã không dán sang thread khác được. Nếu API không dùng được, phương án dự phòng: wrapper `BaseCheckpointSaver` mã hoá blob trước khi ghi (cùng giao diện, ghi vào cùng bảng). Test `test_checkpoint_blob_is_ciphertext` (đọc thẳng bảng, không thấy chuỗi tiếng Việt của câu hỏi mẫu) và `test_wrong_key_cannot_load`.
-- **Xoay khoá:** `AGENT_CHECKPOINT_ENCRYPTION_KEY` hỗ trợ danh sách khoá có `kid` (khoá đầu để ghi, các khoá sau chỉ để đọc); job re-encrypt tuỳ chọn.
+- **Cách cắm mã hoá (đã xác minh M0, ADR-004):** dựng saver tường minh `PostgresSaver(conn, serde=...)` / `AsyncPostgresSaver(pool, serde=...)` với `serde = EncryptedSerializer.from_pycryptodome_aes(key=<bytes>)` (AES-EAX); thêm `pycryptodome` vào dependency của `packages/agent`. `PostgresSaver.from_conn_string()` bản đồng bộ không nhận `serde`. Sai key ⇒ `ValueError: MAC check failed`.
+- **Key:** `AGENT_CHECKPOINT_ENCRYPTION_KEY` là **base64 của 32 byte** ngẫu nhiên (hỗ trợ `_FILE`); agent tự `b64decode`, kiểm đúng 32 byte, sai thì từ chối khởi động. Không dùng biến `LANGGRAPH_AES_KEY`.
+- **Quy tắc state (bắt buộc, có review):** `checkpoints.checkpoint` và `checkpoints.metadata` (JSONB) vẫn **plaintext** với channel kiểu đơn giản (`str`/`int`/`float`/`bool`/`None`) và với mọi key của `config["configurable"]` trừ `thread_id`. Vì vậy: (1) nội dung nhạy cảm (hội thoại, kết quả tool, `intent_jws`, pending action, tóm tắt) chỉ nằm trong `messages` hoặc channel non-primitive (dict/list/pydantic); (2) channel `str`/`int` chỉ cho cờ, bộ đếm, ID không nhạy cảm; (3) `configurable` **chỉ** chứa `thread_id` (và `checkpoint_ns` nếu cần), token và dữ liệu người dùng truyền qua `context=`/contextvar.
+- **Test canary bắt buộc trong CI** (Postgres thật): chạy một lượt có chuỗi canary và một `interrupt`; canary không được xuất hiện trong `checkpoints.checkpoint::text`, `metadata::text`, `encode(blob,'escape')` của `checkpoint_blobs`/`checkpoint_writes`. Chạy lại mỗi lần nâng LangGraph. Kèm `test_checkpoint_blob_is_ciphertext` và `test_wrong_key_cannot_load`.
+- **Rủi ro còn lại đã chấp nhận (ADR-004):** không có AAD (bản mã chép sang thread khác vẫn giải mã được; **bỏ** test `test_aad_thread_binding`); `loads_typed` vẫn đọc được plaintext nên kẻ có quyền ghi DB chèn được dữ liệu (giảm thiểu bằng role `ag_app` + audit); `thread_id`, `step`, kích thước blob vẫn lộ; xoay khoá cần cipher tự viết có `kid` (M7).
+- **Xoay khoá:** hoãn sang M7 (ADR-004): cần cipher tự viết có `kid` (khoá đầu để ghi, các khoá sau chỉ để đọc); job re-encrypt tuỳ chọn.
 - **Retention (R12):** `AGENT_THREAD_RETENTION_DAYS=30`. Job xoá hằng ngày các thread có `conversations.last_active_at` quá hạn: xoá checkpoint (`adelete_thread`, **[SPIKE]** tên hàm), message liên quan và đánh dấu `conversations.deleted_at`. Thread đang có interrupt chưa xử lý cũng bị dọn (chưa có gì được ghi).
-- **Xoá theo yêu cầu:** `DELETE /v1/threads/{id}` (mục 1.3) xoá checkpoint + đánh dấu `deleted_at` ngay; chỉ chủ thread (hoặc `admin` qua audit) được gọi; ghi audit `thread_deleted` không kèm nội dung. **D17 (N12):** cả API xoá lẫn job retention, sau khi xoá checkpoint, gọi `POST /internal/taint/forget {thread_id}` của docs-mcp bằng token user (job retention exchange bằng service account có quyền thay mặt `sub` chủ thread, ghi audit); forget lỗi ⇒ thử lại có backoff, không chặn việc xoá (taint vẫn tự hết TTL).
+- **Xoá theo yêu cầu:** `DELETE /v1/threads/{id}` (mục 1.3) xoá checkpoint + đánh dấu `deleted_at` ngay; chỉ chủ thread (hoặc `admin` qua audit) được gọi; ghi audit `thread_deleted` không kèm nội dung. **D17 (N12):** cả API xoá lẫn job retention, sau khi xoá checkpoint, gọi `POST /internal/taint/forget {thread_id}` của docs-mcp bằng token user (job retention không có người dùng: dùng client `agent-maintenance` (client-credentials, `aud=docs-mcp`, scope `docs:forget`) gọi forget theo `thread_id`, ghi audit; V2 không hỗ trợ impersonation; ADR-005 mục 7); forget lỗi ⇒ thử lại có backoff, không chặn việc xoá (taint vẫn tự hết TTL).
 - Biện pháp kèm theo: (1) role `ag_app` chỉ truy cập DB `agent`; (2) không ghi nội dung message vào log ứng dụng (chỉ độ dài, id); (3) Langfuse chỉ nhận metadata + nội dung đã mask (mục 10.1); (4) backup mã hoá bằng khoá khác khoá checkpoint.
 
 ---
@@ -1123,7 +1127,7 @@ LLM giả: `FakeListChatModel(responses=[...])` cho node trả text; với struc
 | `cost` | Cộng header; stream thiếu header → ước lượng + `estimated`; cache → 0 |
 | `sse` | Mapping stream→event; luôn kết thúc bằng một `done`/`error` |
 | Không rò token | Sau một run, quét bảng checkpoint (đã giải mã) + log: không có access/refresh/approval token; JWT duy nhất được phép là `intent_jws` (`iss=tickets-mcp`, `aud=approval-signer`) |
-| Checkpoint mã hoá | `test_checkpoint_blob_is_ciphertext`, `test_wrong_key_cannot_load`, `test_aad_thread_binding` (bản mã thread A không giải được ở thread B), thiếu `AGENT_CHECKPOINT_ENCRYPTION_KEY` ngoài `ACME_ENV=test` → agent không khởi động |
+| Checkpoint mã hoá | `test_checkpoint_blob_is_ciphertext`, `test_wrong_key_cannot_load`, `test_checkpoint_canary_not_in_plaintext_columns` (ADR-004), thiếu `AGENT_CHECKPOINT_ENCRYPTION_KEY` ngoài `ACME_ENV=test` → agent không khởi động |
 | Retention và xoá | Job retention xoá thread quá `AGENT_THREAD_RETENTION_DAYS` (freezegun) và gọi forget taint; `FakeToolProvider` khẳng định mọi call mang `_meta.thread_id`; `DELETE` gọi `POST /internal/taint/forget` đúng một lần với token user, forget lỗi không làm hỏng xoá; `DELETE /v1/threads/{id}` xoá checkpoint + đặt `deleted_at`, thread người khác → 404 |
 | Phiên BFF | Test thuộc `07` mục 6.3 (hai `session_id` cùng `sub` độc lập, token không rò ra trình duyệt, không giải mã JWT chưa xác minh). Phía agent: `POST /v1/internal/evict` chỉ xoá cache của `sub` trong token |
 
@@ -1156,8 +1160,8 @@ Snapshot test cho prompt (băm) để thay đổi prompt phải đi kèm chạy 
 2. `context_schema`/`Runtime` trong LangGraph 1.2.x để truyền token không qua checkpoint; configurable có bị lưu vào metadata checkpoint không.
 3. Định dạng stream với `subgraphs=True` và lấy interrupt từ `astream`; API đọc `__interrupt__`/`aget_state().tasks`.
 4. `with_structured_output(..., method="json_schema", strict=True)` đi qua gateway tới Claude/Gemini.
-5. `AsyncPostgresSaver`: tên lớp, pool, `adelete_thread`; serializer/serde mã hoá (AES-GCM, nonce ngẫu nhiên, AAD = `thread_id`) hoặc wrapper saver dự phòng (mục 8.4).
-6. Keycloak token-exchange v2: scope hẹp, `audience`, claim `act`.
+5. `AsyncPostgresSaver`: tên lớp, pool, `adelete_thread`; `EncryptedSerializer` với `AsyncPostgresSaver` (bản async kiểm lại ở M1; bản đồng bộ đã xác minh M0, ADR-004; mục 8.4).
+6. Keycloak token-exchange v2: **đã xác minh M0** (ADR-005): không có `act`, dùng `azp`; hậu điều kiện `aud`/scope do adapter kiểm.
 7. BFF OIDC + exchange 2 audience (luật Keycloak exchange V2, `07` mục 8); phía agent chỉ cần xác nhận agent nhận token `aud=agent-service` do BFF exchange và exchange tiếp được sang gateway/MCP.
 8. Fake chat model hỗ trợ `bind_tools` cho unit test.
 9. Header chi phí khi `stream=true` (thoả thuận với gateway).
@@ -1180,7 +1184,7 @@ Mục đã chốt bởi D13/D14: #1 (D13), #4 (D14: `tool_audit.intent_id` nulla
 | 2 | `ToolProvider` đổi chữ ký: `call_write(...)` → `commit_intent(intent_id, approval_token, *, principal, user_token)` | Chỉ ảnh hưởng port nội bộ của agent; ghi chú để các worker khác không dùng tên cũ |
 | 3 | Event `resume` thêm quyết định `refresh` (re-prepare khi intent hết hạn) và trường `edits` thay cho `args` | Thuộc API nội bộ BFF↔agent (mục 1.3, 9.1), không cần vào contracts |
 | 4 | `tool_audit.intent_id` và `ticket_events.intent_id` (02 mục 12 C3, C4) | Ở contracts §3 |
-| 5 | Serializer mã hoá checkpoint (**[SPIKE]**, mục 8.4) | Nếu API không có, dùng wrapper saver; không đổi contracts |
+| 5 | `EncryptedSerializer` với `AsyncPostgresSaver` (bản sync đã xác minh M0; mục 8.4) | Nếu async không nhận `serde`, dùng wrapper saver; không đổi contracts |
 | 6 | Langfuse `mask`/metadata-only (mục 10.1) | Env `LANGFUSE_CAPTURE_CONTENT=false` mặc định; thêm vào bảng env agent |
 
 ---

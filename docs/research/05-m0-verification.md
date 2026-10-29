@@ -153,7 +153,14 @@ with psycopg.connect(dsn, autocommit=True) as conn:
 
 ## Còn mở (đưa vào spike)
 
-- Tên attribute `standard.token.exchange.enabled` (export realm sau khi bật switch).
-- `azp` sau exchange V2, và hành vi của `downscope-assertion-grant-enforcer` (spike B/C).
-- `get_access_token()` trong tool handler của `mcp` 2.3 ở chế độ stateless (spike A).
-- Giấy phép trọng số NER deep của underthesea; trang Prompt Guard 2 22M.
+**Đã chốt (2026-10-29):**
+- Tên attribute `standard.token.exchange.enabled`: đúng, xác nhận bằng export realm ([ADR-005](../adr/ADR-005-token-flow.md), `spikes/b_bff_token_exchange`).
+- `azp` sau exchange V2 = client gửi request; không có `act`; Keycloak không chặn gộp audience, lọt scope, hay `exp` vượt subject ⇒ adapter tự kiểm hậu điều kiện ([ADR-005](../adr/ADR-005-token-flow.md), `spikes/b_bff_token_exchange`, `spikes/c_agent_downstream_exchange`). `downscope-assertion-grant-enforcer`: chặn agent sang signer bằng thiết kế scope, không dựa vào executor này.
+- Danh tính MCP: xác thực bằng middleware ASGI riêng, SDK chỉ host giao thức, `fastmcp` đã chứng minh stateless; `mcp` 2.3 kiểm lại ở M1 ([ADR-003](../adr/ADR-003-mcp-host-auth.md), `spikes/a_mcp_identity`).
+- Mã hoá checkpoint: `EncryptedSerializer` + quy tắc state ([ADR-004](../adr/ADR-004-checkpoint-encryption.md), `spikes/d_checkpoint_encryption`).
+- Keycloak nâng lên 26.8.1 (compose đã đổi, chạy thật).
+
+**Vẫn mở:**
+- Pilot Prompt Guard 2 tiếng Việt (50 mẫu độc + 50 mẫu lành); trang Prompt Guard 2 22M.
+- Giấy phép trọng số NER deep của underthesea.
+- Redis semantic cache: image có Query Engine hay Vector Sets (TODO M4).

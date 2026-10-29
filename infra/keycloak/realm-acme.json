@@ -309,10 +309,11 @@
       "secret": "${AGENT_KC_CLIENT_SECRET}",
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": true,
+      "serviceAccountsEnabled": false,
       "fullScopeAllowed": false,
       "attributes": {
-        "standard.token.exchange.enabled": "true"
+        "standard.token.exchange.enabled": "true",
+        "access.token.lifespan": "300"
       },
       "defaultClientScopes": [
         "acme-claims"

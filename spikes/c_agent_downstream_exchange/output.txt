@@ -1,0 +1,209 @@
+======== STATUS TRUOC (baseline) ========
+spike-c clients: []
+credentials chi.le=0 tam.vu=0
+
+== client agent-service: sha256(json)=718b27b87f0a3800
+   default : acme-claims 
+   optional: analytics:read docs:read llm:invoke tickets:read tickets:write 
+   mappers : 
+
+== client tickets-mcp: sha256(json)=b95239ec5212e5be
+   default : 
+   optional: 
+   mappers : 
+
+== client llm-gateway: sha256(json)=71677c3b83a0ce18
+   default : 
+   optional: 
+   mappers : 
+
+== scope llm:invoke: sha256(json)=4863719422717418
+
+== scope tickets:read: sha256(json)=c5ef94aae112b399
+
+== scope tickets:write: sha256(json)=f4f3552c56bed4da
+
+== scope agent:invoke: sha256(json)=77e50a4e93afd0fc
+======== SETUP ========
+Created new client with id 'd37a9a61-5a64-4fe0-b481-1cc65b90ba08'
+Created new model with id '7a501a37-143f-4896-a8bd-31e043689df2'
+created spike-c-login id=d37a9a61-5a64-4fe0-b481-1cc65b90ba08
+Created new client with id 'cb96e165-b5a9-4124-b12f-90f299011e5b'
+Created new model with id 'b912fe53-e54f-4fa2-918f-47dfd1b35225'
+created spike-c-short id=cb96e165-b5a9-4124-b12f-90f299011e5b
+setup ok
+
+======== A. POSITIVE - agent-service exchange (RFC 8693, Keycloak std token exchange V2) ========
+[INFO] login token (aud=spike-c-login, vai tro token chat-ui): {'aud': 'spike-c-login', 'azp': 'spike-c-login', 'scope': 'acme-claims', 'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3, 'typ': 'Bearer', 'sid': '597cd1c7-243e-b7ec-8404-9df57e05dab4', 'exp-iat': 300, 'act': '<none>'}
+[INFO] subject token (aud=agent-service, vai tro token BFF gui agent): {'aud': 'agent-service', 'azp': 'spike-c-login', 'scope': 'acme-claims agent:invoke', 'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3, 'typ': 'Bearer', 'sid': '597cd1c7-243e-b7ec-8404-9df57e05dab4', 'exp-iat': 300, 'act': '<none>'}
+[INFO] subject exchange spike-c-login->agent-service: dung scope agent:invoke (lien ket san scope co san, KHONG sua scope)
+[INFO] chi.le tickets-mcp ['tickets:read']: {'aud': 'tickets-mcp', 'azp': 'agent-service', 'scope': 'tickets:read acme-claims', 'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3, 'typ': 'Bearer', 'sid': '597cd1c7-243e-b7ec-8404-9df57e05dab4', 'exp-iat': 300, 'act': '<none>'} exp-vs-subject-exp=0s meta={'issued_token_type': 'urn:ietf:params:oauth:token-type:access_token', 'expires_in': 300, 'refresh_token': False, 'scope': 'tickets:read acme-claims'}
+[PASS] A chi.le tickets-mcp ['tickets:read']: aud chua tickets-mcp
+[PASS] A chi.le tickets-mcp ['tickets:read']: scope == yeu cau (scope='tickets:read acme-claims')
+[PASS] A chi.le tickets-mcp ['tickets:read']: sub giu nguyen (subject & login) (sub='5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9')
+[PASS] A chi.le tickets-mcp ['tickets:read']: dept giu nguyen (subject & login) (dept=['SALES'])
+[PASS] A chi.le tickets-mcp ['tickets:read']: clearance giu nguyen (subject & login) (clearance=3)
+[PASS] A chi.le tickets-mcp ['tickets:read']: azp == agent-service (azp=agent-service)
+[PASS] A chi.le tickets-mcp ['tickets:read']: khong co act
+[INFO] chi.le tickets-mcp ['tickets:write']: {'aud': 'tickets-mcp', 'azp': 'agent-service', 'scope': 'tickets:write acme-claims', 'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3, 'typ': 'Bearer', 'sid': '597cd1c7-243e-b7ec-8404-9df57e05dab4', 'exp-iat': 300, 'act': '<none>'} exp-vs-subject-exp=0s meta={'issued_token_type': 'urn:ietf:params:oauth:token-type:access_token', 'expires_in': 300, 'refresh_token': False, 'scope': 'tickets:write acme-claims'}
+[PASS] A chi.le tickets-mcp ['tickets:write']: aud chua tickets-mcp
+[PASS] A chi.le tickets-mcp ['tickets:write']: scope == yeu cau (scope='tickets:write acme-claims')
+[PASS] A chi.le tickets-mcp ['tickets:write']: sub giu nguyen (subject & login) (sub='5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9')
+[PASS] A chi.le tickets-mcp ['tickets:write']: dept giu nguyen (subject & login) (dept=['SALES'])
+[PASS] A chi.le tickets-mcp ['tickets:write']: clearance giu nguyen (subject & login) (clearance=3)
+[PASS] A chi.le tickets-mcp ['tickets:write']: azp == agent-service (azp=agent-service)
+[PASS] A chi.le tickets-mcp ['tickets:write']: khong co act
+[INFO] chi.le tickets-mcp ['tickets:read', 'tickets:write']: {'aud': 'tickets-mcp', 'azp': 'agent-service', 'scope': 'tickets:write tickets:read acme-claims', 'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3, 'typ': 'Bearer', 'sid': '597cd1c7-243e-b7ec-8404-9df57e05dab4', 'exp-iat': 300, 'act': '<none>'} exp-vs-subject-exp=0s meta={'issued_token_type': 'urn:ietf:params:oauth:token-type:access_token', 'expires_in': 300, 'refresh_token': False, 'scope': 'tickets:write tickets:read acme-claims'}
+[PASS] A chi.le tickets-mcp ['tickets:read', 'tickets:write']: aud chua tickets-mcp
+[PASS] A chi.le tickets-mcp ['tickets:read', 'tickets:write']: scope == yeu cau (scope='tickets:write tickets:read acme-claims')
+[PASS] A chi.le tickets-mcp ['tickets:read', 'tickets:write']: sub giu nguyen (subject & login) (sub='5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9')
+[PASS] A chi.le tickets-mcp ['tickets:read', 'tickets:write']: dept giu nguyen (subject & login) (dept=['SALES'])
+[PASS] A chi.le tickets-mcp ['tickets:read', 'tickets:write']: clearance giu nguyen (subject & login) (clearance=3)
+[PASS] A chi.le tickets-mcp ['tickets:read', 'tickets:write']: azp == agent-service (azp=agent-service)
+[PASS] A chi.le tickets-mcp ['tickets:read', 'tickets:write']: khong co act
+[INFO] chi.le llm-gateway ['llm:invoke']: {'aud': 'llm-gateway', 'azp': 'agent-service', 'scope': 'acme-claims llm:invoke', 'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3, 'typ': 'Bearer', 'sid': '597cd1c7-243e-b7ec-8404-9df57e05dab4', 'exp-iat': 300, 'act': '<none>'} exp-vs-subject-exp=0s meta={'issued_token_type': 'urn:ietf:params:oauth:token-type:access_token', 'expires_in': 300, 'refresh_token': False, 'scope': 'acme-claims llm:invoke'}
+[PASS] A chi.le llm-gateway ['llm:invoke']: aud chua llm-gateway
+[PASS] A chi.le llm-gateway ['llm:invoke']: scope == yeu cau (scope='acme-claims llm:invoke')
+[PASS] A chi.le llm-gateway ['llm:invoke']: sub giu nguyen (subject & login) (sub='5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9')
+[PASS] A chi.le llm-gateway ['llm:invoke']: dept giu nguyen (subject & login) (dept=['SALES'])
+[PASS] A chi.le llm-gateway ['llm:invoke']: clearance giu nguyen (subject & login) (clearance=3)
+[PASS] A chi.le llm-gateway ['llm:invoke']: azp == agent-service (azp=agent-service)
+[PASS] A chi.le llm-gateway ['llm:invoke']: khong co act
+[INFO] tam.vu tickets-mcp ['tickets:read']: {'aud': 'tickets-mcp', 'azp': 'agent-service', 'scope': 'tickets:read acme-claims', 'sub': '9629353d-a7e7-45e1-8e17-484866b58c8a', 'dept': ['SALES'], 'clearance': 0, 'typ': 'Bearer', 'sid': '9bb2caa6-115b-7785-2c18-b3a813c38c28', 'exp-iat': 300, 'act': '<none>'} exp-vs-subject-exp=0s meta={'issued_token_type': 'urn:ietf:params:oauth:token-type:access_token', 'expires_in': 300, 'refresh_token': False, 'scope': 'tickets:read acme-claims'}
+[PASS] A tam.vu tickets-mcp ['tickets:read']: aud chua tickets-mcp
+[PASS] A tam.vu tickets-mcp ['tickets:read']: scope == yeu cau (scope='tickets:read acme-claims')
+[PASS] A tam.vu tickets-mcp ['tickets:read']: sub giu nguyen (subject & login) (sub='9629353d-a7e7-45e1-8e17-484866b58c8a')
+[PASS] A tam.vu tickets-mcp ['tickets:read']: dept giu nguyen (subject & login) (dept=['SALES'])
+[PASS] A tam.vu tickets-mcp ['tickets:read']: clearance giu nguyen (subject & login) (clearance=0)
+[PASS] A tam.vu tickets-mcp ['tickets:read']: azp == agent-service (azp=agent-service)
+[PASS] A tam.vu tickets-mcp ['tickets:read']: khong co act
+[INFO] tam.vu llm-gateway ['llm:invoke']: {'aud': 'llm-gateway', 'azp': 'agent-service', 'scope': 'acme-claims llm:invoke', 'sub': '9629353d-a7e7-45e1-8e17-484866b58c8a', 'dept': ['SALES'], 'clearance': 0, 'typ': 'Bearer', 'sid': '9bb2caa6-115b-7785-2c18-b3a813c38c28', 'exp-iat': 300, 'act': '<none>'} exp-vs-subject-exp=1s meta={'issued_token_type': 'urn:ietf:params:oauth:token-type:access_token', 'expires_in': 300, 'refresh_token': False, 'scope': 'acme-claims llm:invoke'}
+[PASS] A tam.vu llm-gateway ['llm:invoke']: aud chua llm-gateway
+[PASS] A tam.vu llm-gateway ['llm:invoke']: scope == yeu cau (scope='acme-claims llm:invoke')
+[PASS] A tam.vu llm-gateway ['llm:invoke']: sub giu nguyen (subject & login) (sub='9629353d-a7e7-45e1-8e17-484866b58c8a')
+[PASS] A tam.vu llm-gateway ['llm:invoke']: dept giu nguyen (subject & login) (dept=['SALES'])
+[PASS] A tam.vu llm-gateway ['llm:invoke']: clearance giu nguyen (subject & login) (clearance=0)
+[PASS] A tam.vu llm-gateway ['llm:invoke']: azp == agent-service (azp=agent-service)
+[PASS] A tam.vu llm-gateway ['llm:invoke']: khong co act
+
+======== B. THAM DO (ghi nguyen hanh vi) ========
+[INFO] B audience=tickets-mcp, KHONG scope: HTTP 400 error='invalid_request' error_description='Requested audience not available: tickets-mcp'
+[INFO] B scope=tickets:read, KHONG audience: HTTP 200 token=eyJ...(len=925) aud=tickets-mcp azp=agent-service scope='tickets:read acme-claims' expires_in=300 refresh=False
+[INFO] B audience=tickets-mcp + scope=llm:invoke (lech): HTTP 400 error='invalid_request' error_description='Requested audience not available: tickets-mcp'
+[INFO] B hai audience (tickets-mcp, llm-gateway) + scope tickets:read llm:invoke: HTTP 200 token=eyJ...(len=939) aud=tickets-mcp azp=agent-service scope='tickets:read acme-claims llm:invoke' expires_in=300 refresh=False
+[INFO] B audience=llm-gateway, KHONG scope: HTTP 400 error='invalid_request' error_description='Requested audience not available: llm-gateway'
+[INFO] B hai tham so audience lap lai + 2 scope: HTTP 200 token=eyJ...(len=961) aud=['tickets-mcp', 'llm-gateway'] azp=agent-service scope='tickets:read acme-claims llm:invoke' expires_in=300 refresh=False
+
+======== C. CA AM ========
+[PASS] C1 scope 'agent:invoke' khong gan cho agent-service -> HTTP 400 error='invalid_scope' error_description='Invalid scopes: agent:invoke'
+[PASS] C1 scope 'analytics:write' khong gan cho agent-service -> HTTP 400 error='invalid_scope' error_description='Invalid scopes: analytics:write'
+[PASS] C1 scope 'admin' khong gan cho agent-service -> HTTP 400 error='invalid_scope' error_description='Invalid scopes: admin'
+[INFO] C1b scope 'tickets:read agent:invoke': HTTP 400 error='invalid_scope' error_description='Invalid scopes: tickets:read agent:invoke'
+[PASS] C2 subject token aud=spike-c-login (khong chua agent-service) bi tu choi -> HTTP 403 error='access_denied' error_description='Client is not within the token audience'
+[PASS] C4a subject bi sua payload (sub/dept) bi tu choi -> HTTP 400 error='invalid_request' error_description='Invalid token'
+[PASS] C4b subject chu ky rac bi tu choi -> HTTP 400 error='invalid_request' error_description='Invalid token'
+[PASS] C5 client secret agent-service sai bi tu choi -> HTTP 401 error='unauthorized_client' error_description='Invalid client or Invalid client credentials'
+[INFO] short subject: exp-iat=15s (client spike-c-short access.token.lifespan=15); token tickets doi tu no: exp-iat=300s exp-vs-subject-exp=285s
+[INFO] token direct-grant spike-c-short aud=['tickets-mcp', 'spike-c-short'] scope='tickets:read acme-claims' exp-iat=15s (dung cho ca het han o resource server)
+[INFO] cho 15s cho token ngan han het han ...
+[PASS] C3 subject token het han bi tu choi -> HTTP 400 error='invalid_request' error_description='Invalid token'
+
+======== D. RESOURCE SERVERS ========
+[INFO] D tickets-mcp /mcp whoami (chi.le): HTTP 200 {'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3, 'azp': 'agent-service', 'aud': 'tickets-mcp', 'scope': 'tickets:read acme-claims'}
+[PASS] D tickets /mcp chap nhan token exchange, whoami == chi.le
+[INFO] D tickets-mcp /mcp whoami (tam.vu): HTTP 200 {'sub': '9629353d-a7e7-45e1-8e17-484866b58c8a', 'dept': ['SALES'], 'clearance': 0, 'azp': 'agent-service', 'aud': 'tickets-mcp', 'scope': 'tickets:read acme-claims'}
+[PASS] D tickets /mcp chap nhan token exchange, whoami == tam.vu
+[PASS] D tickets /mcp tu choi token aud=agent-service goc -> HTTP 401 reason='audience' detail='can aud=tickets-mcp'
+[PASS] D tickets /mcp tu choi token llm-gateway (nham dich) -> HTTP 401 reason='audience' detail='can aud=tickets-mcp'
+[PASS] D tickets /mcp tu choi token bi sua -> HTTP 401 reason='signature' detail='InvalidSignatureError'
+[PASS] D tickets /mcp tu choi token chu ky rac -> HTTP 401 reason='signature' detail='InvalidSignatureError'
+[PASS] D tickets /mcp tu choi khong token -> HTTP 401 reason='missing_bearer' detail=''
+[PASS] D tickets /mcp tu choi token chi co tickets:write (thieu tickets:read) -> HTTP 401 reason='scope' detail='can scope=tickets:read'
+[PASS] D tickets /mcp tu choi token aud=tickets-mcp scope tickets:read het han (direct grant 15s) -> HTTP 401 reason='expired' detail=''
+[INFO] D gateway /v1/whoami: HTTP 200 {'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3, 'azp': 'agent-service', 'aud': 'llm-gateway', 'scope': 'acme-claims llm:invoke'}
+[PASS] D gateway chap nhan token llm-gateway, danh tinh == chi.le
+[PASS] D gateway tu choi token aud=agent-service goc -> HTTP 401 reason='audience' detail='can aud=llm-gateway'
+[PASS] D gateway tu choi token tickets-mcp -> HTTP 401 reason='audience' detail='can aud=llm-gateway'
+[PASS] D gateway tu choi API key sai -> HTTP 401 reason='api_key' detail=''
+[PASS] D gateway tu choi token llm bi sua -> HTTP 401 reason='signature' detail='InvalidSignatureError'
+
+======== F. PHUONG AN B (client_credentials + X-Acme-User-Token) ========
+[INFO] F cc-token claims: {'aud': tickets-mcp, 'azp': agent-service, 'sub': 218367d9-1b1a-4f3f-8363-fa5d7cf9ab20, 'scope': 'tickets:read acme-claims', 'dept': None, 'clearance': None, 'exp-iat': 300, 'username': None} meta={'expires_in': 300, 'refresh_token': False}
+[PASS] F cc-token sub KHAC sub user (la service account)
+[INFO] F /mcp-b whoami: HTTP 200 {'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3, 'azp': 'spike-c-login', 'aud': 'agent-service', 'scope': 'acme-claims agent:invoke'}
+[PASS] F /mcp-b: cc-token + header user token -> danh tinh chi.le
+[PASS] F /mcp-b thieu header -> HTTP 401 reason='missing_user_token' detail=''
+[PASS] F /mcp-b header la token aud=spike-c-login -> HTTP 401 reason='audience' detail='can aud=agent-service'
+[PASS] F /mcp-b header het han -> HTTP 401 reason='expired' detail=''
+[PASS] F /mcp-b header bi sua -> HTTP 401 reason='signature' detail='InvalidSignatureError'
+[PASS] F /mcp-b Bearer la token user thay vi cc -> HTTP 401 reason='audience' detail='can aud=tickets-mcp'
+
+======== F2. RUI RO PHUONG AN B ========
+[INFO] F2 gateway-B /v1-b/whoami voi cung user token aud=agent-service: HTTP 200 {'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3, 'azp': 'spike-c-login', 'aud': 'agent-service', 'scope': 'acme-claims agent:invoke'}
+[PASS] F2 (rui ro) cung user token aud=agent-service duoc CA /mcp-b VA /v1-b/whoami chap nhan (replay lien dich vu)
+[INFO] F2 cung cc-token, doi header: 5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9 / 9629353d-a7e7-45e1-8e17-484866b58c8a
+[PASS] F2 (rui ro) cung credentials agent-service + bat ky user token aud=agent-service -> danh tinh user bat ky
+[PASS] F2 phuong an chinh: token tickets-mcp khong dung duoc o gateway /v1 -> HTTP 401 reason='audience' detail='can aud=llm-gateway'
+[PASS] F2 phuong an chinh: token tickets-mcp khong dung duoc o gateway-B /v1-b -> HTTP 401 reason='audience' detail='can aud=agent-service'
+[PASS] F2 phuong an chinh: token tickets-mcp khong dung duoc lam header o /mcp-b -> HTTP 401 reason='audience' detail='can aud=agent-service'
+
+======== E. LATENCY (ms) ========
+[LAT] exchange tickets-mcp - httpx client dung lai (keep-alive): n=20 p50=52.2ms p95=61.2ms min=49.7ms max=62.7ms
+[LAT] exchange tickets-mcp - client moi moi lan: n=20 p50=27.7ms p95=36.3ms min=24.6ms max=37.5ms
+[LAT] exchange llm-gateway - httpx client dung lai (keep-alive): n=20 p50=52.4ms p95=57.1ms min=50.1ms max=58.8ms
+[LAT] exchange llm-gateway - client moi moi lan: n=20 p50=25.8ms p95=32.5ms min=24.1ms max=34.2ms
+[LAT] exchange tickets-mcp - keep-alive, URL 127.0.0.1: n=20 p50=12.4ms p95=20.8ms min=9.9ms max=31.7ms
+[LAT] exchange llm-gateway - keep-alive, URL 127.0.0.1: n=20 p50=10.2ms p95=18.2ms min=9.4ms max=20.6ms
+[LAT] client_credentials (B) - keep-alive, URL 127.0.0.1: n=20 p50=11.4ms p95=16.6ms min=9.1ms max=16.7ms
+[LAT] client_credentials (phuong an B) - client dung lai: n=20 p50=54.1ms p95=68.0ms min=49.8ms max=74.8ms
+[LAT] CachingTokenBroker 1 miss + 19 hit: n=20 p50=0.0ms p95=0.0ms min=0.0ms max=55.7ms
+[INFO] cache hits=19 misses=1
+[PASS] E cache: 1 miss + 19 hit
+[PASS] E cache khong cache scope tickets:write (2 token khac nhau)
+[PASS] E cache khoa theo sub: 2 user -> 2 token, sub khac
+[LAT] verify JWT RS256 tai resource server (JWKS da cache): n=200 p50=0.1ms p95=0.2ms min=0.1ms max=1.0ms
+[LAT] tickets /mcp whoami end-to-end (HTTP, verify, tool): n=20 p50=5.2ms p95=5.8ms min=4.8ms max=7.3ms
+
+======== TOM TAT ========
+79/79 PASS
+
+======== CLEANUP ========
+deleted client spike-c-login
+deleted client spike-c-short
+deleted credential of chi.le
+deleted credential of tam.vu
+======== STATUS SAU CLEANUP ========
+spike-c clients: []
+credentials chi.le=0 tam.vu=0
+
+== client agent-service: sha256(json)=718b27b87f0a3800
+   default : acme-claims 
+   optional: analytics:read docs:read llm:invoke tickets:read tickets:write 
+   mappers : 
+
+== client tickets-mcp: sha256(json)=b95239ec5212e5be
+   default : 
+   optional: 
+   mappers : 
+
+== client llm-gateway: sha256(json)=71677c3b83a0ce18
+   default : 
+   optional: 
+   mappers : 
+
+== scope llm:invoke: sha256(json)=4863719422717418
+
+== scope tickets:read: sha256(json)=c5ef94aae112b399
+
+== scope tickets:write: sha256(json)=f4f3552c56bed4da
+
+== scope agent:invoke: sha256(json)=77e50a4e93afd0fc
+
+======== G. BO SUNG (lead, chay rieng): exchange khi serviceAccountsEnabled=false ========
+# extra_no_service_account.sh setup -> extra_no_service_account.py -> cleanup (client tam spike-c-nosa, tu exchange token cua chinh no)
+login 200 {'aud': 'spike-c-nosa', 'azp': 'spike-c-nosa', 'scope': 'acme-claims', 'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3}
+exchange (serviceAccountsEnabled=false) 200 {'aud': 'tickets-mcp', 'azp': 'spike-c-nosa', 'scope': 'tickets:read acme-claims', 'sub': '5262e5ff-1c3c-4eb3-b28e-d98f4c2d77c9', 'dept': ['SALES'], 'clearance': 3}
+client_credentials (serviceAccountsEnabled=false) 401 {'error': 'unauthorized_client', 'error_description': 'Client not enabled to retrieve service account'}
+deleted-client
+clients: 
+chi.le creds: 0
