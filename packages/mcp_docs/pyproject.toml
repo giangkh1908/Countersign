@@ -8,8 +8,15 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic-settings",
     "acme-common",
+    "psycopg[binary]>=3.2",
+    "redis>=8.1.0",
 ]
-# M1: mcp (SDK), sqlalchemy/psycopg, redis, pgvector, pdf/docx loader
+# M2: pdf/docx loader, bge_reranker
+
+[dependency-groups]
+dev = [
+    "fakeredis[lua]>=2.40.0",
+]
 
 [tool.uv.sources]
 acme-common = { workspace = true }

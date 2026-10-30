@@ -163,17 +163,29 @@ source = { editable = "packages/mcp_docs" }
 dependencies = [
     { name = "acme-common" },
     { name = "fastapi" },
+    { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
+    { name = "redis" },
     { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "fakeredis", extra = ["lua"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "acme-common", editable = "packages/common" },
     { name = "fastapi" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pydantic-settings" },
+    { name = "redis", specifier = ">=8.1.0" },
     { name = "uvicorn", extras = ["standard"] },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "fakeredis", extras = ["lua"], specifier = ">=2.40.0" }]
 
 [[package]]
 name = "acme-mcp-tickets"

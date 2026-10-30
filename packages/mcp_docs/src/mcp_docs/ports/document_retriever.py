@@ -1,5 +1,27 @@
-"""Port `DocumentRetriever`: `search(query, principal, k)`.
-Adapter v1: hybrid vector+full-text (xem adapters/); mở rộng: xem contracts §9.2.
-Milestone: M2. Docs: docs/design/02-mcp-servers.md; contracts §9.2.
-Chưa có class/ABC (khung).
-"""
+"""Port `DocumentRetriever`: tìm đoạn tài liệu theo quyền của principal (02 §5.0)."""
+
+from __future__ import annotations
+
+import abc
+
+from acme_common.ports import Principal
+
+from .types import SearchResult
+
+
+class DocumentRetriever(abc.ABC):
+    @abc.abstractmethod
+    async def search(
+        self,
+        query: str,
+        principal: Principal,
+        k: int,
+        department_filter: str | None = None,
+    ) -> SearchResult:
+        """Chỉ trả đoạn principal được phép xem (ACL do adapter thực thi; service kiểm lại).
+
+        Lỗi hạ tầng => `RetrievalUnavailable`.
+        """
+
+    async def aclose(self) -> None:  # noqa: B027 - hook tuỳ chọn
+        """Giải phóng tài nguyên."""
