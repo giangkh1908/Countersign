@@ -1,17 +1,25 @@
+import { request } from "../client";
 import type { RequestCost, ThreadApi, ThreadMessages, ThreadPage } from "../types";
+import { RequestCostSchema, ThreadMessagesSchema, ThreadPageSchema, VoidSchema } from "../zod";
 
-// TODO: implement bằng request() của client.ts.
 export class HttpThreadApi implements ThreadApi {
-  list(): Promise<ThreadPage> {
-    return Promise.reject(new Error("TODO"));
+  list(p: { limit: number; before?: string }): Promise<ThreadPage> {
+    const q = new URLSearchParams({ limit: String(p.limit) });
+    if (p.before) q.set("before", p.before);
+    return request(`/api/threads?${q.toString()}`, { schema: ThreadPageSchema });
   }
-  messages(): Promise<ThreadMessages> {
-    return Promise.reject(new Error("TODO"));
+  messages(threadId: string): Promise<ThreadMessages> {
+    return request(`/api/threads/${encodeURIComponent(threadId)}/messages`, {
+      schema: ThreadMessagesSchema,
+    });
   }
-  remove(): Promise<void> {
-    return Promise.reject(new Error("TODO"));
+  remove(threadId: string): Promise<void> {
+    return request(`/api/threads/${encodeURIComponent(threadId)}`, {
+      method: "DELETE",
+      schema: VoidSchema,
+    });
   }
-  requestCost(): Promise<RequestCost> {
-    return Promise.reject(new Error("TODO"));
+  requestCost(requestId: string): Promise<RequestCost> {
+    return request(`/api/requests/${encodeURIComponent(requestId)}`, { schema: RequestCostSchema });
   }
 }

@@ -3,5 +3,5 @@ import { ChatPage } from "./features/chat/ChatPage";
 
 export const routes: RouteObject[] = [
   { path: "/", element: <ChatPage /> },
-  // TODO: /t/:threadId, /approval, /admin
+  { path: "/t/:threadId", element: <ChatPage /> },
 ];
