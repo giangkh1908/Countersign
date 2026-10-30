@@ -399,6 +399,7 @@
   ],
   "users": [
     {
+      "id": "a3bcc435-78cf-578a-aedf-e599663a78ef",
       "username": "an.nguyen",
       "enabled": true,
       "emailVerified": true,
@@ -421,6 +422,7 @@
       ]
     },
     {
+      "id": "992b3d78-764d-5e6e-9c01-40386156847d",
       "username": "binh.tran",
       "enabled": true,
       "emailVerified": true,
@@ -444,6 +446,7 @@
       ]
     },
     {
+      "id": "9fdaba8e-9ad1-58ab-a666-b42be8b6a0ec",
       "username": "chi.le",
       "enabled": true,
       "emailVerified": true,
@@ -467,6 +470,7 @@
       ]
     },
     {
+      "id": "3aa3dba5-9ece-5e2d-8668-8952bb3de00b",
       "username": "tam.vu",
       "enabled": true,
       "emailVerified": true,
@@ -489,6 +493,7 @@
       ]
     },
     {
+      "id": "4c23be31-0582-54dd-8295-a7a4be6fb2b8",
       "username": "dung.pham",
       "enabled": true,
       "emailVerified": true,
@@ -511,6 +516,7 @@
       ]
     },
     {
+      "id": "3321b7e0-8d6e-5afa-8e6e-f7eaecfba3f4",
       "username": "hieu.vo",
       "enabled": true,
       "emailVerified": true,
@@ -534,6 +540,7 @@
       ]
     },
     {
+      "id": "a9a9bd11-a3cb-5b15-960f-6a5e21226f13",
       "username": "giang.do",
       "enabled": true,
       "emailVerified": true,
@@ -557,6 +564,7 @@
       ]
     },
     {
+      "id": "7f6d2572-e61c-58a0-84b3-5fb55495624e",
       "username": "hoa.ngo",
       "enabled": true,
       "emailVerified": true,
@@ -579,6 +587,7 @@
       ]
     },
     {
+      "id": "9bff6795-ad17-535e-87b4-bc9d574b983d",
       "username": "khanh.bui",
       "enabled": true,
       "emailVerified": true,
@@ -602,6 +611,7 @@
       ]
     },
     {
+      "id": "dfa8a782-400a-5273-b399-93ded1e67ec0",
       "username": "lan.dang",
       "enabled": true,
       "emailVerified": true,
@@ -624,6 +634,7 @@
       ]
     },
     {
+      "id": "3d326823-28fe-5c7e-9735-c85dacf295d3",
       "username": "minh.huynh",
       "enabled": true,
       "emailVerified": true,
@@ -647,6 +658,7 @@
       ]
     },
     {
+      "id": "83267982-0915-59dc-b86c-e5ae551104a4",
       "username": "nam.truong",
       "enabled": true,
       "emailVerified": true,
@@ -669,6 +681,7 @@
       ]
     },
     {
+      "id": "c4933c96-a278-5db3-80a7-3c16b22c85be",
       "username": "oanh.ly",
       "enabled": true,
       "emailVerified": true,
@@ -692,6 +705,7 @@
       ]
     },
     {
+      "id": "2901ed43-6cb8-5549-9c0f-3ab0a23a4c1e",
       "username": "phuc.cao",
       "enabled": true,
       "emailVerified": true,
@@ -718,6 +732,7 @@
       ]
     },
     {
+      "id": "db9190fd-9874-552b-a6cb-a12b13b510e1",
       "username": "quynh.dinh",
       "enabled": true,
       "emailVerified": true,
@@ -740,6 +755,7 @@
       ]
     },
     {
+      "id": "a6c2b446-b68b-5a2d-85db-490a9f01cb9c",
       "username": "son.mai",
       "enabled": true,
       "emailVerified": true,

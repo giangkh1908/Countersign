@@ -37,7 +37,6 @@ Nạp lại nhiều lần là an toàn (`INSERT ... ON CONFLICT (id) DO UPDATE`)
 - **Analytics:** 40 khách hàng (10% thuộc CS), 12 sản phẩm, 300 đơn, ~735 dòng đơn, 3 đơn bất thường (x20).
 - **Gateway:** bảng `departments` (SALES, ENG, HR, CS, IT, EVAL). Không seed `api_keys` (cần `GW_KEY_PEPPER`;
   tạo bằng lệnh admin của gateway).
-- **User:** đọc `infra/keycloak/realm-acme.json` (16 user). Realm không cố định `id` nên `sub` mặc định =
-  `username`. Sau khi import realm, lấy `sub` thật của Keycloak và chạy lại với
-  `--sub-map map.json` (`{"an.nguyen": "<uuid>", ...}`) rồi nạp lại seed; nếu không, `requester_sub` sẽ không
-  khớp JWT thật.
+- **User:** đọc `infra/keycloak/realm-acme.json` (16 user). Realm cố định `id` mỗi user (uuid5 theo
+  username) nên `requester_sub` khớp `sub` của JWT thật. Keycloak đã import realm từ trước bản có `id`
+  thì xoá volume Keycloak để import lại, hoặc dùng `--sub-map map.json` (`{"an.nguyen": "<uuid>", ...}`).

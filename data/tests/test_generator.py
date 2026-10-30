@@ -57,9 +57,9 @@ def test_documents_acl_mix(out):
 
 def test_users_exist_in_realm(out):
     realm = json.loads(DEFAULT_REALM.read_text(encoding="utf-8"))
-    names = {u["username"] for u in realm["users"]}
+    ids = {u["id"] for u in realm["users"]}
     subs = {u.sub for u in load_users()}
-    assert subs == names  # sub mặc định = username
+    assert subs == ids  # sub = `id` cố định trong realm
     for d in _docs(out):
         assert d["owner_sub"] in subs
     sql = (out / "sql" / "tickets.sql").read_text(encoding="utf-8")

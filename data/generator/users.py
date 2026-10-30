@@ -1,8 +1,7 @@
 """Người dùng ACME: đọc từ realm Keycloak (không tự bịa user).
 
-Realm không cố định `id` (sub) của user -> Keycloak cấp UUID khi import. Vì vậy `sub` mặc định
-là `username`; truyền `sub_map` (username -> sub thật, lấy từ Keycloak sau khi import) để seed
-khớp JWT thật.
+Realm cố định `id` của từng user (uuid5 theo username) nên `sub` trong JWT tất định và khớp seed.
+`sub_map` (username -> sub) chỉ còn để ghi đè khi realm đã import từ trước bản có `id`.
 """
 
 from __future__ import annotations
@@ -40,7 +39,7 @@ def load_users(
         name = u["username"]
         users.append(
             User(
-                sub=sub_map.get(name, name),
+                sub=sub_map.get(name) or u["id"],
                 username=name,
                 employee_id=attrs["employee_id"][0],
                 departments=tuple(attrs["department"]),

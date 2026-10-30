@@ -19,7 +19,7 @@ def main() -> None:
         "--sub-map",
         type=Path,
         default=None,
-        help="JSON {username: keycloak_sub}; mặc định sub = username",
+        help="JSON {username: keycloak_sub}; ghi đè sub (mặc định lấy `id` trong realm)",
     )
     args = ap.parse_args()
     sub_map = json.loads(args.sub_map.read_text(encoding="utf-8")) if args.sub_map else None
