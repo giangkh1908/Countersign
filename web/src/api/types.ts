@@ -1,17 +1,35 @@
+// Kiểu dùng chung + interface (port) của tầng API. Component chỉ phụ thuộc file này (07 §3.4).
+import type { z } from "zod";
 import type { ApiError } from "./errors";
+import type {
+  AgentEventSchema,
+  CardSchema,
+  CitationSchema,
+  InterruptRefSchema,
+  MeSchema,
+  MessageSchema,
+  RequestCostSchema,
+  ThreadMessagesSchema,
+  ThreadPageSchema,
+  ThreadSummarySchema,
+} from "./zod";
 
-// TODO: AgentEvent đầy đủ theo 07 §3.4.
-export type AgentEvent = { event: string; data: unknown };
+export type AgentEvent = z.infer<typeof AgentEventSchema>;
+export type InterruptRef = z.infer<typeof InterruptRefSchema>;
+export type Citation = z.infer<typeof CitationSchema>;
+export type Me = z.infer<typeof MeSchema>;
+/** Phản hồi thô của POST /api/intents/verify; display_fields phân loại ở features/approval/cardModel. */
+export type CardModel = z.infer<typeof CardSchema>;
+export type ThreadSummary = z.infer<typeof ThreadSummarySchema>;
+export type ThreadPage = z.infer<typeof ThreadPageSchema>;
+export type ChatMessage = z.infer<typeof MessageSchema>;
+export type ThreadMessages = z.infer<typeof ThreadMessagesSchema>;
+export type RequestCost = z.infer<typeof RequestCostSchema>;
+
 export type Decision =
   | { type: "edit"; edits: Record<string, string> }
   | { type: "reject"; reason?: string }
   | { type: "refresh" };
-
-// TODO: định nghĩa chi tiết các kiểu dưới đây.
-export type CardModel = Record<string, unknown>;
-export type ThreadPage = { items: unknown[] };
-export type ThreadMessages = { items: unknown[] };
-export type RequestCost = Record<string, unknown>;
 
 export interface StreamSink {
   onEvent(e: AgentEvent): void;
@@ -33,6 +51,7 @@ export interface AgentStream {
 }
 
 export interface ApprovalApi {
+  /** 410 intent_expired / 422 intent_unrenderable|intent_mismatch -> ném ApiError. */
   verify(threadId: string, interruptId: string): Promise<CardModel>;
   approve(
     req: { threadId: string; interruptId: string; intentSha256: string },
@@ -46,4 +65,17 @@ export interface ThreadApi {
   messages(threadId: string): Promise<ThreadMessages>;
   remove(threadId: string): Promise<void>;
   requestCost(requestId: string): Promise<RequestCost>;
+}
+
+export interface AuthApi {
+  me(): Promise<Me>;
+  /** POST /auth/logout -> URL cần chuyển tới (đăng xuất phía IdP). */
+  logout(): Promise<{ redirectUrl: string }>;
+}
+
+export interface Api {
+  agent: AgentStream;
+  approvals: ApprovalApi;
+  threads: ThreadApi;
+  auth: AuthApi;
 }

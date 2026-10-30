@@ -1,3 +1,5 @@
+import { ErrorBodySchema } from "./zod";
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -11,7 +13,16 @@ export class ApiError extends Error {
   }
 }
 
-// TODO: đọc {code, message, retryable, request_id} từ body lỗi; ánh xạ mã -> thông điệp i18n.
-export async function parseErrorBody(res: { status: number }): Promise<ApiError> {
-  return new ApiError(res.status, "unknown", "", false);
+/** Đọc `{"error":{code,message,retryable,request_id}}` (contracts §6.4); body lạ -> mã `unknown`. */
+export async function parseErrorBody(res: Response): Promise<ApiError> {
+  try {
+    const parsed = ErrorBodySchema.safeParse(await res.json());
+    if (parsed.success) {
+      const e = parsed.data.error;
+      return new ApiError(res.status, e.code, e.message, e.retryable, e.request_id);
+    }
+  } catch {
+    /* body không phải JSON */
+  }
+  return new ApiError(res.status, "unknown", "", res.status >= 500);
 }

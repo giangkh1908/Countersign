@@ -1,9 +1,29 @@
-import type { ApprovalApi, CardModel } from "../types";
+import type { ApiError } from "../errors";
+import type { AgentEvent, ApprovalApi, CardModel, StreamSink } from "../types";
 
-// TODO: trả CardModel dựng sẵn hoặc ném ApiError (410, 422).
+/** Trả CardModel dựng sẵn hoặc ném ApiError (410, 422). */
 export class FakeApprovalApi implements ApprovalApi {
+  readonly approvals: { threadId: string; interruptId: string; intentSha256: string }[] = [];
+
+  constructor(
+    private readonly card: CardModel | ApiError,
+    private readonly approveScript: AgentEvent[] = [],
+  ) {}
+
   async verify(): Promise<CardModel> {
-    return {};
+    if (this.card instanceof Error) throw this.card;
+    return this.card;
   }
-  async approve(): Promise<void> {}
+  async approve(
+    req: { threadId: string; interruptId: string; intentSha256: string },
+    sink: StreamSink,
+    signal: AbortSignal,
+  ): Promise<void> {
+    this.approvals.push(req);
+    for (const e of this.approveScript) {
+      if (signal.aborted) return;
+      sink.onEvent(e);
+    }
+    sink.onClose();
+  }
 }
