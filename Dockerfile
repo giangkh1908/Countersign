@@ -104,11 +104,14 @@ ENV PATH="/app/.venv/bin:$PATH" BFF_STATIC_DIR=/app/static
 CMD ["uvicorn", "bff.main:app", "--host", "0.0.0.0", "--port", "8300", "--no-server-header"]
 
 # ───────────── job một lần: migrate / seed ─────────────
-# TODO(M1): migrate = Alembic bằng các role *_owner (entrypoint dựng URL từ secret *_owner_password).
+# migrate: hiện chỉ tạo schema checkpointer LangGraph của agent (`python -m agent.migrate`, role ag_owner).
+# TODO(M1): Alembic cho các DB khác (hiện bảng nghiệp vụ do infra/postgres/init/sql tạo).
 FROM base AS migrate
+RUN uv sync --frozen --no-dev --no-editable --package acme-agent
+RUN bash eval/security/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
-CMD ["sh", "-c", "echo 'TODO: migrate placeholder (Alembic chưa có)'"]
+CMD ["python", "-m", "agent.migrate"]
 
 # TODO(M1): seed = generator dữ liệu mẫu (docs/design/04 §7).
 FROM base AS seed

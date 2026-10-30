@@ -133,8 +133,9 @@ def router(ctx: bh.Context) -> APIRouter:
             return err
         tools = [t["function"]["name"] for t in body.get("tools") or [] if "function" in t]
         max_tokens = body.get("max_completion_tokens") or body.get("max_tokens")
-        reply = bh.make_reply(
-            plan, prompt, "\n".join(texts), tools, ctx.settings.mock_tool_prefix, max_tokens
+        joined = "\n".join(texts)
+        reply = ctx.scripted_reply(joined, tools) or bh.make_reply(
+            plan, prompt, joined, tools, ctx.settings.mock_tool_prefix, max_tokens
         )
         model = body.get("model", "mock")
         cid = "chatcmpl-mock" + bh.digest(plan.seed, prompt)[:16]

@@ -55,7 +55,12 @@ class Settings(CommonSettings):
 
     # --- Lưu trữ ---
     agent_database_url: str | None = None
-    agent_database_owner_url: str | None = None
+    agent_database_owner_url: str | None = None  # DSN role ag_owner (chỉ job migrate)
+    agent_owner_password: str | None = (
+        None  # thay cho DSN: dựng từ pg_host/pg_port + mật khẩu ag_owner
+    )
+    pg_host: str = "postgres"
+    pg_port: int = 5432
     agent_checkpoint_encryption_key: str | None = None  # base64 của 32 byte
     agent_thread_retention_days: int = 30
 
