@@ -35,9 +35,9 @@ created=0
 
 # provision FILE_NAME NAME OWNER_REF ALLOWED_MODELS [extra create-key args...]
 provision() {
-  local file="$SEC/$1" name="$2" owner="$3" models="$4"; shift 4
+  local fname="$1" file="$SEC/$1" name="$2" owner="$3" models="$4"; shift 4
   if [ -s "$file" ] && [ "$ROTATE" -eq 0 ]; then
-    echo "skip   $name: $1 đã có key (dùng --rotate để tạo lại)"
+    echo "skip   $name: $fname đã có key (dùng --rotate để tạo lại)"
     return 0
   fi
   local key
@@ -52,7 +52,7 @@ provision() {
   printf '%s' "$key" > "$file"
   chmod "$MODE" "$file"
   key=""
-  echo "create $name -> secrets/$1 (dept=$DEPT, models=$models)"
+  echo "create $name -> secrets/$fname (dept=$DEPT, models=$models)"
   created=1
 }
 

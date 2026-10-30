@@ -44,3 +44,4 @@ Thumbs.db
 
 # Audit anchor (dev, bind mount)
 audit-anchors/
+backups/
