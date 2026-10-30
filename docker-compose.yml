@@ -210,7 +210,8 @@ services:
     environment:
       <<: *pyapp-env
       PG_HOST: postgres                      # URL dựng trong entrypoint từ các secret *_owner_password
-    secrets: [gw_owner_password, kn_owner_password, tk_owner_password, an_owner_password, ag_owner_password]
+      AGENT_OWNER_PASSWORD_FILE: /run/secrets/ag_owner_password   # agent.migrate: setup() checkpointer bằng ag_owner
+    secrets: [gw_owner_password, kn_owner_password, tk_owner_password, an_owner_password, ag_owner_password, metrics_token]
     networks: [core]
     depends_on:
       postgres: { condition: service_healthy }
