@@ -80,6 +80,14 @@ secrets:                                   # sinh bởi infra/scripts/gen-secret
   grafana_admin_password:  { file: ./secrets/grafana_admin_password }
   lf_nextauth_secret:      { file: ./secrets/lf_nextauth_secret }
   lf_salt:                 { file: ./secrets/lf_salt }
+  # URL đầy đủ (DSN/redis) dựng bởi gen-secrets.sh từ các mật khẩu ở trên; app đọc qua <BIẾN>_FILE
+  docs_database_url:          { file: ./secrets/docs_database_url }          # role kn_app
+  docs_audit_database_url:    { file: ./secrets/docs_audit_database_url }    # role mcp_audit_w @ knowledge
+  docs_redis_url:             { file: ./secrets/docs_redis_url }
+  tickets_database_url:       { file: ./secrets/tickets_database_url }       # role tk_app
+  tickets_audit_database_url: { file: ./secrets/tickets_audit_database_url } # role mcp_audit_w @ tickets
+  tickets_redis_url:          { file: ./secrets/tickets_redis_url }
+  agent_database_url:         { file: ./secrets/agent_database_url }         # role ag_app
 
 services:
   # ───────────── dữ liệu ─────────────
@@ -223,7 +231,7 @@ services:
       GW_ADMIN_TOKEN_FILE: /run/secrets/gw_admin_token
       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
       GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
-      GW_PROVIDER_OVERRIDE: ${GW_PROVIDER_OVERRIDE:-}          # "mock" → factory chọn adapter `mock` (contracts §9.1 mục 5)
+      GW_PROVIDER_OVERRIDE: ${GW_PROVIDER_OVERRIDE:-mock}      # M1: mặc định mock (chưa có khoá provider thật); factory chọn adapter `mock` (§9.1 mục 5)
       GW_FEATURES: ${GW_FEATURES:-auth,ratelimit,budget,pii,guard,cache,router}
       GW_SIDECAR_URL: http://policy-sidecar:8010                # gateway KHÔNG nạp model; gọi sidecar qua HTTP nội bộ (D2)
       SIDECAR_TOKEN_FILE: /run/secrets/sidecar_token
@@ -250,7 +258,7 @@ services:
       redis-cache: { condition: service_healthy }
       migrate:     { condition: service_completed_successfully }
       keycloak:    { condition: service_healthy }
-      policy-sidecar: { condition: service_healthy }
+      mock-provider: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
       interval: 5s
@@ -261,6 +269,7 @@ services:
 
   # ───────────── policy sidecar (D2, D3) ─────────────
   policy-sidecar:
+    profiles: ["sidecar"]                       # M4, không thuộc M1 core
     build: { context: ., dockerfile: Dockerfile, target: policy_sidecar }
     image: acme/policy-sidecar:dev
     <<: *hardened
@@ -322,7 +331,6 @@ services:
     deploy: { resources: { limits: { cpus: "0.25", memory: 128m } } }
 
   mock-provider:
-    profiles: ["bench"]
     build: { context: ., dockerfile: Dockerfile, target: mock_provider }
     image: acme/mock-provider:dev
     <<: *hardened
@@ -332,7 +340,7 @@ services:
       MOCK_TOKENS_PER_SEC: ${MOCK_TOKENS_PER_SEC:-50}
       MOCK_OUTPUT_TOKENS: ${MOCK_OUTPUT_TOKENS:-50}
       MOCK_CONTROL_TOKEN_FILE: /run/secrets/gw_admin_token     # API chaos /__control
-    secrets: [gw_admin_token]
+    secrets: [gw_admin_token, metrics_token]
     networks: [core]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8900/healthz', timeout=2)"]
@@ -349,9 +357,9 @@ services:
     environment:
       <<: *pyapp-env
       MCP_AUDIENCE: docs-mcp
-      MCP_DATABASE_URL_FILE: /run/secrets/kn_app_password      # URL dựng ở entrypoint; role kn_app (SELECT)
-      MCP_REDIS_URL: redis://docs@redis-state:6379/0
-      MCP_REDIS_PASSWORD_FILE: /run/secrets/redis_docs_password
+      MCP_DATABASE_URL_FILE: /run/secrets/docs_database_url   # role kn_app (SELECT)
+      MCP_AUDIT_DATABASE_URL_FILE: /run/secrets/docs_audit_database_url
+      MCP_REDIS_URL_FILE: /run/secrets/docs_redis_url
       DOCS_GATEWAY_URL: http://gateway:8000/v1                 # embedding qua alias acme-embed
       DOCS_GATEWAY_KEY_FILE: /run/secrets/docs_gateway_key     # key owner_type=service, allowed_models={acme-embed}
       MCP_HOST: ${MCP_HOST:-mcp_sdk}
@@ -359,7 +367,7 @@ services:
       MCP_TAINT_RETENTION_DAYS: "30"                           # D17
       MCP_TAINT_RECENT_TTL_S: "86400"                          # D17
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key
-    secrets: [kn_app_password, redis_docs_password, docs_gateway_key, audit_hmac_key, metrics_token]
+    secrets: [docs_database_url, docs_audit_database_url, docs_redis_url, docs_gateway_key, audit_hmac_key, metrics_token]
     networks: [core]
     depends_on:
       postgres:    { condition: service_healthy }
@@ -380,19 +388,19 @@ services:
     environment:
       <<: *pyapp-env
       MCP_AUDIENCE: tickets-mcp
-      MCP_DATABASE_URL_FILE: /run/secrets/tk_app_password
-      MCP_REDIS_URL: redis://tickets@redis-state:6379/0
-      MCP_REDIS_PASSWORD_FILE: /run/secrets/redis_tickets_password
+      MCP_DATABASE_URL_FILE: /run/secrets/tickets_database_url
+      MCP_AUDIT_DATABASE_URL_FILE: /run/secrets/tickets_audit_database_url
+      MCP_REDIS_URL_FILE: /run/secrets/tickets_redis_url
       APPROVAL_PUBLIC_KEY_PATH: /run/secrets/approval_public_key     # verify approval token do approval-signer ký
       INTENT_PRIVATE_KEY_PATH: /run/secrets/intent_private_key       # ký intent JWS (D1)
-      INTENT_KEY_ID: ${INTENT_KEY_ID:-in-1}
+      INTENT_KEY_ID: tickets-mcp-1                                    # = secrets/intent-keys/<kid>.pem do gen-secrets.sh tạo (cố định, không đọc .env)
       INTENT_TTL_S: "300"
       TAINT_POLICY: ${TAINT_POLICY:-warn}                            # warn|block (D8)
       MCP_TAINT_RETENTION_DAYS: "30"
       MCP_TAINT_RECENT_TTL_S: "86400"
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key
       AUDIT_ANCHOR_DIR: /anchors
-    secrets: [tk_app_password, redis_tickets_password, approval_public_key, intent_private_key, audit_hmac_key, metrics_token]
+    secrets: [tickets_database_url, tickets_audit_database_url, tickets_redis_url, approval_public_key, intent_private_key, audit_hmac_key, metrics_token]
     volumes:
       - ./audit-anchors:/anchors
     networks: [core]
@@ -408,6 +416,7 @@ services:
     deploy: { resources: { limits: { cpus: "0.5", memory: 512m } } }
 
   analytics-mcp:
+    profiles: ["analytics"]                     # M3, không thuộc M1 core
     build: { context: ., dockerfile: Dockerfile, target: mcp_analytics }
     image: acme/mcp-analytics:dev
     <<: *hardened
@@ -442,13 +451,13 @@ services:
       AGENT_GATEWAY_URL: http://gateway:8000/v1
       AGENT_GATEWAY_KEY_FILE: /run/secrets/agent_gateway_key
       AGENT_KC_CLIENT_SECRET_FILE: /run/secrets/kc_agent_client_secret
-      AGENT_DATABASE_URL_FILE: /run/secrets/ag_app_password
+      AGENT_DATABASE_URL_FILE: /run/secrets/agent_database_url
       MCP_DOCS_URL: http://docs-mcp:8101/mcp
       MCP_TICKETS_URL: http://tickets-mcp:8102/mcp
       MCP_ANALYTICS_URL: http://analytics-mcp:8103/mcp
       AGENT_CHECKPOINT_ENCRYPTION_KEY_FILE: /run/secrets/agent_checkpoint_key   # checkpoint mã hoá mặc định (D7)
       AGENT_THREAD_RETENTION_DAYS: "30"
-    secrets: [agent_gateway_key, kc_agent_client_secret, ag_app_password, agent_checkpoint_key, metrics_token]
+    secrets: [agent_gateway_key, kc_agent_client_secret, agent_database_url, agent_checkpoint_key, metrics_token]
     networks: [core]                           # KHÔNG có egress
     depends_on:
       postgres:      { condition: service_healthy }
@@ -456,7 +465,6 @@ services:
       keycloak:      { condition: service_healthy }
       docs-mcp:      { condition: service_healthy }
       tickets-mcp:   { condition: service_healthy }
-      analytics-mcp: { condition: service_healthy }
       migrate:       { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8200/healthz', timeout=2)"]
@@ -500,6 +508,7 @@ services:
 
   # ───────────── quan sát ─────────────
   prometheus:
+    profiles: ["obs"]
     image: prom/prometheus:v3.5.0           # TODO(M7): pin digest
     <<: *hardened
     command:
@@ -520,6 +529,7 @@ services:
     deploy: { resources: { limits: { cpus: "0.5", memory: 512m } } }
 
   grafana:
+    profiles: ["obs"]
     image: grafana/grafana:12.2.0           # TODO(M7): pin digest
     <<: *hardened
     environment:

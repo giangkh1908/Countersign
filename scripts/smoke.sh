@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# scripts/smoke.sh — kiểm các service M1 core đã lên và khoẻ sau `docker compose up -d --build`.
+# Thoát khác 0 nếu có service nào hỏng. Dùng: bash scripts/smoke.sh
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+SERVICES=(postgres redis-state redis-cache keycloak mock-provider gateway approval-signer docs-mcp tickets-mcp agent bff)
+fail=0
+ok()  { printf '  OK    %s\n' "$*"; }
+bad() { printf '  FAIL  %s\n' "$*" >&2; fail=1; }
+
+echo "== Docker health (healthcheck trong compose) =="
+for svc in "${SERVICES[@]}"; do
+  cid="$(docker compose ps -a -q "$svc" 2>/dev/null | head -n1 || true)"
+  if [ -z "$cid" ]; then bad "$svc: không có container"; continue; fi
+  status="$(docker inspect -f '{{.State.Status}}/{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")"
+  if [ "$status" = "running/healthy" ]; then ok "$svc ($status)"; else bad "$svc ($status)"; fi
+done
+
+echo "== Job migrate =="
+cid="$(docker compose ps -a -q migrate | head -n1 || true)"
+if [ -n "$cid" ] && [ "$(docker inspect -f '{{.State.Status}}/{{.State.ExitCode}}' "$cid")" = "exited/0" ]; then
+  ok "migrate (exited/0)"; else bad "migrate chưa hoàn tất thành công"; fi
+
+echo "== HTTP từ host (cổng đã publish) =="
+http_ok() { # name url
+  local code
+  code="$(curl -s -o /dev/null -m 5 -w '%{http_code}' "$2" || true)"
+  if [ "$code" = "200" ]; then ok "$1 $2 -> 200"; else bad "$1 $2 -> ${code:-000}"; fi
+}
+http_ok gateway  http://localhost:8000/healthz
+http_ok bff      http://localhost:8300/healthz
+http_ok keycloak http://localhost:8080/realms/acme/.well-known/openid-configuration
+
+echo "== HTTP nội bộ (từ container bff, mạng core) =="
+for t in agent:8200 approval-signer:8310 docs-mcp:8101 tickets-mcp:8102 mock-provider:8900; do
+  if docker compose exec -T bff python -c "import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://$t/healthz',timeout=3).status==200 else 1)" >/dev/null 2>&1; then
+    ok "$t/healthz -> 200"; else bad "$t/healthz không phản hồi 200"; fi
+done
+
+if [ "$fail" -ne 0 ]; then echo "SMOKE: THẤT BẠI" >&2; exit 1; fi
+echo "SMOKE: OK"
