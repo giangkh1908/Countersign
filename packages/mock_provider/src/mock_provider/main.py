@@ -73,7 +73,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/__control")
     def control_get(request: Request) -> dict[str, Any]:
         control_guard(request)
-        return {"overrides": ctx.overrides, "requests_planned": ctx.counter}
+        return {"overrides": ctx.overrides, "script": ctx.script, "requests_planned": ctx.counter}
+
+    @app.put("/__control/script")
+    def control_script(request: Request, body: Annotated[dict[str, Any], Body()]) -> dict[str, Any]:
+        """Đặt kịch bản nội dung (xem `behavior.py`): `{"rules": [{"match", "needs_tool", "text"|"tool"+"args", "times"}]}`."""
+        control_guard(request)
+        try:
+            ctx.set_script(body.get("rules") or [])
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        return {"script": ctx.script}
 
     @app.put("/__control/{scope}")
     def control_put(

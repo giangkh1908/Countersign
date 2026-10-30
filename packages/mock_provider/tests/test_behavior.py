@@ -1,5 +1,7 @@
 """Lỗi chaos, seed tái lập, auth, /__control, /metrics."""
 
+import json
+
 import httpx
 import pytest
 from mock_provider.main import create_app
@@ -123,3 +125,58 @@ async def test_health_and_metrics(http) -> None:
     text = (await http.get("/metrics", headers={"authorization": f"Bearer {METRICS_TOKEN}"})).text
     assert 'mock_requests_total{route="/v1/chat/completions",status="200"} 1' in text
     assert 'mock_requests_total{route="/v1/chat/completions",status="500"} 1' in text
+
+
+# --- kịch bản nội dung (/__control/script) ---
+_CTL = {"authorization": "Bearer control-secret"}
+_TOOLS = [{"type": "function", "function": {"name": "prepare_close_ticket", "parameters": {}}}]
+
+
+async def _chat(http: httpx.AsyncClient, text: str, tools: list | None = None) -> dict:
+    body: dict = {"model": "m", "messages": [{"role": "user", "content": text}]}
+    if tools:
+        body["tools"] = tools
+    r = await http.post("/v1/chat/completions", json=body)
+    assert r.status_code == 200
+    return r.json()["choices"][0]
+
+
+async def test_script_text_and_tool_rules_consumed_in_order(http: httpx.AsyncClient) -> None:
+    rules = [
+        {"match": "router", "text": '{"route":"ticket","confidence":0.9}'},
+        {
+            "needs_tool": "prepare_close_ticket",
+            "tool": "prepare_close_ticket",
+            "args": {"code": "TCK-1"},
+        },
+    ]
+    r = await http.put("/__control/script", json={"rules": rules}, headers=_CTL)
+    assert r.status_code == 200
+    c1 = await _chat(http, "you are a router")
+    assert c1["message"]["content"] == '{"route":"ticket","confidence":0.9}'
+    c2 = await _chat(http, "đóng ticket", _TOOLS)
+    call = c2["message"]["tool_calls"][0]["function"]
+    assert call["name"] == "prepare_close_ticket" and json.loads(call["arguments"]) == {
+        "code": "TCK-1"
+    }
+    # hết lượt -> quay về câu trả lời tất định
+    c3 = await _chat(http, "you are a router")
+    assert c3["message"]["content"].startswith("mock")
+
+
+async def test_script_tool_rule_not_forged_without_tool(http: httpx.AsyncClient) -> None:
+    rules = [{"tool": "prepare_close_ticket", "args": {}}]
+    await http.put("/__control/script", json={"rules": rules}, headers=_CTL)
+    c = await _chat(http, "hi")  # request không có tools
+    assert "tool_calls" not in c["message"]
+
+
+async def test_script_rejects_bad_rule_and_reset_clears(http: httpx.AsyncClient) -> None:
+    bad = await http.put(
+        "/__control/script", json={"rules": [{"text": "a", "tool": "b"}]}, headers=_CTL
+    )
+    assert bad.status_code == 422
+    await http.put("/__control/script", json={"rules": [{"text": "hello"}]}, headers=_CTL)
+    assert (await http.delete("/__control", headers=_CTL)).status_code == 200
+    assert (await http.get("/__control", headers=_CTL)).json()["script"] == []
+    assert (await http.put("/__control/script", json={"rules": []})).status_code == 401

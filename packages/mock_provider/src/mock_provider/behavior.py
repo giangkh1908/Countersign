@@ -5,6 +5,11 @@ scope (tên wire format, xem `factory.wire_names()`) > `/__control` scope `*` > 
 Tên (`_` thành `-` trong header): ttft_ms, token_delay_ms, output_tokens, error_rate, error,
 error_kinds, retry_after_s, hang_s, seed.
 `error` = `429|500|503|timeout|stream_cut|none` (ép lỗi; `none` tắt cả lỗi ngẫu nhiên).
+
+Kịch bản nội dung (dùng cho E2E, wire OpenAI): `PUT /__control/script` với `{"rules": [...]}`. Mỗi rule:
+`match` (chuỗi con của toàn bộ text request, bỏ trống = khớp mọi request), `needs_tool` (tên tool phải có
+trong `tools` của request), và một trong `text` | `tool` + `args`; `times` (mặc định 1) là số lần dùng.
+Rule đầu tiên còn lượt và khớp thì thắng; không rule nào khớp thì sinh câu trả lời tất định như cũ.
 """
 
 import asyncio
@@ -121,6 +126,7 @@ class Reply:
 class Context:
     settings: Settings
     overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    script: list[dict[str, Any]] = field(default_factory=list)
     counter: int = 0
     stats: dict[tuple[str, int], int] = field(default_factory=dict)
 
@@ -173,8 +179,47 @@ class Context:
         key = (route, status)
         self.stats[key] = self.stats.get(key, 0) + 1
 
+    def set_script(self, rules: list[dict[str, Any]]) -> None:
+        """Thay toàn bộ kịch bản; raise `ValueError` nếu rule sai dạng."""
+        clean: list[dict[str, Any]] = []
+        for r in rules:
+            if not isinstance(r, dict) or ("text" in r) == ("tool" in r):
+                raise ValueError("rule needs exactly one of text|tool")
+            times = r.get("times", 1)
+            if not isinstance(times, int) or isinstance(times, bool) or times < 1:
+                raise ValueError("times must be a positive int")
+            if "text" in r and not isinstance(r["text"], str):
+                raise ValueError("text must be a string")
+            if "tool" in r and (
+                not isinstance(r["tool"], str) or not isinstance(r.get("args", {}), dict)
+            ):
+                raise ValueError("tool must be a string and args an object")
+            clean.append({**r, "times": times})
+        self.script = clean
+
+    def scripted_reply(self, input_text: str, tool_names: list[str]) -> Reply | None:
+        """Rule đầu tiên còn lượt, khớp `match`/`needs_tool` -> Reply (và trừ một lượt)."""
+        for rule in self.script:
+            if rule["times"] < 1:
+                continue
+            if rule.get("match") and rule["match"] not in input_text:
+                continue
+            if rule.get("needs_tool") and rule["needs_tool"] not in tool_names:
+                continue
+            rule["times"] -= 1
+            n_in = count_tokens(input_text)
+            if "tool" in rule:
+                if rule["tool"] not in tool_names:
+                    continue  # tool không được cung cấp: không giả mạo tool call
+                args = json.dumps(rule.get("args", {}), separators=(",", ":"), ensure_ascii=False)
+                h = digest("script", rule["tool"], args)
+                return Reply(tokenize(args), n_in, rule["tool"], "mock_" + h[:16])
+            return Reply(tokenize(rule["text"]) or ["ok"], n_in)
+        return None
+
     def reset(self) -> None:
         self.overrides.clear()
+        self.script.clear()
         self.counter = 0
 
 
