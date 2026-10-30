@@ -1,27 +1,34 @@
+-- Idempotent: chạy lại không lỗi (role/DB đã có thì bỏ qua; mật khẩu luôn được đồng bộ lại từ secret).
 -- Mọi role: NOSUPERUSER NOBYPASSRLS NOREPLICATION; không role app nào là superuser/BYPASSRLS
-CREATE ROLE gw_owner  LOGIN PASSWORD :'gw_owner_pw'  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE gw_app    LOGIN PASSWORD :'gw_app_pw'    NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE gw_report LOGIN PASSWORD :'gw_report_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;   -- Grafana
-CREATE ROLE kn_owner  LOGIN PASSWORD :'kn_owner_pw'  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE kn_app    LOGIN PASSWORD :'kn_app_pw'    NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE kn_ingest LOGIN PASSWORD :'kn_ingest_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE tk_owner  LOGIN PASSWORD :'tk_owner_pw'  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE tk_app    LOGIN PASSWORD :'tk_app_pw'    NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE an_owner  LOGIN PASSWORD :'an_owner_pw'  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE an_reader LOGIN PASSWORD :'an_reader_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE ag_owner  LOGIN PASSWORD :'ag_owner_pw'  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;   -- chạy setup() của checkpointer
-CREATE ROLE ag_app    LOGIN PASSWORD :'ag_app_pw'    NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE mcp_audit_w LOGIN PASSWORD :'mcp_audit_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;   -- chỉ INSERT/SELECT trên tool_audit (contracts §3.6)
-CREATE ROLE kc_app    LOGIN PASSWORD :'kc_app_pw'    NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
-CREATE ROLE lf_app    LOGIN PASSWORD :'lf_app_pw'    NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION', r)
+FROM (VALUES ('gw_owner'), ('gw_app'), ('gw_report'), ('kn_owner'), ('kn_app'), ('kn_ingest'), ('tk_owner'), ('tk_app'), ('an_owner'), ('an_reader'), ('ag_owner'), ('ag_app'), ('mcp_audit_w'), ('kc_app'), ('lf_app')) AS v(r)
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = v.r) \gexec
 
-CREATE DATABASE gateway   OWNER gw_owner;
-CREATE DATABASE knowledge OWNER kn_owner;
-CREATE DATABASE tickets   OWNER tk_owner;
-CREATE DATABASE analytics OWNER an_owner;
-CREATE DATABASE agent     OWNER ag_owner;      -- ag_app chỉ DML (GRANT sau khi setup())
-CREATE DATABASE keycloak  OWNER kc_app;
-CREATE DATABASE langfuse  OWNER lf_app;
+SELECT format('ALTER ROLE %I PASSWORD %L', r, pw)
+FROM (VALUES
+  ('gw_owner', :'gw_owner_pw'),
+  ('gw_app', :'gw_app_pw'),
+  ('gw_report', :'gw_report_pw'),
+  ('kn_owner', :'kn_owner_pw'),
+  ('kn_app', :'kn_app_pw'),
+  ('kn_ingest', :'kn_ingest_pw'),
+  ('tk_owner', :'tk_owner_pw'),
+  ('tk_app', :'tk_app_pw'),
+  ('an_owner', :'an_owner_pw'),
+  ('an_reader', :'an_reader_pw'),
+  ('ag_owner', :'ag_owner_pw'),
+  ('ag_app', :'ag_app_pw'),
+  ('mcp_audit_w', :'mcp_audit_pw'),
+  ('kc_app', :'kc_app_pw'),
+  ('lf_app', :'lf_app_pw')
+) AS v(r, pw) \gexec
+
+SELECT format('CREATE DATABASE %I OWNER %I', d, o)
+FROM (VALUES ('gateway', 'gw_owner'), ('knowledge', 'kn_owner'), ('tickets', 'tk_owner'), ('analytics', 'an_owner'), ('agent', 'ag_owner'), ('keycloak', 'kc_app'), ('langfuse', 'lf_app')) AS v(d, o)
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = v.d) \gexec
+-- ag_app chỉ DML; quyền cấp ở 30-agent.sql (default privileges cho bảng setup() tạo sau)
+
+
 
 -- Timeout & giới hạn theo role (contracts §3.4 cho an_reader)
 ALTER ROLE gw_app    SET statement_timeout = '5s';   ALTER ROLE gw_app SET idle_in_transaction_session_timeout = '10s';
