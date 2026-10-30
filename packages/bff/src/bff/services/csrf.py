@@ -1,1 +1,16 @@
-"""CSRF double-submit (X-CSRF-Token). Milestone: M5. Docs: docs/design/07-web-bff.md §2.1."""
+"""CSRF double-submit có ràng buộc phiên (07 §2.5): header == cookie == HMAC(k_csrf, sid)."""
+
+from __future__ import annotations
+
+import hmac
+
+from .crypto import Crypto
+
+
+def csrf_valid(crypto: Crypto, *, sid: str, header: str | None, cookie: str | None) -> bool:
+    if not header or not cookie:
+        return False
+    expected = crypto.csrf_for(sid)
+    return hmac.compare_digest(header.encode(), cookie.encode()) and hmac.compare_digest(
+        header.encode(), expected.encode()
+    )

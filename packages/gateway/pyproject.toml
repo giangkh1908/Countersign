@@ -12,12 +12,28 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic-settings",
     "acme-common",
-    # M1/M4: thêm sqlalchemy/asyncpg, redis, httpx, anthropic/google-genai SDK (chỉ trong adapters), pyyaml, prometheus-client.
+    "httpx",
+    "pyyaml",
+    "asyncpg",  # adapter KeyStore pg_redis_cached (chỉ trong adapters/)
+    "anthropic",  # SDK chính thức, chỉ import trong adapters/anthropic.py
+    "prometheus-client",
+    # M2: redis (L2 cache key, rate limit, breaker), google-genai (adapter gemini).
     # CẤM (D2): onnxruntime, torch, tokenizers, transformers, sentence-transformers, huggingface_hub.
 ]
 
 [tool.uv.sources]
 acme-common = { workspace = true }
+acme-mock-provider = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gateway"]
+
+[dependency-groups]
+dev = [
+    "acme-mock-provider",
+    "httpx2",  # anthropic SDK dùng httpx2 cho http_client tiêm vào (test qua ASGI)
+    "langchain-openai",
+    "openai",
+    "pytest",
+    "pytest-asyncio",
+]

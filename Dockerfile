@@ -22,7 +22,8 @@ FROM base AS gateway
 RUN uv sync --frozen --no-dev --no-editable --package acme-gateway
 RUN bash eval/security/check_pth.sh /app/.venv
 USER 10001
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.venv/bin:$PATH" \
+    GW_MODELS_CONFIG=/app/packages/gateway/config/models.yaml
 CMD ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
 
 # ───────────── policy-sidecar (8010) ─────────────
