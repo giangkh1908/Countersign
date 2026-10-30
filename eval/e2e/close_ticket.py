@@ -10,8 +10,11 @@ LLM là mock-provider; định tuyến được ép bằng kịch bản `PUT /__
 Các service nội bộ không publish cổng ra host nên HTTP nội bộ đi qua `docker compose exec bff|agent`
 (hop); không in token/secret. Chạy: `bash scripts/e2e-close-ticket.sh [--skip-expiry]`.
 
-Tác dụng phụ trên stack (dev): tạo client `e2e-test` nếu chưa có, đặt mật khẩu ngẫu nhiên cho 2
-user test (chỉ giữ trong bộ nhớ), đóng 1 ticket seed mỗi lần chạy. Hãy backup trước (pg_dumpall).
+Tác dụng phụ trên stack (dev): script SỞ HỮU vòng đời client `e2e-test` (tạo qua Admin API nếu thiếu,
+xoá ở cuối trong `finally`; `--keep-client` để giữ khi debug; client KHÔNG nằm trong realm-acme.json),
+đặt mật khẩu ngẫu nhiên cho 2 user test (chỉ giữ trong bộ nhớ), đóng 1 ticket seed mỗi lần chạy.
+Từ chối chạy nếu Keycloak không phải dev (localhost / keycloak.acme.local) trừ khi `E2E_ALLOW=1`.
+Hãy backup trước (pg_dumpall).
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import re
 import secrets as pysecrets
 import subprocess
@@ -29,6 +33,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from acme_common.audit.chain import AuditKeyring, verify_chain
@@ -41,6 +46,23 @@ AGENT = "http://agent:8200"
 SIGNER = "http://approval-signer:8310"
 MOCK = "http://mock-provider:8900"
 TICKETS_MCP = "http://tickets-mcp:8102/mcp"
+E2E_CLIENT_ID = "e2e-test"
+DEV_KC_HOSTS = frozenset({"localhost", "127.0.0.1", "keycloak.acme.local"})
+# Client dev-only, public + direct grant: KHÔNG được nằm trong realm-acme.json (có test canh).
+E2E_CLIENT = {
+    "clientId": E2E_CLIENT_ID,
+    "name": "e2e-test (DEV/TEST ONLY)",
+    "description": "DEV/TEST ONLY, created and deleted by eval/e2e/close_ticket.py. Token has aud=chat-ui like the BFF login token.",
+    "enabled": True,
+    "protocol": "openid-connect",
+    "publicClient": True,
+    "standardFlowEnabled": False,
+    "directAccessGrantsEnabled": True,
+    "serviceAccountsEnabled": False,
+    "fullScopeAllowed": False,
+    "defaultClientScopes": ["acme-claims", "aud-chat-ui"],
+    "optionalClientScopes": [],
+}
 GRANT_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange"
 TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 ROUTER_MARK = "bộ định tuyến"  # có trong system prompt của router (agent/graph/nodes.py)
@@ -285,18 +307,31 @@ class Keycloak:
         r.raise_for_status()
         return {"Authorization": "Bearer " + r.json()["access_token"]}
 
+    def _client_uuids(self, h: dict[str, str]) -> list[str]:
+        r = self.http.get(
+            f"{KC}/admin/realms/{REALM}/clients", params={"clientId": E2E_CLIENT_ID}, headers=h
+        )
+        r.raise_for_status()
+        return [c["id"] for c in r.json() if c["clientId"] == E2E_CLIENT_ID]
+
+    def delete_client(self) -> bool:
+        """Xoá client dev-only `e2e-test` (idempotent). Trả True nếu đã xoá."""
+        h = self._admin()
+        ids = self._client_uuids(h)
+        for cid in ids:
+            self.http.delete(
+                f"{KC}/admin/realms/{REALM}/clients/{cid}", headers=h
+            ).raise_for_status()
+        return bool(ids)
+
     def ensure_test_setup(self, usernames: list[str]) -> bool:
-        """Đảm bảo client dev-only `e2e-test` tồn tại (định nghĩa lấy từ realm-acme.json) và đặt
-        mật khẩu ngẫu nhiên cho các user test. Trả True nếu phải tạo client."""
+        """Đảm bảo client dev-only `e2e-test` tồn tại (tạo qua Admin API) và đặt mật khẩu ngẫu nhiên
+        cho các user test. Trả True nếu phải tạo client."""
         h = self._admin()
         created = False
         base = f"{KC}/admin/realms/{REALM}"
-        if not self.http.get(f"{base}/clients", params={"clientId": "e2e-test"}, headers=h).json():
-            realm = json.loads(
-                (ROOT / "infra/keycloak/realm-acme.json").read_text(encoding="utf-8")
-            )
-            client = next(c for c in realm["clients"] if c["clientId"] == "e2e-test")
-            self.http.post(f"{base}/clients", headers=h, json=client).raise_for_status()
+        if not self._client_uuids(h):
+            self.http.post(f"{base}/clients", headers=h, json=E2E_CLIENT).raise_for_status()
             created = True
         for name in usernames:
             users = self.http.get(
@@ -966,13 +1001,42 @@ def main() -> int:
     ap.add_argument(
         "--skip-expiry", action="store_true", help="bỏ ca hết hạn (mất ~5 phút chờ TTL intent)"
     )
+    ap.add_argument(
+        "--keep-client",
+        action="store_true",
+        help="giữ client e2e-test sau khi chạy (debug); mặc định xoá ở cuối",
+    )
     args = ap.parse_args()
+    host = urlparse(KC).hostname or ""
+    if host not in DEV_KC_HOSTS and os.environ.get("E2E_ALLOW") != "1":
+        print(
+            f"Từ chối chạy: Keycloak host {host!r} không phải dev {sorted(DEV_KC_HOSTS)} (đặt E2E_ALLOW=1 để ép)",
+            file=sys.stderr,
+        )
+        return 2
     t0 = time.time()
     print(
         f"E2E close_ticket  run_id={uuid.uuid4().hex[:8]}  user={args.user}  other={args.other_user}"
     )
 
     kc = Keycloak()
+    try:
+        return _run(args, kc, t0)
+    finally:
+        if args.keep_client:
+            print(f"keycloak: GIỮ client {E2E_CLIENT_ID} (--keep-client)")
+        else:
+            try:
+                gone = kc.delete_client()
+                print(f"keycloak: client {E2E_CLIENT_ID} {'ĐÃ XOÁ' if gone else 'không còn'}")
+            except Exception as exc:  # noqa: BLE001
+                print(
+                    f"  WARN: không xoá được client {E2E_CLIENT_ID}: {type(exc).__name__}",
+                    file=sys.stderr,
+                )
+
+
+def _run(args: argparse.Namespace, kc: Keycloak, t0: float) -> int:
     created = kc.ensure_test_setup([args.user, args.other_user])
     print(
         f"keycloak: client e2e-test {'ĐÃ TẠO' if created else 'đã có'}; mật khẩu test đặt lại (chỉ trong bộ nhớ)"
