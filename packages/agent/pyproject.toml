@@ -8,6 +8,12 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic-settings",
     "acme-common",
+    "langgraph>=1.2.18",
+    "langgraph-checkpoint-postgres>=3.2.0",
+    "langchain-openai>=1.7.3",
+    "pycryptodome>=4.2.0",
+    "psycopg[binary,pool]>=3.3.6",
+    "mcp>=2.3,<2.4",
 ]
 # M1: langgraph + checkpointer postgres, client OpenAI-compatible, mcp client, sqlalchemy/psycopg
 
