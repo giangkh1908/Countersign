@@ -27,3 +27,11 @@ def test_list_settings_parse_comma_separated() -> None:
     s = CommonSettings(token_allowed_azp="agent-service, chat-ui", token_required_claims="sub,dept")
     assert s.allowed_azp == {"agent-service", "chat-ui"}
     assert s.required_claims == ("sub", "dept")
+
+
+def test_empty_env_value_falls_back_to_default(monkeypatch) -> None:
+    # `.env.example` để trống các biến tuỳ chọn (vd `MCP_RL_CAPACITY=`): rỗng = dùng mặc định.
+    monkeypatch.setenv("MCP_RL_CAPACITY", "")
+    assert (
+        CommonSettings().mcp_rl_capacity == CommonSettings.model_fields["mcp_rl_capacity"].default
+    )

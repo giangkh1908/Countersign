@@ -107,7 +107,7 @@ dev = [
 requires-dist = [
     { name = "httpx" },
     { name = "jsonschema", specifier = ">=4.26.0" },
-    { name = "mcp", specifier = ">=2.3,<3" },
+    { name = "mcp", specifier = ">=2.3,<2.4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
