@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/errors";
@@ -96,6 +96,8 @@ describe("ApprovalCard", () => {
   });
 
   it("đếm ngược theo server_time và khoá khi hết hạn", async () => {
+    // Fake timer bật TRƯỚC render để setInterval của Countdown chạy theo đồng hồ giả.
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"], shouldAdvanceTime: true });
     // Đồng hồ máy lệch +1 giờ so với server: hạn vẫn tính theo server_time.
     const serverNow = Date.now() - 3_600_000;
     const api = new FakeApprovalApi(
@@ -108,19 +110,13 @@ describe("ApprovalCard", () => {
     const cd = await screen.findByTestId("countdown");
     expect(cd.textContent).toMatch(/01:0\d|01:00/);
     expect(screen.getByRole("button", { name: "Duyệt" })).not.toHaveAttribute("aria-disabled", "true");
-    await waitFor(
-      () => expect(screen.getByTestId("countdown")).toHaveTextContent("Đã hết hạn"),
-      { timeout: 4000 },
-    ).catch(() => undefined);
-    // Mô phỏng thời gian trôi để kiểm hết hạn.
-    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
-    vi.setSystemTime(Date.now() + 120_000);
+    // Cho thời gian trôi qua hạn 61 s.
     await act(async () => {
-      vi.advanceTimersByTime(1500);
+      vi.advanceTimersByTime(62_000);
     });
     expect(screen.getByTestId("countdown")).toHaveTextContent("Đã hết hạn");
     expect(screen.getByRole("button", { name: "Duyệt" })).toHaveAttribute("aria-disabled", "true");
-  }, 10000);
+  });
 
   it("Từ chối gọi onDecision reject kèm lý do", async () => {
     const h = setup(new FakeApprovalApi(card([field({})])));
