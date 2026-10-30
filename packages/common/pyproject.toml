@@ -10,7 +10,9 @@ requires-python = ">=3.12"
 dependencies = [
     "pydantic",
     "pydantic-settings",
-    # M1/M2: thêm pyjwt/cryptography (TokenVerifier), httpx (RetryingHttpClient), redis, sqlalchemy/psycopg khi triển khai adapter.
+    "httpx",
+    "pyjwt[crypto]",
+    # M2: thêm redis, sqlalchemy/psycopg khi triển khai adapter postgres_event_sink / redis_token_bucket.
 ]
 
 [tool.hatch.build.targets.wheel]

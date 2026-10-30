@@ -4,3 +4,21 @@ Adapter v1 dự kiến: `postgres`, `json_log`.
 Milestone: M1/M2.
 Tài liệu: docs/design/00-contracts.md §9.2, D14.
 """
+
+from __future__ import annotations
+
+import abc
+from collections.abc import Mapping
+from typing import Any
+
+EventRecord = Mapping[str, Any]
+
+
+class EventSink(abc.ABC):
+    @abc.abstractmethod
+    def append(self, record: EventRecord, sync: bool = False) -> None:
+        """`sync=False`: không chặn (đưa vào batch). `sync=True`: ghi ngay (audit)."""
+
+    @abc.abstractmethod
+    async def flush(self, timeout_s: float = 5.0) -> None:
+        """Đẩy phần còn lại của batch (shutdown)."""
