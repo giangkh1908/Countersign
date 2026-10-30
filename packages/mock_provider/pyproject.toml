@@ -25,5 +25,6 @@ packages = ["src/mock_provider"]
 dev = [
     "anthropic>=2.3.0",
     "httpx>=0.28.1",
+    "httpx2>=2.16.0",
     "openai>=3.41.0",
 ]
