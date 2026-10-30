@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import hmac
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -18,6 +20,18 @@ from .container import Container, build_container
 from .services.errors import GatewayError
 from .settings import Settings
 
+log = logging.getLogger("gateway.main")
+
+
+async def _flush_loop(c: Container, interval_s: float) -> None:
+    """Đẩy buffer EventSink định kỳ; lỗi chỉ log, không làm chết vòng lặp."""
+    while True:
+        await asyncio.sleep(interval_s)
+        try:
+            await c.sink.flush(interval_s)
+        except Exception:  # noqa: BLE001 - sink hỏng không được ảnh hưởng request
+            log.warning("event sink flush failed", exc_info=True)
+
 
 def create_app(settings: Settings | None = None, container: Container | None = None) -> FastAPI:
     """`container` tiêm sẵn (test) hoặc để None: lifespan dựng từ settings qua factory."""
@@ -28,9 +42,12 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         configure_logging(settings.log_level, "gateway")
         c = container or build_container(settings)
         app.state.container = c
+        flusher = asyncio.create_task(_flush_loop(c, settings.gw_sink_flush_interval_s))
         try:
             yield
         finally:
+            flusher.cancel()
+            await asyncio.gather(flusher, return_exceptions=True)
             await c.sink.flush(5.0)
             for close in c.closers:
                 await close()

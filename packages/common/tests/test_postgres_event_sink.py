@@ -5,6 +5,7 @@ Mỗi test chạy trong một schema riêng (DDL mô phỏng contracts §3.1/§3
 
 from __future__ import annotations
 
+import asyncio
 import os
 import threading
 import uuid
@@ -119,8 +120,12 @@ async def test_usage_batched_on_flush(dsn: str, aconn) -> None:
 async def test_usage_auto_flush_when_batch_full(dsn: str, aconn) -> None:
     sink = PostgresEventSink(dsn, KR, batch_size=5)
     for i in range(5):
-        sink.append(usage(i))
-    cur = await aconn.execute("SELECT count(*) FROM usage_events")
+        sink.append(usage(i))  # không chặn: flush chạy ở thread nền
+    for _ in range(50):
+        cur = await aconn.execute("SELECT count(*) FROM usage_events")
+        if (await cur.fetchone())[0] == 5:
+            break
+        await asyncio.sleep(0.1)
     assert (await cur.fetchone())[0] == 5
 
 

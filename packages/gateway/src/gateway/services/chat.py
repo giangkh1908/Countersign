@@ -165,34 +165,38 @@ class ChatService:
         """Ghi `usage_events` (cột theo contracts §3.1). Không chứa nội dung prompt."""
         u = usage or Usage()
         alias = resolved.alias if resolved else requested_alias
-        self._sink.append(
-            {
-                "event": "usage_event",
-                "ts": self._clock.now(),
-                "request_id": request_id,
-                "key_id": caller.key.key_id,
-                "department": caller.dept,
-                "end_user_sub": caller.end_user_sub,
-                "alias": alias,
-                "provider": provider,
-                "model": model,
-                "input_tokens": u.prompt_tokens,
-                "output_tokens": u.completion_tokens,
-                "cached_input_tokens": u.cached_tokens,
-                "cost_micro_usd": 0,  # M2: pricing.yaml
-                "latency_ms": latency_ms,
-                "ttft_ms": ttft_ms,
-                "gateway_overhead_ms": overhead_ms,
-                "sidecar_ms": 0,
-                "cache": "miss",
-                "fallback_count": 0,
-                "route_reason": resolved.route_reason if resolved else None,
-                "pii_entities": 0,
-                "guard_score": None,
-                "status_code": status,
-                "error_code": error_code,
-            }
-        )
+        event = {
+            "event": "usage_event",
+            "ts": self._clock.now(),
+            "request_id": request_id,
+            "key_id": caller.key.key_id,
+            "department": caller.dept,
+            "end_user_sub": caller.end_user_sub,
+            "alias": alias,
+            "provider": provider,
+            "model": model,
+            "input_tokens": u.prompt_tokens,
+            "output_tokens": u.completion_tokens,
+            "cached_input_tokens": u.cached_tokens,
+            "cost_micro_usd": 0,  # M2: pricing.yaml
+            "latency_ms": latency_ms,
+            "ttft_ms": ttft_ms,
+            "gateway_overhead_ms": overhead_ms,
+            "sidecar_ms": 0,
+            "cache": "miss",
+            "fallback_count": 0,
+            "route_reason": resolved.route_reason if resolved else None,
+            "pii_entities": 0,
+            "guard_score": None,
+            "status_code": status,
+            "error_code": error_code,
+        }
+        try:
+            self._sink.append(event)
+        except Exception:  # noqa: BLE001 - sink hỏng không được làm hỏng request
+            log.error(
+                "usage event dropped", exc_info=True, extra={"fields": {"request_id": request_id}}
+            )
         m = self._metrics
         label = alias if resolved else "unknown"
         m.requests.labels(label, str(status)).inc()

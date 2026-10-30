@@ -38,14 +38,32 @@ for t in agent:8200 approval-signer:8310 docs-mcp:8101 tickets-mcp:8102 mock-pro
     ok "$t/healthz -> 200"; else bad "$t/healthz không phản hồi 200"; fi
 done
 
-echo "== Gateway: gọi chat có xác thực (tuỳ chọn, cần secrets/agent_gateway_key) =="
+echo "== Gateway: gọi chat có xác thực + usage_events (tuỳ chọn, cần secrets/agent_gateway_key) =="
 if [ ! -s secrets/agent_gateway_key ]; then
   echo "  WARN  secrets/agent_gateway_key rỗng: bỏ qua (chạy: bash infra/scripts/bootstrap-gateway-keys.sh --restart)"
 else
-  code="$(curl -s -o /dev/null -m 15 -w '%{http_code}' http://localhost:8000/v1/chat/completions     -H "Authorization: Bearer $(tr -d '
+  hdr="$(mktemp)"
+  code="$(curl -s -o /dev/null -D "$hdr" -m 15 -w '%{http_code}' http://localhost:8000/v1/chat/completions     -H "Authorization: Bearer $(tr -d '
 ' < secrets/agent_gateway_key)" -H 'Content-Type: application/json'     -d '{"model":"acme-fast","messages":[{"role":"user","content":"ping"}]}' || true)"
+  rid="$(tr -d '' < "$hdr" | awk -F': ' 'tolower($1)=="x-acme-request-id"{print $2}' | head -n1)"
+  rm -f "$hdr"
   if [ "$code" = "200" ]; then ok "gateway /v1/chat/completions (agent key, acme-fast -> mock) -> 200"
   else bad "gateway /v1/chat/completions với agent key -> ${code:-000} (mong đợi 200)"; fi
+  if [ "$code" = "200" ]; then
+    if ! printf '%s' "$rid" | grep -Eq '^[0-9a-fA-F-]{36}$'; then
+      bad "gateway không trả header x-acme-request-id hợp lệ"
+    else
+      # sink đẩy batch định kỳ (GW_SINK_FLUSH_INTERVAL_S, mặc định 2s) nên chờ tối đa ~15s
+      found=0
+      for _ in $(seq 1 15); do
+        n="$(docker compose exec -T -u postgres postgres psql -U postgres -d gateway -tA           -c "SELECT count(*) FROM usage_events WHERE request_id = '$rid' AND status_code = 200" 2>/dev/null | tr -d '[:space:]' || true)"
+        if [ "${n:-0}" = "1" ]; then found=1; break; fi
+        sleep 1
+      done
+      if [ "$found" = "1" ]; then ok "usage_events có dòng cho request_id $rid"
+      else bad "usage_events KHÔNG có dòng cho request_id $rid (kiểm EVENT_SINK_ADAPTER=postgres của gateway)"; fi
+    fi
+  fi
 fi
 
 if [ "$fail" -ne 0 ]; then echo "SMOKE: THẤT BẠI" >&2; exit 1; fi

@@ -223,6 +223,8 @@ services:
     environment:
       <<: *pyapp-env
       GW_DATABASE_URL_FILE: /run/secrets/gw_database_url       # URL dựng từ gw_app_password (ghi chú 1)
+      EVENT_SINK_ADAPTER: postgres                              # usage_events + audit_log vào DB gateway (mặc định json_log chỉ ra stdout)
+      EVENT_SINK_DATABASE_URL_FILE: /run/secrets/gw_database_url  # role gw_app (INSERT usage_events, audit_log)
       GW_REDIS_STATE_URL: redis://gateway@redis-state:6379/0
       GW_REDIS_STATE_PASSWORD_FILE: /run/secrets/redis_gateway_password
       GW_REDIS_CACHE_URL: redis://gateway@redis-cache:6379/0
