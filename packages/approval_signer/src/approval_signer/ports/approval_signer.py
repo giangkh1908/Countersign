@@ -1,6 +1,18 @@
-"""Port `ApprovalSigner`: `sign(intent, principal) -> approval_token`.
+"""Port `ApprovalSigner`: `sign(intent, principal) -> ApprovalToken`.
 
-Adapter v1 dự kiến: `es256_jwt`.
-Milestone: M5.
-Tài liệu: docs/design/00-contracts.md §9.2.
+Adapter v1: `es256_jwt`. Tài liệu: docs/design/00-contracts.md §4.1, 05 §4.3.
 """
+
+from __future__ import annotations
+
+import abc
+
+from acme_common.ports import Principal
+
+from .types import ApprovalToken, VerifiedIntent
+
+
+class ApprovalSigner(abc.ABC):
+    @abc.abstractmethod
+    def sign(self, intent: VerifiedIntent, principal: Principal) -> ApprovalToken:
+        """Ký approval token ràng buộc `intent_sha256` và `sub` của người duyệt."""

@@ -1,14 +1,5 @@
 """Entrypoint FastAPI của approval_signer: `uvicorn approval_signer.main:app`."""
 
-from fastapi import FastAPI
+from .api.app import create_app
 
-app = FastAPI(title="Approval Signer")
-
-
-@app.get("/healthz")
-def healthz() -> dict[str, str]:
-    """Không auth; chỉ báo sống (contracts §1)."""
-    return {"status": "ok"}
-
-
-# TODO: GET /metrics, bắt buộc `Authorization: Bearer ${METRICS_TOKEN}` (contracts §1).
+app = create_app()

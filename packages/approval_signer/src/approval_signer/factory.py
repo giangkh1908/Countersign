@@ -1,11 +1,71 @@
 """Factory của approval_signer: chọn adapter theo config bằng registry dict + lazy import.
 
-Quy tắc (contracts §9.1 mục 5): KHÔNG dùng chuỗi if/elif. Mỗi vendor có một hàm loader
-import lười (`from .adapters.<vendor> import ...` nằm TRONG hàm). Tên lạ -> raise
-`XxxNotConfigured` kèm `sorted(_REGISTRY)`. Factory bọc sẵn decorator cross-cutting.
+Không có adapter `permissive` nào (signer không bao giờ ký "cho qua"). Tên lạ => `XxxNotConfigured`
+kèm `sorted(registry)`.
 """
 
-from collections.abc import Callable
+from __future__ import annotations
 
-# TODO: điền loader theo bảng port §9.2 khi triển khai milestone tương ứng.
-_REGISTRY: dict[str, Callable[..., object]] = {}
+from collections.abc import Callable, Mapping
+from pathlib import Path
+from typing import Any
+
+from acme_common.ports import Clock, NotConfigured
+
+from .ports import (
+    ApprovalSigner,
+    ApprovalSignerNotConfigured,
+    IntentVerifier,
+    IntentVerifierNotConfigured,
+)
+from .settings import Settings
+
+
+def _lookup[T](
+    registry: Mapping[str, Callable[..., T]], name: str, err: type[NotConfigured]
+) -> Any:
+    try:
+        return registry[name]
+    except KeyError:
+        raise err(f"unknown adapter {name!r}; known: {sorted(registry)}") from None
+
+
+def _load_es256_jws(settings: Settings, clock: Clock) -> IntentVerifier:
+    from .adapters.es256_jws import Es256JwsIntentVerifier
+
+    if not settings.intent_public_keys_dir:
+        raise IntentVerifierNotConfigured("INTENT_PUBLIC_KEYS_DIR is required")
+    return Es256JwsIntentVerifier(
+        settings.intent_public_keys_dir,
+        clock,
+        issuer=settings.intent_issuer_name,
+        audience=settings.signer_audience,
+    )
+
+
+_VERIFIERS: dict[str, Callable[[Settings, Clock], IntentVerifier]] = {"es256_jws": _load_es256_jws}
+
+
+def build_intent_verifier(name: str, settings: Settings, *, clock: Clock) -> IntentVerifier:
+    return _lookup(_VERIFIERS, name, IntentVerifierNotConfigured)(settings, clock)
+
+
+def _load_es256_jwt(settings: Settings, clock: Clock) -> ApprovalSigner:
+    from .adapters.es256_jwt import Es256JwtApprovalSigner
+
+    if settings.approval_signer_private_key:
+        pem = settings.approval_signer_private_key.encode()
+    elif settings.approval_signer_private_key_path:
+        pem = Path(settings.approval_signer_private_key_path).read_bytes()
+    else:
+        raise ApprovalSignerNotConfigured("APPROVAL_SIGNER_PRIVATE_KEY_PATH is required")
+    return Es256JwtApprovalSigner(
+        pem, settings.approval_signer_key_id or "", clock, ttl_s=settings.approval_ttl_s
+    )
+
+
+_SIGNERS: dict[str, Callable[[Settings, Clock], ApprovalSigner]] = {"es256_jwt": _load_es256_jwt}
+
+
+def build_approval_signer(name: str, settings: Settings, *, clock: Clock) -> ApprovalSigner:
+    return _lookup(_SIGNERS, name, ApprovalSignerNotConfigured)(settings, clock)
