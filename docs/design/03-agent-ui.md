@@ -1,5 +1,8 @@
 # 03 — Agent LangGraph
 
+> **Trạng thái phạm vi (ADR-006, 2026-10-30):** agent LangGraph giữ lại với router rút gọn (chỉ docs và trả lời trực tiếp); thêm trả lời có trích dẫn và bộ kiểm chứng (xem `08-rag-citations.md`).
+> Nhánh tickets, HITL/phê duyệt, analytics: đóng băng (profile `tickets`/`analytics`). Phần UI Chainlit đã bị thay bởi React + BFF (xem 07).
+
 > Phiên bản 1.4, 2026-10-29. Tuân thủ `DECISIONS-v1.2.md` (gồm D15) và `00-contracts.md` (nguồn chân lý); các điểm cần xác nhận ở mục **15. Phụ thuộc contracts v1.3**.
 > Quy ước: chỗ nào API của thư viện chưa được xác minh thì ghi **[SPIKE]** = "cần xác minh trong spike", không đoán.
 > Phạm vi: `packages/agent` (service `agent`, cổng 8200). **Giao diện người dùng (SPA React + BFF, cổng 8300) được thiết kế ở `07-web-bff.md`**; mục 9 chỉ giữ hợp đồng agent ↔ BFF. Việc ký phê duyệt do dịch vụ riêng `approval-signer` đảm nhiệm (`05-approval-flow.md`). Gateway ở `01`, MCP servers ở `02`.

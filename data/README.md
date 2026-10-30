@@ -7,7 +7,7 @@ Thiết kế: `docs/design/04-infra-data-eval.md` PHẦN B (§7–§8). Mọi PI
 | `generator/` | Generator ACME có seed (`20261028`), chỉ dùng stdlib, không gọi LLM: 30 tài liệu, 100 ticket, analytics nhỏ, user từ realm |
 | `tests/` | Test offline của generator (`uv run pytest data/tests`) |
 | `load_seed.sh` | Nạp SQL seed vào Postgres trong compose (idempotent) |
-| `corpus/` | Corpus độc cho E4 (>= 50 tài liệu, 8 kỹ thuật injection, có ground truth) |
+| `corpus/` | Corpus độc cho RQ3 (**chưa xây**, dự kiến R3: >= 50 tài liệu, 8 kỹ thuật injection, có ground truth) |
 | `pii_testset/` | Tập test PII viết tay (tập chính cho bộ lọc PII, R11/R13) |
 | `generated/` | Đầu ra của generator, đã gitignore |
 | `vbpl/` | Công cụ tải corpus luật thật từ vbpl.vn + danh sách chọn (`selection.json`); nguồn và giấy phép ở `SOURCES.md` |

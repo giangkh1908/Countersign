@@ -1,5 +1,8 @@
 # 06 — Policy-sidecar: embedding, guard và NER nội bộ
 
+> **Trạng thái phạm vi (ADR-006, 2026-10-30):** ĐÓNG BĂNG. policy-sidecar (embed, guard, NER) giữ code và test, thuộc profile `sidecar`, không phát triển thêm.
+> Embedding của đề tài mới đi qua gateway `/v1/embeddings` tới API provider, không dùng sidecar. Nội dung dưới đây chỉ là tham chiếu.
+
 > Phiên bản v1.4 (D17: hàng đợi ưu tiên 3 lớp, mục 4.1; xem Changelog v1.4 cuối mục 4). Tài liệu mới theo `DECISIONS-v1.2.md` D2. Nguồn chân lý chung là `00-contracts.md` (v1.2); khi mâu thuẫn, `DECISIONS-v1.2.md` thắng. Gateway (`01-gateway.md`) chỉ là egress mỏng và gọi sidecar qua HTTP nội bộ.
 
 ## Mục lục

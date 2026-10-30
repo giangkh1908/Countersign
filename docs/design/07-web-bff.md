@@ -1,5 +1,8 @@
 # 07 — Web UI: SPA React + TypeScript và BFF
 
+> **Trạng thái phạm vi (ADR-006, 2026-10-30):** phần đăng nhập OIDC, BFF (token chỉ ở BFF), SPA chat/stream vẫn còn hiệu lực. Cần thêm: hiển thị trích dẫn `[n]`, mở đoạn nguồn, cờ "chưa kiểm chứng" (R2).
+> Thẻ phê duyệt/approval card (gắn với 05), trang admin, i18n: đóng băng hoặc bỏ.
+
 > Phiên bản 1.4, 2026-10-29. Changelog v1.4 (D17, review-02 N13/N12): BFF giữ `bff:sess:{sid}:rej` (TTL 10 phút) chặn trình lại intent đã từ chối, giới hạn `BFF_MAX_CARDS_PER_THREAD_HOUR=10` ⇒ `429 rate_limited`, UI thông báo; `DELETE /api/threads/{id}` kích hoạt forget taint qua agent (mục 2.6, 2.7, 3.6, 6.3, 6.4). Thiết kế chi tiết cho quyết định **D15** (`DECISIONS-v1.2.md`, thắng mọi mâu thuẫn) và `docs/adr/ADR-002-ui-react-bff.md` (thay ADR-001 Chainlit). Tuân thủ `00-contracts.md` (nguồn chân lý, §9 Ports & Adapters). Sửa N01, N02, N03 của `docs/reviews/review-02-opus.md`. Liên quan: `03-agent-ui.md` (API agent mục 1.3/1.4, hợp đồng mục 9), `05-approval-flow.md` (signer, intent, render model).
 > Code là minh hoạ thiết kế, chưa nằm trong repo. Chỗ API thư viện/Keycloak chưa xác minh ghi **[SPIKE]**; việc xác minh gom ở mục 8.
 > Phạm vi: `packages/bff` (service `bff`, cổng 8300), `web/` (SPA), trang admin (M6). Không bao gồm agent, signer, gateway.

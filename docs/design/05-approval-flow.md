@@ -1,5 +1,8 @@
 # 05 — Phê duyệt ràng buộc giao dịch (What You See Is What You Sign)
 
+> **Trạng thái phạm vi (ADR-006, 2026-10-30):** ĐÓNG BĂNG. Luồng intent/approval ký số (tickets-mcp, approval-signer) giữ code và test, thuộc profile `tickets`, không phát triển thêm.
+> Nội dung dưới đây chỉ là tham chiếu nếu bật lại tính năng ghi có phê duyệt.
+
 > Phiên bản 1.4, 2026-10-29. **v1.4: áp dụng D17** (máy trạng thái intent, từ chối, taint; D17 thắng mọi mâu thuẫn).
 > Phiên bản 1.3, 2026-10-29. Tuân thủ `DECISIONS-v1.2.md` (D1, D7, D8, D10, **D15**; file đó thắng mọi mâu thuẫn). **v1.3 (D15, ADR-002):** UI là React+TS SPA + BFF FastAPI (service `bff`, cổng 8300) ngay từ MVP, Chainlit đã bị thay; luồng token đổi theo D15 (sửa N01/N02); render model phủ toàn bộ trường + `422 intent_unrenderable` (N03) và `00-contracts.md` (mọi điểm cần đổi contracts nằm ở mục 14 "Phụ thuộc contracts v1.2").
 > Đây là tài liệu trung tâm của điểm khác biệt sản phẩm: **agent ghi dữ liệu nghiệp vụ nhưng không bao giờ tự quyết nội dung người dùng được thấy lẫn nội dung được ký**. Liên quan: `02-mcp-servers.md` (tickets-mcp: `prepare_*`/`commit_intent`), `03-agent-ui.md` (interrupt, UI), `04-evaluation.md` (E4).

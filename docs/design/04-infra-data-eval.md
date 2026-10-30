@@ -1,5 +1,8 @@
 # 04 — Hạ tầng, dữ liệu giả lập và bộ đánh giá
 
+> **Trạng thái phạm vi (ADR-006, 2026-10-30):** phần hạ tầng (PHẦN A) còn hiệu lực cho các service giữ lại; tickets/approval, analytics, sidecar, obs/Langfuse đóng băng theo profile; HA/mTLS/Helm/secret manager bỏ.
+> Phần dữ liệu và đánh giá (B, C) có corpus mới: luật Việt Nam từ vbpl.vn, xem `data/SOURCES.md` và `08-rag-citations.md`. Cấu trúc đánh giá mới (truy xuất, trích dẫn, rò rỉ/ASR): `eval/README.md`, ROADMAP R1–R4.
+
 > Tài liệu thiết kế chi tiết, **phiên bản 1.4**, 2026-10-29. Tuân thủ `00-contracts.md` (nguồn chân lý, gồm §9 Ports & Adapters) và `DECISIONS-v1.2.md` (thắng khi mâu thuẫn; D15 thắng cả phần Keycloak của D13). Chỗ nào cần sửa contracts thì ghi ở mục 23 chứ không sửa ngầm trong tài liệu này.
 > Phạm vi: (A) hạ tầng `docker compose`, Redis, Postgres, Keycloak, supply-chain, CI, quan sát; (B) dữ liệu "ACME Việt Nam", corpus độc cho E4 và các tập test viết tay; (C) bộ đánh giá gồm benchmark, security regression suite và user study; (D) production hardening (M7).
 > Đây là dự án sản phẩm (nền tảng trợ lý AI nội bộ self-host). Các đoạn YAML/SQL/Python là **mẫu để worker hiện thực hoá**, chưa được chạy thử.

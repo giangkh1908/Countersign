@@ -1,5 +1,7 @@
 # infra — hạ tầng Docker
 
+> Phạm vi theo ADR-006: giữ postgres, redis, keycloak, gateway (mỏng), mock-provider, docs-mcp, agent, bff. Đóng băng (profile): `tickets` (tickets-mcp, approval-signer), `analytics`, `sidecar`, `obs`, Langfuse. Hiện compose mới chỉ tách `sidecar`, `analytics`, `obs`, `seed`; việc đưa tickets-mcp và approval-signer vào profile `tickets` là dự kiến (R0), chưa làm.
+
 Nguồn: `docs/design/04-infra-data-eval.md` PHẦN A, `00-contracts.md` §1/§7. File gốc: `Dockerfile` (đa tầng, `target` theo service),
 `docker-compose.yml`, `docker-compose.bench.yml`, `.env.example`, `models.lock`.
 
@@ -27,14 +29,15 @@ Nguồn: `docs/design/04-infra-data-eval.md` PHẦN A, `00-contracts.md` §1/§7
 
 | Profile | Nội dung |
 |---|---|
-| (mặc định, M1 core) | postgres, redis-state, redis-cache, keycloak, migrate, mock-provider, gateway, approval-signer, docs-mcp, tickets-mcp, agent, bff (kiểm: `bash scripts/smoke.sh`) |
-| `sidecar` | policy-sidecar (M4; cần `make models`) |
-| `analytics` | analytics-mcp (M3) |
-| `obs` | prometheus, grafana |
+| (mặc định, hiện tại) | postgres, redis-state, redis-cache, keycloak, migrate, mock-provider, gateway, approval-signer, docs-mcp, tickets-mcp, agent, bff (kiểm: `bash scripts/smoke.sh`). approval-signer và tickets-mcp sẽ chuyển sang profile `tickets` (dự kiến R0) |
+| `tickets` (dự kiến R0) | tickets-mcp, approval-signer: đóng băng theo ADR-006 |
+| `sidecar` | policy-sidecar: đóng băng (cần tải model theo `models.lock`; target `make models` chưa có trong Makefile) |
+| `analytics` | analytics-mcp: đóng băng |
+| `obs` | prometheus, grafana: đóng băng |
 | `bench` | overlay `docker-compose.bench.yml` (`mock-provider` nay chạy mặc định); kèm overlay `docker-compose.bench.yml` (gỡ egress của gateway, `GW_PROVIDER_OVERRIDE=mock`, ghim `cpuset`) |
 | `seed` | job `seed` (sinh dữ liệu mẫu) |
-| `eval` | chưa có service riêng; chỉ khi đặt `ACME_ENV=eval` mới cho adapter `permissive` (TODO M5) |
-| `obs` | Langfuse v3, **chưa có file** (TODO M5: `infra/langfuse/`, nặng ~3-4 GB RAM) |
+| `eval` | chưa có service riêng; chỉ khi đặt `ACME_ENV=eval` mới cho adapter `permissive` |
+| `obs` | Langfuse v3, **chưa có file**, đóng băng (không còn trong lộ trình; nặng ~3-4 GB RAM) |
 
 ## Chạy dev
 
@@ -43,7 +46,7 @@ Nguồn: `docs/design/04-infra-data-eval.md` PHẦN A, `00-contracts.md` §1/§7
    `127.0.0.1 keycloak.acme.local` (browser và container cùng thấy issuer `http://keycloak.acme.local:8080/realms/acme`).
 3. `bash infra/scripts/gen-secrets.sh` — sinh `./secrets/*` và `./.env` (đã gitignore). Điền `secrets/anthropic_api_key` / `gemini_api_key` nếu dùng provider thật.
    `--ci` ghi đè tất cả không hỏi (dùng cho CI compose-config); `--rotate <tên>` sinh lại một secret.
-4. `make models` (tải model theo `models.lock`, sau khi điền revision/sha256 thật) — sidecar từ chối khởi động nếu thiếu/lệch.
+4. (Chỉ khi bật profile `sidecar`, đóng băng) tải model theo `models.lock`; Makefile hiện chưa có target `models`. Bỏ qua bước này với stack mặc định.
 5. `docker compose up -d --build` (cần `uv.lock` và `web/pnpm-lock.yaml` có thật).
 6. Bench: `docker compose -f docker-compose.yml -f docker-compose.bench.yml --profile bench up -d gateway mock-provider`.
    Seed: `docker compose --profile seed run --rm seed`. Backup: `bash infra/scripts/backup.sh`.

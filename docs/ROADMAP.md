@@ -32,6 +32,7 @@ Còn lại:
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
 | Đưa tickets-mcp + approval-signer vào profile `tickets`; agent chạy được khi không có ticket (router chỉ docs/direct) | W | `docker compose up` mặc định không có 2 service này; smoke xanh; `--profile tickets` + E2E đóng ticket vẫn xanh |
+| Gỡ `depends_on` của agent → tickets-mcp và bff → approval-signer; gateway mặc định `GW_FEATURES=auth` (+ ghi usage), bỏ `GW_SIDECAR_URL` khỏi mặc định | W | Stack mặc định khoẻ khi không có tickets/sidecar |
 | Đo RAM/CPU lúc rảnh và khi chạy 20 câu hỏi; ghi bảng vào README | W | Bảng số đo thật; mục tiêu < 2,5 GB lúc rảnh |
 | Tắt `directAccessGrants` của client `admin-cli` trong realm `acme` | W | Test realm: không client nào cho password grant |
 | Cập nhật CLAUDE.md, SOLUTION theo ADR-006 | O | Xong (2026-10-30) |
@@ -70,7 +71,7 @@ Còn lại:
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
 | Kiểm tra rò rỉ: mỗi user trong 16 user hỏi bộ câu chạm tài liệu trái quyền; kiểm cả câu trả lời, trích dẫn, cache | W | 0 tài liệu trái quyền xuất hiện ở bất kỳ đâu |
-| Corpus độc (`data/corpus/`, 8 kỹ thuật injection) nạp vào kho; đo tỉ lệ tấn công thành công (ASR) có/không spotlighting và bộ kiểm chứng | W | Bảng ASR theo kỹ thuật |
+| Xây corpus độc (`data/corpus/` hiện trống; ≥ 50 tài liệu, 8 kỹ thuật injection, có ground truth) và nạp vào kho; đo tỉ lệ tấn công thành công (ASR) có/không spotlighting và bộ kiểm chứng | W | Bảng ASR theo kỹ thuật |
 | Canary trong tài liệu mật không bao giờ ra khỏi phạm vi quyền (log, response, usage) | W | Quét tự động = 0 |
 | Security regression chạy trong CI | W | CI fail khi hồi quy |
 

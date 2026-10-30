@@ -469,6 +469,9 @@ Giới hạn: pinning chống thay đổi *định nghĩa*, không chống nội
 ---
 ## 5. docs-mcp (RAG)
 
+> **Lưu ý (ADR-006, 2026-10-30):** từ ADR-006, thiết kế RAG chi tiết (loader, trích dẫn, đánh giá) ở [`08-rag-citations.md`](08-rag-citations.md); phần dưới vẫn là cơ sở cho ACL/RLS, spotlighting.
+> Khi mâu thuẫn về loader, chunking, schema cột trích dẫn, số chiều embedding, truy xuất hybrid thì theo 08.
+
 Cổng 8101, audience `docs-mcp`, scope `docs:read`, database `knowledge` (role runtime `kn_app`, chỉ SELECT; ingest dùng `kn_ingest`). Hai tool: `search_documents`, `get_document`, cả hai `readOnlyHint=true`.
 
 ### 5.0 Ports, adapters, services

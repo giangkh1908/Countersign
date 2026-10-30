@@ -1,5 +1,9 @@
 # Quyết định v1.2 (sau review-01-opus) — nguồn chung cho mọi worker
 
+> **Trạng thái phạm vi (ADR-006, 2026-10-30):** các quyết định bảo mật, identity, token và Ports & Adapters vẫn hiệu lực. Lộ trình milestone M2–M7 ở D0 bị thay bằng R0–R4 (`docs/ROADMAP.md`).
+> Các quyết định cho tính năng đóng băng (D1 approval-signer, D2/D3 sidecar, D4 semantic cache, D9 analytics, D10 user study, HA/hardening) chỉ còn là tham chiếu.
+> Mâu thuẫn giữa file này và ADR-006: ADR-006 thắng về phạm vi.
+
 > Ngày 2026-10-28. Orchestrator quyết định sau khi đọc `docs/reviews/review-01-opus.md` và ý kiến chủ dự án.
 > Mọi file 00–05, SOLUTION, ROADMAP phải khớp file này. Mâu thuẫn → file này thắng.
 

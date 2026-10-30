@@ -1,5 +1,9 @@
 # 00 — Hợp đồng dùng chung (Shared Contracts)
 
+> **Trạng thái phạm vi (ADR-006, 2026-10-30):** file này vẫn là nguồn chân lý cho identity/token (§4), RLS/ACL và schema Postgres (§3) và quy tắc Ports & Adapters (§9).
+> Phần liên quan tickets/approval (intent, approval token), policy-sidecar và observability nâng cao nằm trong chức năng đóng băng; giữ làm tham chiếu, không phát triển thêm.
+> Phạm vi hiện hành: `docs/adr/ADR-006-scope-rag-citations.md`, `docs/ROADMAP.md` v2.0.
+
 > **Nguồn chân lý duy nhất** cho tên dịch vụ, cổng, mạng, Redis keyspace, schema Postgres, JWT claims, mã lỗi, biến môi trường.
 > Mọi tài liệu thiết kế `01..04` và mọi dòng code phải khớp file này. Muốn đổi thì sửa file này trước và ghi ADR.
 > Phiên bản 1.4, 2026-10-29. Khi mâu thuẫn với `DECISIONS-v1.2.md` thì `DECISIONS-v1.2.md` thắng.

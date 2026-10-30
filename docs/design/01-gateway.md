@@ -1,5 +1,9 @@
 # 01 — Thiết kế chi tiết LLM Gateway
 
+> **Trạng thái phạm vi (ADR-006, 2026-10-30):** gateway chỉ giữ bản mỏng: auth API key, `/v1/chat/completions`, thêm `/v1/embeddings` (alias `acme-embed`, port `EmbeddingProvider`), ghi `usage_events` + chi phí.
+> Rate limit, budget đầy đủ, semantic cache, router chi phí (`acme-auto`), fallback nhiều provider, tích hợp PII/guard qua sidecar: đóng băng hoặc bỏ, không còn trong lộ trình.
+> Các phần đó vẫn là thiết kế tham chiếu nếu mở rộng lại.
+
 > Phiên bản 1.4, 2026-10-29. Tuân thủ `00-contracts.md` (tên key Redis, bảng Postgres, mã lỗi, header, env) và `DECISIONS-v1.2.md` (mâu thuẫn thì DECISIONS thắng). Chỗ nào contracts thiếu/chưa rõ thì **không sửa contracts** mà ghi vào mục 20–21.
 > Kiến trúc code theo `00-contracts.md §9` (Ports & Adapters, `abc.ABC`, factory registry, decorator).
 > Phạm vi: package `packages/gateway` (FastAPI, Python 3.12, `uv`). Phần suy luận model (embedding, prompt-injection guard, NER) **không** nằm trong gateway mà ở `06-policy-sidecar.md`. Tài liệu này là đặc tả để dev code thẳng theo; không chứa code chạy được của repo.
