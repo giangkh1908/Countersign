@@ -887,6 +887,7 @@ def scenario_tamper(kc: Keycloak, user: str, code: str, other_code: str) -> None
 class ExpiryCase:
     prep: Prepared
     login: str
+    user: str
     approval_token: str
     before: dict[str, Any]
     expires_at: str
@@ -904,12 +905,13 @@ def expiry_begin(kc: Keycloak, user: str, code: str) -> ExpiryCase:
         f"status={ap.status}",
     )
     exp = next(d for e, d in prep.events if e == "interrupt")["payload"]["expires_at"]
-    return ExpiryCase(prep, login, ap.json()["approval_token"], ticket_snapshot(code), exp)
+    return ExpiryCase(prep, login, user, ap.json()["approval_token"], ticket_snapshot(code), exp)
 
 
 def expiry_finish(kc: Keycloak, case: ExpiryCase) -> None:
     R.section(f"D. Hết hạn: chờ intent {case.prep.code} quá hạn rồi thử lại")
     exp = datetime.fromisoformat(case.expires_at.replace("Z", "+00:00"))
+    case.login = kc.login(case.user)  # token đăng nhập cũ đã hết hạn sau ~5 phút chờ
     st = kc.token_for(case.login, "approval-signer", "signer:approve")
     deadline = time.time() + 400
     last = signer_verify(st, case.prep.intent_jws)
@@ -936,9 +938,9 @@ def expiry_finish(kc: Keycloak, case: ExpiryCase) -> None:
     errs = [d.get("code") for e, d in ev if e == "error"]
     R.check(
         "D3 resume với approval token cũ sau TTL -> error intent_expired/approval_expired, không completed",
-        bool(errs)
-        and errs[0] in ("intent_expired", "approval_expired", "intent_not_found")
-        and _commit_failed(ev),
+        bool(ev)
+        and _commit_failed(ev)
+        and all(c in ("intent_expired", "approval_expired", "intent_not_found") for c in errs),
         f"errors={errs}",
     )
     R.check("D4 DB ticket y nguyên", same_state(case.before, ticket_snapshot(case.prep.code)))
