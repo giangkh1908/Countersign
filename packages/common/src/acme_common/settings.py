@@ -73,7 +73,7 @@ class CommonSettings(BaseSettings):
 
     # --- TokenBroker (oauth_token_exchange + CachingTokenBroker) ---
     token_cache_skew_s: float = 30.0
-    token_ignored_scopes: str = "openid,profile,email,offline_access,acme-claims"
+    token_ignored_scopes: str = "openid,profile,email,offline_access,acme-claims,aud-chat-ui"
 
     # --- RetryingHttpClient ---
     http_timeout_s: float = 10.0

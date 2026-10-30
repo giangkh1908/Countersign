@@ -35,3 +35,13 @@ def test_empty_env_value_falls_back_to_default(monkeypatch) -> None:
     assert (
         CommonSettings().mcp_rl_capacity == CommonSettings.model_fields["mcp_rl_capacity"].default
     )
+
+
+def test_default_ignored_scopes_cover_login_token_scopes() -> None:
+    """Token đăng nhập của chat-ui mang scope `aud-chat-ui` + `acme-claims` (client scope mặc định); khi
+    đổi token, Keycloak giữ lại chúng trong claim `scope`. Không được coi là scope_escalation
+    (bug phát hiện bởi E2E trình duyệt: mọi /api/* trả 502)."""
+    from acme_common.settings import CommonSettings
+
+    ignored = CommonSettings().ignored_scopes
+    assert {"openid", "acme-claims", "aud-chat-ui"} <= ignored

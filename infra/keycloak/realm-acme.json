@@ -32,6 +32,42 @@
   },
   "clientScopes": [
     {
+      "name": "profile",
+      "description": "OIDC profile (name, preferred_username) cho id_token cua BFF; BFF yeu cau scope `openid profile`",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "full name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "false",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "false",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "name": "acme-claims",
       "description": "dept/clearance/roles claims",
       "protocol": "openid-connect",
@@ -309,6 +345,7 @@
         "aud-chat-ui"
       ],
       "optionalClientScopes": [
+        "profile",
         "agent:invoke",
         "signer:approve"
       ]
