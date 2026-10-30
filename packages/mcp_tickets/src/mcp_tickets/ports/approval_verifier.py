@@ -1,5 +1,15 @@
-"""Port `ApprovalVerifier`: `verify(token, principal, intent_record)`.
-Adapter v1: `es256_jwt`, `permissive` (chỉ ACME_ENV=eval).
-Milestone: M3. Docs: docs/design/02-mcp-servers.md, 05-approval-flow.md; contracts §9.2.
-Chưa có class/ABC (khung).
-"""
+"""Port `ApprovalVerifier` (02 §6.7 bước 1-5, 05 §4.3-4.4)."""
+
+from __future__ import annotations
+
+import abc
+
+from acme_common.ports import Principal
+
+from .types import Approval
+
+
+class ApprovalVerifier(abc.ABC):
+    @abc.abstractmethod
+    def verify(self, token: str, principal: Principal, intent_id: str) -> Approval:
+        """Kiểm header/chữ ký/iss/aud/exp/sub/intent_id. Raise `ApprovalRejected(code)`."""

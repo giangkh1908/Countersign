@@ -1,5 +1,11 @@
-"""Port `ReplayGuard`: `consume(jti, ttl) -> bool`.
-Adapter v1: `redis`, `in_memory`.
-Milestone: M3. Docs: docs/design/02-mcp-servers.md, 05-approval-flow.md; contracts §9.2.
-Chưa có class/ABC (khung).
-"""
+"""Port `ReplayGuard`: tiêu thụ `jti` của approval đúng một lần (02 §6.0)."""
+
+from __future__ import annotations
+
+import abc
+
+
+class ReplayGuard(abc.ABC):
+    @abc.abstractmethod
+    async def consume(self, jti: str, ttl_s: int) -> bool:
+        """`True` = lần đầu (đã ghi nhận); `False` = đã dùng. Lỗi hạ tầng => `BackendUnavailable`."""
