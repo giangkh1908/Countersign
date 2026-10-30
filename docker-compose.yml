@@ -360,6 +360,7 @@ services:
     environment:
       <<: *pyapp-env
       MCP_AUDIENCE: docs-mcp
+      MCP_ALLOWED_HOSTS: "docs-mcp:8101,localhost:8101,127.0.0.1:8101"   # chống DNS rebinding của SDK MCP; thiếu thì Host nội bộ bị 421
       MCP_DATABASE_URL_FILE: /run/secrets/docs_database_url   # role kn_app (SELECT)
       MCP_AUDIT_DATABASE_URL_FILE: /run/secrets/docs_audit_database_url
       MCP_REDIS_URL_FILE: /run/secrets/docs_redis_url
@@ -391,6 +392,7 @@ services:
     environment:
       <<: *pyapp-env
       MCP_AUDIENCE: tickets-mcp
+      MCP_ALLOWED_HOSTS: "tickets-mcp:8102,localhost:8102,127.0.0.1:8102"   # chống DNS rebinding của SDK MCP; thiếu thì Host nội bộ bị 421
       MCP_DATABASE_URL_FILE: /run/secrets/tickets_database_url
       MCP_AUDIT_DATABASE_URL_FILE: /run/secrets/tickets_audit_database_url
       MCP_REDIS_URL_FILE: /run/secrets/tickets_redis_url
@@ -426,6 +428,7 @@ services:
     environment:
       <<: *pyapp-env
       MCP_AUDIENCE: analytics-mcp
+      MCP_ALLOWED_HOSTS: "analytics-mcp:8103,localhost:8103,127.0.0.1:8103"   # chống DNS rebinding của SDK MCP; thiếu thì Host nội bộ bị 421
       MCP_DATABASE_URL_FILE: /run/secrets/an_reader_password
       MCP_REDIS_URL: redis://analytics@redis-state:6379/0
       MCP_REDIS_PASSWORD_FILE: /run/secrets/redis_analytics_password
