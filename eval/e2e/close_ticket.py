@@ -919,6 +919,7 @@ def expiry_finish(kc: Keycloak, case: ExpiryCase) -> None:
         left = max(5.0, (exp - datetime.now(UTC)).total_seconds() + 3)
         print(f"  ... intent còn hạn, chờ {left:.0f}s (expires_at={case.expires_at})", flush=True)
         time.sleep(min(left, 60))
+        case.login = kc.login(case.user)
         st = kc.token_for(case.login, "approval-signer", "signer:approve")
         last = signer_verify(st, case.prep.intent_jws)
     R.check(
