@@ -408,23 +408,6 @@
       "directAccessGrantsEnabled": false,
       "defaultClientScopes": [],
       "optionalClientScopes": []
-    },
-    {
-      "clientId": "e2e-test",
-      "name": "e2e-test (DEV/TEST ONLY)",
-      "description": "DEV/TEST ONLY, never enable in production. Direct-grant public client for eval/e2e/close_ticket.py (no browser). Token has aud=chat-ui like the BFF login token.",
-      "enabled": true,
-      "protocol": "openid-connect",
-      "publicClient": true,
-      "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": true,
-      "serviceAccountsEnabled": false,
-      "fullScopeAllowed": false,
-      "defaultClientScopes": [
-        "acme-claims",
-        "aud-chat-ui"
-      ],
-      "optionalClientScopes": []
     }
   ],
   "users": [
