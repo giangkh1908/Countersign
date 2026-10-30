@@ -270,6 +270,19 @@
       ]
     }
   ],
+  "scopeMappings": [
+    {
+      "clientScope": "acme-claims",
+      "roles": [
+        "employee",
+        "team_lead",
+        "dept_manager",
+        "management",
+        "admin",
+        "auditor"
+      ]
+    }
+  ],
   "clients": [
     {
       "clientId": "chat-ui",
