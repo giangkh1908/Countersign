@@ -70,18 +70,32 @@ version = "0.1.0"
 source = { editable = "packages/bff" }
 dependencies = [
     { name = "acme-common" },
+    { name = "cryptography" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "pydantic-settings" },
+    { name = "redis" },
     { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "fakeredis" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "acme-common", editable = "packages/common" },
+    { name = "cryptography" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "pydantic-settings" },
+    { name = "redis", specifier = ">=5" },
     { name = "uvicorn", extras = ["standard"] },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "fakeredis", specifier = ">=2.26" }]
 
 [[package]]
 name = "acme-common"
