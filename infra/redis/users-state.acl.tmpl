@@ -5,7 +5,8 @@
 # docs: đọc+ghi taint (Lua taint_max) gồm {thread_id} và :recent; forget xoá key thread
 # analytics: ghi taint; không có ~mcp:tickets:*
 # bff: phiên BFF (D15/D16); không chạm gw:*/mcp:*; không MULTI/WATCH/EVAL
-user default off nopass -@all
+# default: off + resetpass (không mật khẩu nào). KHÔNG dùng nopass: với protected-mode yes, nopass làm Redis chặn mọi client ngoài loopback.
+user default off resetpass -@all
 user gateway on #@@REDIS_GATEWAY@@ ~gw:* &gw:events +@read +@write +@scripting +@pubsub -@dangerous
 user tickets on #@@REDIS_TICKETS@@ ~mcp:tickets:* ~mcp:rl:tickets-mcp:* ~mcp:taint:* +@read +@write +@scripting +multi +exec +discard -@dangerous
 user docs on #@@REDIS_DOCS@@ ~mcp:rl:docs-mcp:* ~mcp:taint:* +@read +@write +@scripting -@dangerous
