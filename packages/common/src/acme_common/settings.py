@@ -87,6 +87,25 @@ class CommonSettings(BaseSettings):
     rate_limiter_adapter: str = "in_memory"
     anchor_store_adapter: str = "file_append_only"
 
+    # --- EventSink postgres / audit hash-chain (contracts §3.1, §3.6) ---
+    event_sink_database_url: str | None = None  # gateway: usage_events + audit_log
+    mcp_audit_database_url: str | None = None  # MCP: tool_audit (role mcp_audit_w)
+    audit_hmac_key: str | None = None  # AUDIT_HMAC_KEY hoặc AUDIT_HMAC_KEY_FILE; >= 16 byte
+    audit_hmac_key_id: int = 1
+
+    # --- MCP server host (02 §1.2) ---
+    mcp_host: str = "mcp_sdk"  # tên adapter ToolServerHost
+    mcp_audience: str = ""
+    mcp_allowed_azp: str = ""
+    mcp_allowed_origins: str = ""
+    mcp_allowed_hosts: str = ""  # vd "docs-mcp:8101,localhost:8101"
+    mcp_rl_capacity: int = 30
+    mcp_rl_refill_per_s: float = 1.0
+    mcp_max_output_bytes: int = 32_768
+    mcp_redis_url: str | None = None
+    taint_recent_ttl_s: int = 86400
+    agent_thread_retention_days: int = 30
+
     # --- AnchorStore file_append_only ---
     audit_anchor_dir: str = "./data/audit-anchors"
 
@@ -131,6 +150,18 @@ class CommonSettings(BaseSettings):
     @property
     def required_claims(self) -> tuple[str, ...]:
         return _split(self.token_required_claims)
+
+    @property
+    def mcp_allowed_azp_set(self) -> frozenset[str]:
+        return frozenset(_split(self.mcp_allowed_azp))
+
+    @property
+    def mcp_allowed_hosts_set(self) -> tuple[str, ...]:
+        return _split(self.mcp_allowed_hosts)
+
+    @property
+    def mcp_allowed_origins_set(self) -> frozenset[str]:
+        return frozenset(_split(self.mcp_allowed_origins))
 
     @property
     def ignored_scopes(self) -> frozenset[str]:

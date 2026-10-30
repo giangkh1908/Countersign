@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 
 from ..ports.anchor_store import AnchorStore, AuditAnchor
@@ -12,6 +12,7 @@ from ..ports.event_sink import EventRecord, EventSink
 from ..ports.rate_limiter import RateLimiter
 from ..ports.token_broker import TokenBroker
 from ..ports.token_verifier import TokenVerifier
+from ..ports.tool_server_host import ASGIApp, RawToolHandler, ToolResult, ToolServerHost, ToolSpec
 from ..ports.types import AccessToken, LimitDecision, Principal
 
 
@@ -142,3 +143,34 @@ class FakeAnchorStore(AnchorStore):
 
     async def list_since(self, since_id: int) -> list[AuditAnchor]:
         return sorted((a for a in self.anchors if a.last_id > since_id), key=lambda a: a.last_id)
+
+
+class FakeToolServerHost(ToolServerHost):
+    """Host giả: lưu handler, `call()` gọi thẳng (không qua giao thức MCP, không auth)."""
+
+    def __init__(self) -> None:
+        self.tools: dict[str, tuple[ToolSpec, RawToolHandler]] = {}
+
+    def register(self, spec: ToolSpec, handler: RawToolHandler) -> None:
+        if spec.name in self.tools:
+            raise ValueError(f"tool {spec.name!r} already registered")
+        self.tools[spec.name] = (spec, handler)
+
+    def asgi_app(self) -> ASGIApp:
+        async def app(scope, receive, send):  # type: ignore[no-untyped-def]
+            if scope["type"] == "http":
+                await send({"type": "http.response.start", "status": 204, "headers": []})
+                await send({"type": "http.response.body", "body": b""})
+
+        return app
+
+    def tool_manifest(self) -> list[dict[str, object]]:
+        return [
+            {"name": s.name, "description": s.description, "inputSchema": dict(s.input_schema)}
+            for s, _ in self.tools.values()
+        ]
+
+    async def call(
+        self, name: str, arguments: Mapping[str, object], meta: Mapping[str, object] | None = None
+    ) -> ToolResult:
+        return await self.tools[name][1](arguments, meta or {})

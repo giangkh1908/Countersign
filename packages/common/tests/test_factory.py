@@ -55,9 +55,8 @@ def test_build_token_broker_unknown() -> None:
         factory.build_token_broker("nope", S, clock=CLOCK)
 
 
-@pytest.mark.parametrize("name", ["json_log", "postgres"])
-def test_build_event_sink(name: str) -> None:
-    assert isinstance(factory.build_event_sink(name, S), EventSink)
+def test_build_event_sink() -> None:
+    assert isinstance(factory.build_event_sink("json_log", S), EventSink)
 
 
 def test_build_event_sink_unknown() -> None:
@@ -87,6 +86,26 @@ def test_build_anchor_store_unknown() -> None:
 
 async def test_m2_stubs_fail_loudly() -> None:
     with pytest.raises(NotImplementedError):
-        factory.build_event_sink("postgres", S).append({"x": 1})
-    with pytest.raises(NotImplementedError):
         await factory.build_rate_limiter("redis_token_bucket", S, clock=CLOCK).release_slot("k")
+
+
+def test_build_tool_server_host() -> None:
+    from acme_common.ports import ToolServerHost, ToolServerHostNotConfigured
+
+    for name in ("mcp_sdk", "fake"):
+        assert isinstance(
+            factory.build_tool_server_host(name, S, server_name="docs-mcp"), ToolServerHost
+        )
+    with pytest.raises(ToolServerHostNotConfigured, match=r"known: \['fake', 'mcp_sdk'\]"):
+        factory.build_tool_server_host("nope", S, server_name="docs-mcp")
+
+
+def test_postgres_sink_needs_dsn_and_builds_with_it() -> None:
+    from acme_common.adapters.postgres_event_sink import PostgresEventSink
+
+    with pytest.raises(EventSinkNotConfigured):
+        factory.build_event_sink("postgres", S)
+    s = CommonSettings(
+        mcp_audit_database_url="postgresql://u:p@localhost/db", audit_hmac_key="k" * 32
+    )
+    assert isinstance(factory.build_event_sink("postgres", s), PostgresEventSink)

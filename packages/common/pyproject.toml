@@ -13,7 +13,16 @@ dependencies = [
     "httpx",
     "pyjwt[crypto]",
     # M2: thêm redis, sqlalchemy/psycopg khi triển khai adapter postgres_event_sink / redis_token_bucket.
+    "mcp>=2.3,<3",
+    "jsonschema>=4.26.0",
+    "redis>=8.1.0",
+    "psycopg[binary]>=3.2",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/acme_common"]
+
+[dependency-groups]
+dev = [
+    "fakeredis[lua]>=2.40.0",
+]

@@ -7,6 +7,7 @@ from .fakes import (
     FakeRateLimiter,
     FakeTokenBroker,
     FakeTokenVerifier,
+    FakeToolServerHost,
 )
 from .signing import ISSUER, FakeJwksEndpoint, TestSigner, make_claims
 
@@ -19,6 +20,7 @@ __all__ = [
     "FakeRateLimiter",
     "FakeTokenBroker",
     "FakeTokenVerifier",
+    "FakeToolServerHost",
     "TestSigner",
     "make_claims",
 ]

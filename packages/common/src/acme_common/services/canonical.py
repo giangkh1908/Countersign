@@ -1,7 +1,7 @@
 """Canonical JSON và `intent_sha256` (contracts §4.1, 02 §6.6).
 
-Bản sao tạm của `acme_common/services/canonical.py` (chưa có trong common); khi common có hàm này
-thì thay import và xoá file. Cùng thuật toán: khoá sắp xếp, không khoảng trắng, UTF-8, NFC, không float.
+Khoá sắp xếp, không khoảng trắng, UTF-8 không escape, chuẩn hoá NFC, từ chối float/NaN.
+Dùng chung: approval-signer (ký intent), tickets-mcp (băm intent), audit.
 """
 
 from __future__ import annotations
