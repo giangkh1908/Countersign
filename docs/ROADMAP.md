@@ -31,7 +31,7 @@ Còn lại:
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Đưa tickets-mcp + approval-signer vào profile `tickets`; agent chạy được khi không có ticket (router chỉ docs/direct) | W | `docker compose up` mặc định không có 2 service này; smoke xanh; `--profile tickets` + E2E đóng ticket vẫn xanh |
+| ✅ (345f304) Đưa tickets-mcp + approval-signer vào profile `tickets`; agent chạy được khi không có ticket (router chỉ docs/direct) | W | `docker compose up` mặc định không có 2 service này; smoke xanh; `--profile tickets` + E2E đóng ticket vẫn xanh |
 | Gỡ `depends_on` của agent → tickets-mcp và bff → approval-signer; gateway mặc định `GW_FEATURES=auth` (+ ghi usage), bỏ `GW_SIDECAR_URL` khỏi mặc định | W | Stack mặc định khoẻ khi không có tickets/sidecar |
 | Đo RAM/CPU lúc rảnh và khi chạy 20 câu hỏi; ghi bảng vào README | W | Bảng số đo thật; mục tiêu < 2,5 GB lúc rảnh |
 | Tắt `directAccessGrants` của client `admin-cli` trong realm `acme` | W | Test realm: không client nào cho password grant |
