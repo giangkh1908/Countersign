@@ -27,8 +27,11 @@ Nguồn: `docs/design/04-infra-data-eval.md` PHẦN A, `00-contracts.md` §1/§7
 
 | Profile | Nội dung |
 |---|---|
-| (mặc định) | postgres, redis-state, redis-cache, keycloak, migrate, gateway, policy-sidecar, approval-signer, docs/tickets/analytics-mcp, agent, bff, prometheus, grafana |
-| `bench` | `mock-provider`; kèm overlay `docker-compose.bench.yml` (gỡ egress của gateway, `GW_PROVIDER_OVERRIDE=mock`, ghim `cpuset`) |
+| (mặc định, M1 core) | postgres, redis-state, redis-cache, keycloak, migrate, mock-provider, gateway, approval-signer, docs-mcp, tickets-mcp, agent, bff (kiểm: `bash scripts/smoke.sh`) |
+| `sidecar` | policy-sidecar (M4; cần `make models`) |
+| `analytics` | analytics-mcp (M3) |
+| `obs` | prometheus, grafana |
+| `bench` | overlay `docker-compose.bench.yml` (`mock-provider` nay chạy mặc định); kèm overlay `docker-compose.bench.yml` (gỡ egress của gateway, `GW_PROVIDER_OVERRIDE=mock`, ghim `cpuset`) |
 | `seed` | job `seed` (sinh dữ liệu mẫu) |
 | `eval` | chưa có service riêng; chỉ khi đặt `ACME_ENV=eval` mới cho adapter `permissive` (TODO M5) |
 | `obs` | Langfuse v3, **chưa có file** (TODO M5: `infra/langfuse/`, nặng ~3-4 GB RAM) |

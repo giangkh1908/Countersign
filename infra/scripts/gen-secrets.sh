@@ -90,6 +90,23 @@ if should_write gw_database_url || [ "$ROTATE" = "gw_app_password" ]; then
   chmod "$MODE" "$SEC/gw_database_url"
 fi
 
+# URL đầy đủ cho các service nhận DSN/URL (app không tự ghép từ mật khẩu rời). Mật khẩu chỉ [A-Za-z0-9].
+# put_url NAME TEMPLATE PASSWORD_SECRET  (TEMPLATE chứa @PW@)
+put_url() {
+  local name="$1" tmpl="$2" pwname="$3"
+  if should_write "$name" || [ "$ROTATE" = "$pwname" ]; then
+    printf '%s' "${tmpl/@PW@/$(cat "$SEC/$pwname")}" > "$SEC/$name"
+    chmod "$MODE" "$SEC/$name"
+  fi
+}
+put_url docs_database_url          'postgresql://kn_app:@PW@@postgres:5432/knowledge'        kn_app_password
+put_url docs_audit_database_url    'postgresql://mcp_audit_w:@PW@@postgres:5432/knowledge'   mcp_audit_password
+put_url docs_redis_url             'redis://docs:@PW@@redis-state:6379/0'                    redis_docs_password
+put_url tickets_database_url       'postgresql://tk_app:@PW@@postgres:5432/tickets'          tk_app_password
+put_url tickets_audit_database_url 'postgresql://mcp_audit_w:@PW@@postgres:5432/tickets'     mcp_audit_password
+put_url tickets_redis_url          'redis://tickets:@PW@@redis-state:6379/0'                 redis_tickets_password
+put_url agent_database_url         'postgresql://ag_app:@PW@@postgres:5432/agent'            ag_app_password
+
 # Cặp khoá ES256: approval (private -> approval-signer, public -> tickets-mcp),
 # intent (private -> tickets-mcp, public -> approval-signer qua secrets/intent-keys/)
 genkey() {
