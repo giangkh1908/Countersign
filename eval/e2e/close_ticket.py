@@ -226,6 +226,12 @@ def mcp_call(
     return json.loads(p.stdout.strip().splitlines()[-1])
 
 
+def _commit_failed(ev: list[tuple[str, dict[str, Any]]]) -> bool:
+    """Resume với token xấu: agent vẫn kết thúc lượt (đáp lỗi) nhưng commit phải thất bại."""
+    ends = [d for e, d in ev if e == "tool_end"]
+    return bool(ends) and not any(d.get("ok") for d in ends)
+
+
 def parse_sse(text: str) -> list[tuple[str, dict[str, Any]]]:
     out: list[tuple[str, dict[str, Any]]] = []
     for block in text.replace("\r\n", "\n").split("\n\n"):
@@ -364,7 +370,7 @@ def pick_tickets(sub: str, n: int) -> list[str]:
         "tickets",
         (
             "select code from tickets where assignee_sub = "
-            f"'{lit(sub)}' and status in ('open','in_progress') order by code limit {int(n)}"
+            f"'{lit(sub)}' and status in ('open','in_progress','resolved') order by code limit {int(n)}"
         ),
     )
     return [r["code"] for r in rows]
@@ -500,7 +506,7 @@ def scenario_positive(kc: Keycloak, user: str, sub: str, code: str) -> dict[str,
     before = ticket_snapshot(code)
     R.check(
         "A0 ticket chưa đóng trước khi chạy",
-        before["status"] in ("open", "in_progress"),
+        before["status"] in ("open", "in_progress", "resolved"),
         before["status"],
     )
 
@@ -638,7 +644,7 @@ def scenario_positive(kc: Keycloak, user: str, sub: str, code: str) -> dict[str,
     R.check("A19 ticket_events tăng đúng 1", after["n_events"] == before["n_events"] + 1)
 
     tool_audit = audit_rows("tickets", prep.intent_id)
-    acts = sorted({(r["action"], r["decision"]) for r in tool_audit})
+    acts = sorted({(r["resource"], r["decision"]) for r in tool_audit})
     R.check(
         "A20 tool_audit(tickets): có prepare_close_ticket và commit_intent cho intent này",
         any(a == "prepare_close_ticket" for a, _ in acts)
@@ -701,11 +707,11 @@ def scenario_positive(kc: Keycloak, user: str, sub: str, code: str) -> dict[str,
         {"intent_id": prep.intent_id, "approval_token": approval_token},
         prep.thread_id,
     )
-    err = (rp.get("data") or {}).get("error", {})
+    err = rp.get("data") or {}
     R.check(
         "A27 replay: commit_intent lại với CÙNG approval_token -> approval_replayed (jti)",
         rp.get("is_error") is True and err.get("code") == "approval_replayed",
-        f"code={err.get('code')} details={err.get('details')}",
+        f"rp={str(rp)[:300]}",
     )
     R.check(
         "A28 sau replay DB y nguyên (không đóng/ghi event lần 2)",
@@ -788,17 +794,17 @@ def scenario_wrong_user(kc: Keycloak, user: str, other: str, code: str) -> None:
     r = resume(agent_tok_a, prep, {"type": "approve", "approval_token": "x" * 40})
     ev = parse_sse(r.body) if r.status == 200 else []
     R.check(
-        "B11 resume approve với approval_token rác -> không thực hiện (SSE error, không completed)",
-        not any(e == "done" and d.get("status") == "completed" for e, d in ev),
-        f"status={r.status} events={[e for e, _ in ev]}",
+        "B11 resume approve với approval_token rác -> commit bị từ chối (tool_end ok=false)",
+        bool(ev) and _commit_failed(ev),
+        f"status={r.status} tail={[(e, d) for e, d in ev if e in ('tool_end', 'done', 'error')]}",
     )
 
     R.check("B12 DB ticket y nguyên sau mọi lần thử", same_state(before, ticket_snapshot(code)))
     after_audit = audit_rows("tickets", prep.intent_id)
     R.check(
         "B13 tool_audit: không có commit_intent THÀNH CÔNG cho intent này",
-        not any(r["action"] == "commit_intent" and r["decision"] == "allow" for r in after_audit),
-        str(sorted({(r["action"], r["decision"]) for r in after_audit})) + f" (trước {n_audit})",
+        not any(r["resource"] == "commit_intent" and r["decision"] == "allow" for r in after_audit),
+        str(sorted({(r["resource"], r["decision"]) for r in after_audit})) + f" (trước {n_audit})",
     )
 
 
@@ -838,11 +844,11 @@ def scenario_tamper(kc: Keycloak, user: str, code: str, other_code: str) -> None
     rp = mcp_call(
         tk, "commit_intent", {"intent_id": prep.intent_id, "approval_token": forged}, prep.thread_id
     )
-    err = (rp.get("data") or {}).get("error", {})
+    err = rp.get("data") or {}
     R.check(
         "C3 approval token bị sửa intent_sha256 -> commit_intent bị từ chối",
         rp.get("is_error") is True and bool(err.get("code")),
-        f"code={err.get('code')}",
+        f"rp={str(rp)[:300]}",
     )
 
     # token hợp lệ của intent X (prep2) dùng cho intent khác (prep): sha/intent không khớp
@@ -850,20 +856,20 @@ def scenario_tamper(kc: Keycloak, user: str, code: str, other_code: str) -> None
     rp = mcp_call(
         tk, "commit_intent", {"intent_id": prep.intent_id, "approval_token": ap2}, prep.thread_id
     )
-    err = (rp.get("data") or {}).get("error", {})
+    err = rp.get("data") or {}
     R.check(
         "C4 approval token của intent khác -> commit_intent bị từ chối",
         rp.get("is_error") is True and bool(err.get("code")),
-        f"code={err.get('code')}",
+        f"rp={str(rp)[:300]}",
     )
 
     # đường agent: resume bằng token của intent khác
     rs = resume(agent_tok, prep, {"type": "approve", "approval_token": ap2})
     ev = parse_sse(rs.body) if rs.status == 200 else []
     R.check(
-        "C5 resume bằng approval token của intent khác -> không completed",
-        not any(e == "done" and d.get("status") == "completed" for e, d in ev),
-        f"events={[e for e, _ in ev]}",
+        "C5 resume bằng approval token của intent khác -> commit bị từ chối (tool_end ok=false)",
+        bool(ev) and _commit_failed(ev),
+        f"tail={[(e, d) for e, d in ev if e in ('tool_end', 'done', 'error')]}",
     )
 
     R.check(
@@ -873,7 +879,7 @@ def scenario_tamper(kc: Keycloak, user: str, code: str, other_code: str) -> None
     a1, a2 = audit_rows("tickets", prep.intent_id), audit_rows("tickets", prep2.intent_id)
     R.check(
         "C7 tool_audit: không commit_intent thành công cho cả hai intent",
-        not any(r["action"] == "commit_intent" and r["decision"] == "allow" for r in a1 + a2),
+        not any(r["resource"] == "commit_intent" and r["decision"] == "allow" for r in a1 + a2),
     )
 
 
@@ -932,14 +938,14 @@ def expiry_finish(kc: Keycloak, case: ExpiryCase) -> None:
         "D3 resume với approval token cũ sau TTL -> error intent_expired/approval_expired, không completed",
         bool(errs)
         and errs[0] in ("intent_expired", "approval_expired", "intent_not_found")
-        and not any(e == "done" and d.get("status") == "completed" for e, d in ev),
+        and _commit_failed(ev),
         f"errors={errs}",
     )
     R.check("D4 DB ticket y nguyên", same_state(case.before, ticket_snapshot(case.prep.code)))
     a = audit_rows("tickets", case.prep.intent_id)
     R.check(
         "D5 tool_audit: không commit_intent thành công",
-        not any(r["action"] == "commit_intent" and r["decision"] == "allow" for r in a),
+        not any(r["resource"] == "commit_intent" and r["decision"] == "allow" for r in a),
     )
 
 
@@ -1011,7 +1017,7 @@ def main() -> int:
             print("  WARN: không reset được kịch bản mock-provider", file=sys.stderr)
 
     print("\n== TỔNG KẾT ==")
-    for name, ok, detail in R.rows:
+    for name, ok, _detail in R.rows:
         print(f"{'PASS' if ok else 'FAIL'}  {name}")
     print(
         f"\n{len(R.rows) - R.failed}/{len(R.rows)} assertion đạt; {int(time.time() - t0)}s; expiry={'bỏ qua' if args.skip_expiry else 'đã chạy'}"
