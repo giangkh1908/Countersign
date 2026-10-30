@@ -9,7 +9,7 @@ from typing import Any
 
 from acme_common.http import HttpError, RetryingHttpClient
 
-from ..services.errors import UpstreamStatus
+from ..services.errors import ApiError, UpstreamStatus
 from .agent_client import auth_headers, error_code_of
 
 
@@ -19,9 +19,15 @@ class SignerClient:
         self._http = http
 
     async def _post(self, path: str, token: str, intent_jws: str) -> dict[str, Any]:
-        resp = await self._http.post(
-            f"{self._base}{path}", json={"intent_jws": intent_jws}, headers=auth_headers(token)
-        )
+        try:
+            resp = await self._http.post(
+                f"{self._base}{path}", json={"intent_jws": intent_jws}, headers=auth_headers(token)
+            )
+        except HttpError as exc:
+            if exc.kind == "connection":
+                # signer vắng mặt (profile `tickets` tắt): lỗi phụ thuộc rõ ràng (503), BFF vẫn khoẻ.
+                raise ApiError(503, "upstream_unavailable", True) from None
+            raise
         if resp.status_code >= 400:
             raise UpstreamStatus(
                 "signer", resp.status_code, error_code_of(resp), resp.headers.get("retry-after")

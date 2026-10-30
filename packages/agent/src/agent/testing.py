@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict
 from .container import Container
 from .factory import build_agent_registry, build_serde
 from .graph.builder import build_graph
+from .ports.service_probe import ServiceProbe
 from .ports.tool_provider import ToolProvider
 from .settings import Settings
 
@@ -222,3 +223,15 @@ def route(name: str) -> AIMessage:
 
 def tool_call(name: str, args: dict[str, Any], cid: str = "c1") -> AIMessage:
     return AIMessage("", tool_calls=[{"name": name, "args": args, "id": cid}])
+
+
+class FakeServiceProbe(ServiceProbe):
+    """Probe giả: `up` là tập URL được coi là khoẻ."""
+
+    def __init__(self, up: set[str] | None = None) -> None:
+        self.up = up or set()
+        self.calls: list[str] = []
+
+    async def is_reachable(self, url: str) -> bool:
+        self.calls.append(url)
+        return url in self.up

@@ -176,6 +176,22 @@ async def test_signer_errors_are_mapped(logged_in: Env) -> None:
     assert r.status_code == 410 and len(logged_in.backends.paths("signer.test")) == n
 
 
+async def test_signer_absent_returns_503_upstream_unavailable_and_bff_stays_healthy(
+    logged_in: Env,
+) -> None:
+    set_interrupt_stream(logged_in)
+    b = logged_in.browser
+    await b.post("/api/chat", json={**CHAT, "thread_id": THREAD})
+    logged_in.backends.signer_down = True
+    body = {"thread_id": THREAD, "interrupt_id": "int_1"}
+    r = await b.post("/api/intents/verify", json=body)
+    assert r.status_code == 503 and r.json()["error"]["code"] == "upstream_unavailable"
+    assert r.json()["error"]["retryable"] is True
+    r = await b.post("/api/approvals", json={**body, "intent_sha256": SHA})
+    assert r.status_code in (422, 503)  # chưa verify thì 422; không bao giờ 500
+    assert (await b.get("/healthz")).status_code == 200
+
+
 async def test_token_exchange_denied_maps_to_502_per_contract() -> None:
     from bff_harness import build_env
 

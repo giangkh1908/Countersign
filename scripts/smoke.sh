@@ -4,7 +4,14 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-SERVICES=(postgres redis-state redis-cache keycloak mock-provider gateway approval-signer docs-mcp tickets-mcp agent bff)
+SERVICES=(postgres redis-state redis-cache keycloak mock-provider gateway docs-mcp agent bff)
+INTERNAL=(agent:8200 docs-mcp:8101 mock-provider:8900)
+# Profile `tickets` (R0): chỉ kiểm tickets-mcp / approval-signer khi chúng đang chạy.
+if [ -n "$(docker compose ps -a -q tickets-mcp 2>/dev/null | head -n1)" ]; then
+  SERVICES+=(approval-signer tickets-mcp)
+  INTERNAL+=(approval-signer:8310 tickets-mcp:8102)
+  echo "(profile tickets đang bật: kiểm thêm approval-signer, tickets-mcp)"
+fi
 fail=0
 ok()  { printf '  OK    %s\n' "$*"; }
 bad() { printf '  FAIL  %s\n' "$*" >&2; fail=1; }
@@ -33,7 +40,7 @@ http_ok bff      http://localhost:8300/healthz
 http_ok keycloak http://localhost:8080/realms/acme/.well-known/openid-configuration
 
 echo "== HTTP nội bộ (từ container bff, mạng core) =="
-for t in agent:8200 approval-signer:8310 docs-mcp:8101 tickets-mcp:8102 mock-provider:8900; do
+for t in "${INTERNAL[@]}"; do
   if docker compose exec -T bff python -c "import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://$t/healthz',timeout=3).status==200 else 1)" >/dev/null 2>&1; then
     ok "$t/healthz -> 200"; else bad "$t/healthz không phản hồi 200"; fi
 done
