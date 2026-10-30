@@ -1,5 +1,10 @@
 # Giải pháp: Nền tảng trợ lý AI nội bộ doanh nghiệp
 
+> **Phạm vi đã thu hẹp (2026-10-30):** xem [ADR-006](adr/ADR-006-scope-rag-citations.md) và [`ROADMAP.md`](ROADMAP.md) v2.0.
+> Đề tài hiện là trợ lý tri thức nội bộ có trích dẫn kiểm chứng được, có phân quyền theo user; corpus và dữ liệu đánh giá ở
+> [`../data/SOURCES.md`](../data/SOURCES.md). Tài liệu dưới đây (v1.3) giữ làm tham chiếu kiến trúc: phần gateway đầy đủ, ticket/phê duyệt,
+> analytics, policy-sidecar, quan sát và hardening nay **đóng băng hoặc bỏ**; phần identity, BFF, docs-mcp, Ports & Adapters vẫn áp dụng.
+
 > LangGraph điều phối agent · MCP kết nối hệ thống nghiệp vụ · LLM Gateway tự phát triển (bảo mật + kiểm soát chi phí) · Phê duyệt ràng buộc giao dịch
 >
 > Phiên bản 1.3, 2026-10-29 (D15: UI React + TS + BFF thay Chainlit). Đây là **dự án sản phẩm phát triển tự do**: nền tảng trợ lý AI nội bộ self-host, hướng tới chạy được thật trong doanh nghiệp. Lộ trình theo milestone (xem [`ROADMAP.md`](ROADMAP.md)); mục tiêu số là SLO/tiêu chí chấp nhận (acceptance). Research chi tiết nằm ở `docs/research/01..04`; lý do các thay đổi v1.2 ở `docs/reviews/review-01-opus.md` và `design/DECISIONS-v1.2.md`.

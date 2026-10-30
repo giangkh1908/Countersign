@@ -1,6 +1,7 @@
 # AI_EXAMPLE — Nền tảng trợ lý AI nội bộ doanh nghiệp
 
-Đề tài: LangGraph điều phối agent, MCP kết nối hệ thống nghiệp vụ, LLM Gateway tự phát triển (bảo mật + kiểm soát chi phí).
+Đề tài (từ 2026-10-30, `docs/adr/ADR-006-scope-rag-citations.md`): trợ lý tri thức nội bộ trả lời từ tài liệu công ty, **trích dẫn kiểm chứng được**, có phân quyền theo user. Nghiên cứu: truy xuất hybrid tiếng Việt, kiểm chứng trích dẫn sau sinh, rò rỉ trái quyền và prompt injection gián tiếp. Corpus: luật Việt Nam từ vbpl.vn (`data/SOURCES.md`).
+Giữ: Keycloak + BFF + SPA, gateway bản mỏng, docs-mcp, agent LangGraph. Đóng băng qua compose profile: tickets/approval (`tickets`), analytics, sidecar, obs.
 
 ## Đội agent
 | Vai trò | Agent | Model | Nhiệm vụ |
