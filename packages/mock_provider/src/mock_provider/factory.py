@@ -1,11 +1,52 @@
-"""Factory của mock_provider: chọn adapter theo config bằng registry dict + lazy import.
+"""Factory của mock_provider: chọn wire format theo tên bằng registry dict + lazy import.
 
-Quy tắc (contracts §9.1 mục 5): KHÔNG dùng chuỗi if/elif. Mỗi vendor có một hàm loader
-import lười (`from .adapters.<vendor> import ...` nằm TRONG hàm). Tên lạ -> raise
-`XxxNotConfigured` kèm `sorted(_REGISTRY)`. Factory bọc sẵn decorator cross-cutting.
+Mock_provider là service đứng riêng (không phải port của gateway) nên không có ABC; factory chỉ
+gom các router wire-format. Thêm format mới = thêm một file trong `adapters/` + một dòng ở đây.
 """
 
 from collections.abc import Callable
 
-# TODO: điền loader theo bảng port §9.2 khi triển khai milestone tương ứng.
-_REGISTRY: dict[str, Callable[..., object]] = {}
+from fastapi import APIRouter
+
+from .behavior import Context
+
+
+def _load_anthropic(ctx: Context) -> APIRouter:
+    from .adapters.anthropic import router
+
+    return router(ctx)
+
+
+def _load_openai(ctx: Context) -> APIRouter:
+    from .adapters.openai import router
+
+    return router(ctx)
+
+
+def _load_gemini(ctx: Context) -> APIRouter:
+    from .adapters.gemini import router
+
+    return router(ctx)
+
+
+_REGISTRY: dict[str, Callable[[Context], APIRouter]] = {
+    "anthropic": _load_anthropic,
+    "openai": _load_openai,
+    "gemini": _load_gemini,
+}
+
+
+class WireNotConfigured(ValueError):
+    pass
+
+
+def build_router(name: str, ctx: Context) -> APIRouter:
+    try:
+        loader = _REGISTRY[name]
+    except KeyError:
+        raise WireNotConfigured(f"wire '{name}' không có; hợp lệ: {sorted(_REGISTRY)}") from None
+    return loader(ctx)
+
+
+def wire_names() -> list[str]:
+    return sorted(_REGISTRY)
