@@ -63,8 +63,8 @@ def test_users_exist_in_realm(out):
     for d in _docs(out):
         assert d["owner_sub"] in subs
     sql = (out / "sql" / "tickets.sql").read_text(encoding="utf-8")
-    used = set(re.findall(r"'([a-z]+\.[a-z]+)'", sql))
-    assert used <= names
+    used = set(re.findall(r"'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'", sql))
+    assert used <= ids
     assert used  # có tham chiếu user
 
 
