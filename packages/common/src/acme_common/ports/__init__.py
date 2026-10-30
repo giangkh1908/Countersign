@@ -13,11 +13,13 @@ from .errors import (
     TokenInvalid,
     TokenServiceUnavailable,
     TokenVerifierNotConfigured,
+    ToolServerHostNotConfigured,
 )
 from .event_sink import EventRecord, EventSink
 from .rate_limiter import RateLimiter
 from .token_broker import TokenBroker
 from .token_verifier import TokenVerifier
+from .tool_server_host import RawToolHandler, ToolResult, ToolServerHost, ToolSpec
 from .types import AccessToken, LimitDecision, Principal
 
 __all__ = [
@@ -42,4 +44,9 @@ __all__ = [
     "TokenServiceUnavailable",
     "TokenVerifier",
     "TokenVerifierNotConfigured",
+    "RawToolHandler",
+    "ToolResult",
+    "ToolServerHost",
+    "ToolServerHostNotConfigured",
+    "ToolSpec",
 ]

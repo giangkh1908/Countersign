@@ -9,11 +9,11 @@ from typing import Any
 import jwt
 import pytest
 from acme_common.ports import Principal, TokenServiceUnavailable
+from acme_common.services.canonical import intent_sha256
 from acme_common.testing import FakeClock, FakeRateLimiter, FakeTokenVerifier, TestSigner
 from approval_signer.adapters.es256_jws import Es256JwsIntentVerifier
 from approval_signer.adapters.es256_jwt import Es256JwtApprovalSigner
 from approval_signer.api.app import Deps, create_app
-from approval_signer.canonical import intent_sha256
 from approval_signer.factory import build_approval_signer, build_intent_verifier
 from approval_signer.ports import (
     ApprovalSignerNotConfigured,

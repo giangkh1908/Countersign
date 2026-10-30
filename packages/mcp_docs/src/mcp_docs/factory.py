@@ -1,7 +1,7 @@
 """Factory của mcp_docs: chọn adapter theo Settings (contracts §9.1 mục 5).
 
 Quy tắc: registry dict + lazy import (import adapter bên trong loader), KHÔNG dùng chuỗi if/elif.
-Tên lạ -> raise XxxNotConfigured kèm danh sách tên hợp lệ. Port: DocumentRetriever, Reranker, DocumentLoader, ToolServerHost.
+Tên lạ -> raise XxxNotConfigured kèm danh sách tên hợp lệ. Port: DocumentRetriever, Reranker, DocumentLoader. ToolServerHost lấy từ acme_common (acme_common.factory.build_tool_server_host).
 """
 
 from collections.abc import Callable

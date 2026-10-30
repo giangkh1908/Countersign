@@ -20,11 +20,13 @@ from .ports.errors import (
     RateLimiterNotConfigured,
     TokenBrokerNotConfigured,
     TokenVerifierNotConfigured,
+    ToolServerHostNotConfigured,
 )
 from .ports.event_sink import EventSink
 from .ports.rate_limiter import RateLimiter
 from .ports.token_broker import TokenBroker
 from .ports.token_verifier import TokenVerifier
+from .ports.tool_server_host import ToolServerHost
 from .settings import CommonSettings
 
 
@@ -161,8 +163,19 @@ def _load_json_log_sink(settings: CommonSettings) -> EventSink:
 
 def _load_postgres_sink(settings: CommonSettings) -> EventSink:
     from .adapters.postgres_event_sink import PostgresEventSink
+    from .audit import AuditKeyring
 
-    return PostgresEventSink()
+    dsn = settings.event_sink_database_url or settings.mcp_audit_database_url
+    if not dsn:
+        raise EventSinkNotConfigured(
+            "postgres sink needs EVENT_SINK_DATABASE_URL or MCP_AUDIT_DATABASE_URL"
+        )
+    keyring = (
+        AuditKeyring.single(settings.audit_hmac_key, settings.audit_hmac_key_id)
+        if settings.audit_hmac_key
+        else None
+    )
+    return PostgresEventSink(dsn, keyring)
 
 
 _SINKS: dict[str, Callable[[CommonSettings], EventSink]] = {
@@ -212,3 +225,33 @@ _ANCHOR_STORES: dict[str, Callable[[CommonSettings], AnchorStore]] = {
 
 def build_anchor_store(name: str, settings: CommonSettings) -> AnchorStore:
     return _lookup(_ANCHOR_STORES, name, AnchorStoreNotConfigured)(settings)
+
+
+# --- ToolServerHost ---
+def _load_mcp_sdk_host(settings: CommonSettings, name: str) -> ToolServerHost:
+    from .adapters.mcp_sdk import McpSdkHost
+
+    return McpSdkHost(
+        name,
+        allowed_hosts=settings.mcp_allowed_hosts_set,
+        allowed_origins=tuple(settings.mcp_allowed_origins_set),
+    )
+
+
+def _load_fake_host(settings: CommonSettings, name: str) -> ToolServerHost:
+    from .testing import FakeToolServerHost
+
+    return FakeToolServerHost()
+
+
+_TOOL_HOSTS: dict[str, Callable[[CommonSettings, str], ToolServerHost]] = {
+    "mcp_sdk": _load_mcp_sdk_host,
+    "fake": _load_fake_host,
+}
+
+
+def build_tool_server_host(
+    name: str, settings: CommonSettings, *, server_name: str
+) -> ToolServerHost:
+    """`name` thường là `settings.mcp_host`; `server_name` vd `docs-mcp`."""
+    return _lookup(_TOOL_HOSTS, name, ToolServerHostNotConfigured)(settings, server_name)

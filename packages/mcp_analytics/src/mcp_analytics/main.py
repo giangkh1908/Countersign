@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 app = FastAPI(title="analytics-mcp")
 
-# TODO: endpoint `/mcp` (Streamable HTTP) sẽ mount từ ToolServerHost.asgi_app() sau spike M0.
+# TODO: dựng host bằng acme_common.factory.build_tool_server_host + acme_common.mcp.AuthMiddleware (ADR-003).
 
 
 @app.get("/healthz")
