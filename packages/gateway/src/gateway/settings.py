@@ -40,6 +40,7 @@ class Settings(CommonSettings):
     gw_max_body_bytes: int = 4 * 1024 * 1024
     gw_features: str = "auth,ratelimit,budget,pii,guard,cache,router"
     gw_pii_strict: bool = False
+    gw_sink_flush_interval_s: float = 2.0  # chu kỳ đẩy buffer EventSink (usage_events)
 
     @property
     def key_pepper(self) -> bytes:

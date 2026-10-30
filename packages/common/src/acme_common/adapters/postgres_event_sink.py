@@ -53,6 +53,7 @@ class PostgresEventSink(EventSink):
         self._audit: deque[tuple[str, dict[str, Any]]] = deque(maxlen=max_buffer)
         self._lock = threading.RLock()
         self._conn: psycopg.Connection[Any] | None = None
+        self._flush_scheduled = False
         self.dropped = 0
         self.write_failures = 0
 
@@ -92,7 +93,22 @@ class PostgresEventSink(EventSink):
             self._usage.append({k: record[k] for k in _USAGE_COLUMNS if k in record})
             full = len(self._usage) >= self._batch_size
         if full:
-            self._flush_usage()
+            self._flush_usage_async()
+
+    def _flush_usage_async(self) -> None:
+        """Buffer đầy: ghi ở thread nền để `append` (gọi trong event loop) không chặn request."""
+        with self._lock:
+            if self._flush_scheduled:
+                return
+            self._flush_scheduled = True
+
+        def run() -> None:
+            try:
+                self._flush_usage()
+            finally:
+                self._flush_scheduled = False
+
+        threading.Thread(target=run, name="usage-flush", daemon=True).start()
 
     def _append_audit(self, table: str, record: EventRecord, sync: bool) -> None:
         if self._keyring is None:
