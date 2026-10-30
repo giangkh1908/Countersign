@@ -8,8 +8,10 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic-settings",
     "acme-common",
+    "redis>=5",
+    "httpx",
+    "cryptography",
 ]
-# M1: redis, httpx (RetryingHttpClient), cryptography (AES-GCM), SSE parsing
 
 [tool.uv.sources]
 acme-common = { workspace = true }
@@ -20,3 +22,14 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bff"]
+
+[dependency-groups]
+dev = [
+    "fakeredis>=2.26",
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Path", "fastapi.Query"]

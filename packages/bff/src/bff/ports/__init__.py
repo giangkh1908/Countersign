@@ -1,1 +1,23 @@
-"""Re-export TokenBroker, TokenVerifier từ acme_common (không import vendor). Milestone M5. Docs: docs/design/07-web-bff.md §2.1."""
+"""Re-export các port dùng chung từ acme_common (không import vendor). Docs: 07 §2.1."""
+
+from acme_common.ports import (
+    AccessToken,
+    Clock,
+    Principal,
+    TokenBroker,
+    TokenExchangeDenied,
+    TokenInvalid,
+    TokenServiceUnavailable,
+    TokenVerifier,
+)
+
+__all__ = [
+    "AccessToken",
+    "Clock",
+    "Principal",
+    "TokenBroker",
+    "TokenExchangeDenied",
+    "TokenInvalid",
+    "TokenServiceUnavailable",
+    "TokenVerifier",
+]
