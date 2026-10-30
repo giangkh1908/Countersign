@@ -132,6 +132,7 @@ class FakeBackends:
     agent_status: int = 200
     calls: list[tuple[str, str, str, dict[str, Any] | None]] = field(default_factory=list)
     signer_error: tuple[int, str] | None = None
+    signer_down: bool = False  # profile `tickets` tắt: không có approval-signer
     sha: str = SHA
 
     def __post_init__(self) -> None:
@@ -151,6 +152,8 @@ class FakeBackends:
                 return httpx.Response(401, json={"error": {"code": "unauthorized"}})
             return self._agent(req, path, body)
         if host == "signer.test":
+            if self.signer_down:
+                raise httpx.ConnectError("signer absent", request=req)
             if not auth.startswith("Bearer fake:approval-signer:"):
                 return httpx.Response(401, json={"error": {"code": "unauthorized"}})
             if self.signer_error:

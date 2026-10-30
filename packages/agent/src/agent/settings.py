@@ -42,7 +42,7 @@ class Settings(CommonSettings):
 
     # --- MCP ---
     mcp_docs_url: str = "http://docs-mcp:8101/mcp"
-    mcp_tickets_url: str = "http://tickets-mcp:8102/mcp"
+    mcp_tickets_url: str = "http://tickets-mcp:8102/mcp"  # rỗng = tắt agent ticket
     mcp_analytics_url: str = "http://analytics-mcp:8103/mcp"
 
     # --- Giới hạn vòng lặp (03 §3.5) ---
@@ -68,6 +68,8 @@ class Settings(CommonSettings):
     tool_provider_adapter: str = "mcp_http"
     conversation_repo_adapter: str = "postgres"
     checkpointer_adapter: str = "postgres"
+    service_probe_adapter: str = "http"
+    optional_agents_recheck_s: float = 10.0  # 0 = không dò lại sau khi khởi động
     agents_enabled: str = "docs,ticket"
 
     # --- Quan sát ---
@@ -79,11 +81,12 @@ class Settings(CommonSettings):
     @property
     def mcp_servers(self) -> dict[str, str]:
         """audience -> URL endpoint MCP."""
-        return {
+        all_servers = {
             "docs-mcp": self.mcp_docs_url,
             "tickets-mcp": self.mcp_tickets_url,
             "analytics-mcp": self.mcp_analytics_url,
         }
+        return {aud: url for aud, url in all_servers.items() if url}
 
     @property
     def enabled_agents(self) -> tuple[str, ...]:

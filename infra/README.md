@@ -1,6 +1,6 @@
 # infra — hạ tầng Docker
 
-> Phạm vi theo ADR-006: giữ postgres, redis, keycloak, gateway (mỏng), mock-provider, docs-mcp, agent, bff. Đóng băng (profile): `tickets` (tickets-mcp, approval-signer), `analytics`, `sidecar`, `obs`, Langfuse. Hiện compose mới chỉ tách `sidecar`, `analytics`, `obs`, `seed`; việc đưa tickets-mcp và approval-signer vào profile `tickets` là dự kiến (R0), chưa làm.
+> Phạm vi theo ADR-006: giữ postgres, redis, keycloak, gateway (mỏng), mock-provider, docs-mcp, agent, bff. Đóng băng (profile): `tickets` (tickets-mcp, approval-signer), `analytics`, `sidecar`, `obs`, Langfuse. Compose đã tách `tickets`, `sidecar`, `analytics`, `obs`, `seed`; bật ticket bằng `docker compose --profile tickets up -d`.
 
 Nguồn: `docs/design/04-infra-data-eval.md` PHẦN A, `00-contracts.md` §1/§7. File gốc: `Dockerfile` (đa tầng, `target` theo service),
 `docker-compose.yml`, `docker-compose.bench.yml`, `.env.example`, `models.lock`.
@@ -29,8 +29,8 @@ Nguồn: `docs/design/04-infra-data-eval.md` PHẦN A, `00-contracts.md` §1/§7
 
 | Profile | Nội dung |
 |---|---|
-| (mặc định, hiện tại) | postgres, redis-state, redis-cache, keycloak, migrate, mock-provider, gateway, approval-signer, docs-mcp, tickets-mcp, agent, bff (kiểm: `bash scripts/smoke.sh`). approval-signer và tickets-mcp sẽ chuyển sang profile `tickets` (dự kiến R0) |
-| `tickets` (dự kiến R0) | tickets-mcp, approval-signer: đóng băng theo ADR-006 |
+| (mặc định) | postgres, redis-state, redis-cache, keycloak, migrate, mock-provider, gateway, docs-mcp, agent, bff (kiểm: `bash scripts/smoke.sh`) |
+| `tickets` | tickets-mcp, approval-signer: đóng băng theo ADR-006. Bật: `docker compose --profile tickets up -d`. Agent dò `tickets-mcp` lúc khởi động (đặt `MCP_TICKETS_URL=` rỗng để tắt hẳn) |
 | `sidecar` | policy-sidecar: đóng băng (cần tải model theo `models.lock`; target `make models` chưa có trong Makefile) |
 | `analytics` | analytics-mcp: đóng băng |
 | `obs` | prometheus, grafana: đóng băng |

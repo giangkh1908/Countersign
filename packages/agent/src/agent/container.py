@@ -17,14 +17,17 @@ from acme_common.ports import Clock, TokenBroker, TokenVerifier
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from .agents import AgentRegistry
+from .availability import resolve_enabled_agents
 from .factory import (
     build_agent_registry,
     build_checkpointer,
     build_conversation_repo,
+    build_service_probe,
     build_tool_provider,
 )
 from .graph.builder import build_graph
 from .ports.conversations import ConversationRepository
+from .ports.service_probe import ServiceProbe
 from .ports.tool_provider import ToolProvider
 from .settings import Settings
 
@@ -44,6 +47,8 @@ class Container:
     repo: ConversationRepository
     clock: Clock
     chat_factory: ChatFactory
+    write_broker: TokenBroker | None = None
+    base_settings: Settings | None = None  # trước khi lọc agent tuỳ chọn (availability)
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     locks: dict[str, asyncio.Lock] = field(default_factory=dict)
 
@@ -64,6 +69,10 @@ async def build_container(settings: Settings) -> Container:
     }
     broker = build_token_broker(settings.token_broker_adapter, settings, **kw)
     write_broker = build_token_broker(settings.token_broker_adapter, settings, cache=False, **kw)
+    base_settings = settings
+    settings = await resolve_enabled_agents(
+        settings, build_service_probe(settings.service_probe_adapter, settings)
+    )
     registry = build_agent_registry(settings)
     provider = build_tool_provider(
         settings.tool_provider_adapter,
@@ -96,5 +105,33 @@ async def build_container(settings: Settings) -> Container:
         repo=repo,
         clock=clock,
         chat_factory=chat_factory,
+        write_broker=write_broker,
+        base_settings=base_settings,
         closers=[close_saver, close_repo, llm_http.aclose],
     )
+
+
+async def refresh_optional_agents(c: Container, probe: ServiceProbe) -> bool:
+    """Dò lại agent tuỳ chọn (vd. bật profile `tickets` sau khi agent đã chạy). True nếu đổi tập agent.
+
+    Dựng lại registry/provider/graph trên cùng checkpointer; các endpoint đọc container theo từng request.
+    """
+    if c.base_settings is None or c.write_broker is None:
+        return False
+    if c.settings.enabled_agents == c.base_settings.enabled_agents:
+        return False  # không có agent tuỳ chọn nào đang tắt: khỏi dò
+    settings = await resolve_enabled_agents(c.base_settings, probe)
+    if settings.enabled_agents == c.settings.enabled_agents:
+        return False
+    registry = build_agent_registry(settings)
+    c.tool_provider = build_tool_provider(
+        settings.tool_provider_adapter,
+        settings,
+        registry=registry,
+        broker=c.broker,
+        write_broker=c.write_broker,
+    )
+    c.graph = build_graph(c.checkpointer, registry)
+    c.registry = registry
+    c.settings = settings
+    return True

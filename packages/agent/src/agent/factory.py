@@ -19,8 +19,10 @@ from .ports.errors import (
     AgentNotConfigured,
     CheckpointerNotConfigured,
     ConversationRepoNotConfigured,
+    ServiceProbeNotConfigured,
     ToolProviderNotConfigured,
 )
+from .ports.service_probe import ServiceProbe
 from .ports.tool_provider import ToolProvider
 from .settings import Settings
 
@@ -53,6 +55,20 @@ def build_agent_registry(settings: Settings, names: tuple[str, ...] | None = Non
         _lookup(_AGENTS, n, AgentNotConfigured)(settings)
         for n in (names or settings.enabled_agents)
     )
+
+
+# --- ServiceProbe ---
+def _load_http_probe(settings: Settings) -> ServiceProbe:
+    from .adapters.http_probe import HttpServiceProbe
+
+    return HttpServiceProbe()
+
+
+_PROBES: dict[str, Callable[[Settings], ServiceProbe]] = {"http": _load_http_probe}
+
+
+def build_service_probe(name: str, settings: Settings) -> ServiceProbe:
+    return _lookup(_PROBES, name, ServiceProbeNotConfigured)(settings)
 
 
 # --- ToolProvider ---
@@ -178,6 +194,7 @@ async def build_checkpointer(
 
 __all__ = [
     "build_agent_registry",
+    "build_service_probe",
     "build_checkpointer",
     "build_conversation_repo",
     "build_serde",

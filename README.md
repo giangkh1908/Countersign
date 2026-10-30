@@ -13,9 +13,11 @@ Corpus chính: 19 luật/bộ luật Việt Nam từ vbpl.vn (1.557 Điều), xe
 
 M0, M1 xong (walking skeleton chạy đầu-cuối trên compose). Đang ở R0 (thu gọn stack). Lộ trình R0–R4: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-Compose hiện tại (chưa thu gọn) chạy mặc định: postgres, redis-state, redis-cache, keycloak, migrate, mock-provider, gateway, approval-signer, docs-mcp, tickets-mcp, agent, bff. Profile tuỳ chọn: `sidecar`, `analytics`, `obs`, `seed`.
+Compose mặc định chạy: postgres, redis-state, redis-cache, keycloak, migrate, mock-provider, gateway, docs-mcp, agent, bff. Profile tuỳ chọn: `tickets` (tickets-mcp, approval-signer; luồng đóng ticket đóng băng), `sidecar`, `analytics`, `obs`, `seed`.
 
-**Dự kiến (R0), chưa làm:** đưa `tickets-mcp` và `approval-signer` vào profile `tickets` (agent/bff không còn phụ thuộc cứng vào chúng); đo RAM/CPU lúc rảnh và khi chạy 20 câu hỏi, ghi bảng vào README (mục tiêu dưới 2,5 GB lúc rảnh). Chưa có số đo RAM thật.
+Bật luồng ticket: `docker compose --profile tickets up -d`. Không bật thì agent tự tắt route ticket (router chỉ còn docs / trả lời trực tiếp), BFF vẫn khoẻ và các API phê duyệt trả `503 upstream_unavailable`.
+
+**Dự kiến (R0), chưa làm:** đo RAM/CPU lúc rảnh và khi chạy 20 câu hỏi, ghi bảng vào README (mục tiêu dưới 2,5 GB lúc rảnh). Chưa có số đo RAM thật.
 
 ## Yêu cầu
 

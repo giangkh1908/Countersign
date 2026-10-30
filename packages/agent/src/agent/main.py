@@ -5,6 +5,8 @@ Không có APPROVAL_SIGNER_URL: agent không được gọi approval-signer (D13
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -14,8 +16,26 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .api.app import ApiError, error_response, router
-from .container import Container, build_container
+from .container import Container, build_container, refresh_optional_agents
+from .factory import build_service_probe
 from .settings import Settings
+
+log = logging.getLogger(__name__)
+
+
+async def _watch_optional_agents(c: Container, s: Settings) -> None:
+    """Agent tuỳ chọn (ticket) đang tắt: dò lại định kỳ để bật khi MCP của nó lên sau agent."""
+    probe = build_service_probe(s.service_probe_adapter, s)
+    while True:
+        await asyncio.sleep(s.optional_agents_recheck_s)
+        try:
+            if await refresh_optional_agents(c, probe):
+                log.info(
+                    "optional_agents_changed",
+                    extra={"fields": {"agents": c.settings.agents_enabled}},
+                )
+        except Exception:  # không để watcher chết làm sập agent
+            log.exception("optional_agents_refresh_failed")
 
 
 def create_app(settings: Settings | None = None, container: Container | None = None) -> FastAPI:
@@ -27,9 +47,14 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         configure_logging(s.log_level, "agent")
         c = container or await build_container(s)
         app.state.container = c
+        watcher = None
+        if container is None and s.optional_agents_recheck_s > 0:
+            watcher = asyncio.create_task(_watch_optional_agents(c, s))
         try:
             yield
         finally:
+            if watcher is not None:
+                watcher.cancel()
             for close in c.closers:
                 await close()
 

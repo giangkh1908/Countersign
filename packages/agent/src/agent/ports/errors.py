@@ -42,3 +42,7 @@ class ConversationRepoNotConfigured(NotConfigured):
 
 class CheckpointerNotConfigured(NotConfigured):
     pass
+
+
+class ServiceProbeNotConfigured(NotConfigured):
+    """Tên adapter ServiceProbe lạ."""
