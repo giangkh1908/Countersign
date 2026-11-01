@@ -42,7 +42,7 @@ Keycloak realm `acme`. Client:
 | `agent-service` | confidential, không service account | Agent đổi token sang các đích |
 | `llm-gateway`, `docs-mcp`, `tickets-mcp`, `approval-signer` | chỉ làm audience | Đích của token |
 
-Không client nào bật password grant.
+Các client khai báo trong `realm-acme.json` đều tắt password grant. Riêng E2E (chỉ dev) dùng `admin-cli` ở realm `master` và tự tạo client tạm `e2e-test` có password grant, rồi xoá khi kết thúc.
 
 ```
 Trình duyệt --cookie--> BFF --exchange (aud=agent-service)--> agent
