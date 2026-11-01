@@ -1,7 +1,6 @@
 """Các `Fake<Port>` kế thừa port (gồm `FakeClock`) cho test nghiệp vụ. Xem docs/design/00-contracts.md §9.1 mục 9."""
 
 from .fakes import (
-    FakeAnchorStore,
     FakeClock,
     FakeEventSink,
     FakeRateLimiter,
@@ -13,7 +12,6 @@ from .signing import ISSUER, FakeJwksEndpoint, TestSigner, make_claims
 
 __all__ = [
     "ISSUER",
-    "FakeAnchorStore",
     "FakeClock",
     "FakeEventSink",
     "FakeJwksEndpoint",

@@ -10,4 +10,4 @@ def test_healthz() -> None:
 
 
 def test_settings() -> None:
-    assert Settings().acme_env in {"dev", "test", "bench", "eval"}
+    assert Settings().acme_env in {"dev", "test", "eval"}

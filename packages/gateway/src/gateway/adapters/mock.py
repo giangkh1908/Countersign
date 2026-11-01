@@ -1,6 +1,6 @@
 """Adapter `mock` cho port `ChatProvider`. Gọi `mock-provider` (wire OpenAI-compatible).
 
-Dùng với `GW_PROVIDER_OVERRIDE=mock`. Không retry (M2 qua decorator). Message lỗi không chứa URL.
+Dùng với `GW_PROVIDER_OVERRIDE=mock`. Không retry. Message lỗi không chứa URL.
 """
 
 from __future__ import annotations

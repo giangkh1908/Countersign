@@ -10,10 +10,8 @@ from typing import Any
 
 from .caching_token_broker import CachingTokenBroker
 from .http import RetryingHttpClient
-from .ports.anchor_store import AnchorStore
 from .ports.clock import Clock
 from .ports.errors import (
-    AnchorStoreNotConfigured,
     ClockNotConfigured,
     EventSinkNotConfigured,
     NotConfigured,
@@ -163,7 +161,7 @@ def _load_json_log_sink(settings: CommonSettings) -> EventSink:
 
 def _load_postgres_sink(settings: CommonSettings) -> EventSink:
     from .adapters.postgres_event_sink import PostgresEventSink
-    from .audit import AuditKeyring
+    from .services.audit_chain import AuditKeyring
 
     dsn = settings.event_sink_database_url or settings.mcp_audit_database_url
     if not dsn:
@@ -209,22 +207,6 @@ _LIMITERS: dict[str, Callable[[CommonSettings, Clock], RateLimiter]] = {
 
 def build_rate_limiter(name: str, settings: CommonSettings, *, clock: Clock) -> RateLimiter:
     return _lookup(_LIMITERS, name, RateLimiterNotConfigured)(settings, clock)
-
-
-# --- AnchorStore ---
-def _load_file_anchor_store(settings: CommonSettings) -> AnchorStore:
-    from .adapters.file_append_only import FileAppendOnlyAnchorStore
-
-    return FileAppendOnlyAnchorStore(settings.audit_anchor_dir)
-
-
-_ANCHOR_STORES: dict[str, Callable[[CommonSettings], AnchorStore]] = {
-    "file_append_only": _load_file_anchor_store,
-}
-
-
-def build_anchor_store(name: str, settings: CommonSettings) -> AnchorStore:
-    return _lookup(_ANCHOR_STORES, name, AnchorStoreNotConfigured)(settings)
 
 
 # --- ToolServerHost ---

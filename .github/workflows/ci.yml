@@ -34,7 +34,6 @@ jobs:
           if uv tree --package acme-gateway | grep -iE "onnxruntime|torch|tokenizers|transformers|underthesea"; then
             echo "::error::gateway dependency tree contains model runtime"; exit 1
           fi
-      # TODO(M1): import-linter (importlinter.ini) sau khi có packages/*
 
   web:
     runs-on: ubuntu-24.04
@@ -56,7 +55,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/gen-secrets.sh --ci
-      - run: docker compose -f docker-compose.yml config -q
+      - run: docker compose config -q
+      - run: docker compose --profile tickets --profile obs --profile seed config -q
 
   # ---- Job nặng: giữ chỗ, bật theo milestone ----
   e2e:  # TODO(M1/M6): Playwright trên compose (BFF + Keycloak + mock-provider)

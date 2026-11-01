@@ -14,9 +14,9 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from acme_common.audit import AuditKeyring
 from acme_common.ports import Clock
 from acme_common.ports.errors import NotConfigured
+from acme_common.services.audit_chain import AuditKeyring
 
 from .ports import (
     ApprovalVerifier,

@@ -1,13 +1,10 @@
 import json
 import logging
-from datetime import UTC, datetime
 
-from acme_common.adapters.file_append_only import FileAppendOnlyAnchorStore
 from acme_common.adapters.in_memory_rate_limiter import InMemoryRateLimiter
 from acme_common.adapters.json_log_event_sink import JsonLogEventSink
 from acme_common.adapters.system_clock import SystemClock
 from acme_common.log import JsonFormatter, bind_request_id, reset_request_id
-from acme_common.ports import AuditAnchor
 from acme_common.testing import FakeClock
 
 
@@ -35,20 +32,6 @@ async def test_rate_limiter_slots() -> None:
     assert not (await rl.acquire_slot("k", 2)).allowed
     await rl.release_slot("k")
     assert (await rl.acquire_slot("k", 2)).allowed
-
-
-async def test_anchor_store_append_only_roundtrip(tmp_path) -> None:
-    store = FileAppendOnlyAnchorStore(tmp_path / "anchors")
-    assert await store.latest() is None
-
-    def anchor(i: int, day: int) -> AuditAnchor:
-        return AuditAnchor("global", i, f"h{i}", datetime(2026, 1, day, tzinfo=UTC), "k1", "sig")
-
-    for a in (anchor(10, 1), anchor(20, 2), anchor(30, 2)):
-        await store.put(a)
-    assert (await store.latest()).last_id == 30
-    assert [a.last_id for a in await store.list_since(10)] == [20, 30]
-    assert len(list((tmp_path / "anchors").glob("*.jsonl"))) == 2  # theo ngày
 
 
 def test_event_sink_and_formatter_emit_json_without_secrets(caplog) -> None:

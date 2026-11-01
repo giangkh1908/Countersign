@@ -14,12 +14,12 @@ from urllib.parse import quote
 
 import psycopg
 import pytest
+from acme_common.adapters.audit_pg import append_audit, fetch_rows
 from acme_common.adapters.postgres_event_sink import PostgresEventSink
-from acme_common.audit import AuditKeyring, verify_chain
-from acme_common.audit.pg import append_audit, fetch_rows
 from acme_common.mcp import CallerContext, ToolInvoker
 from acme_common.mcp.context import AuthContext, reset_auth, set_auth
 from acme_common.ports import Principal, ToolSpec
+from acme_common.services.audit_chain import AuditKeyring, verify_chain
 from acme_common.testing import FakeClock, FakeRateLimiter
 
 BASE = os.environ.get("TEST_DATABASE_URL")
@@ -60,9 +60,9 @@ CREATE TABLE usage_events (
   id bigserial, ts timestamptz NOT NULL DEFAULT now(), request_id uuid NOT NULL, key_id uuid NOT NULL,
   department text NOT NULL, end_user_sub text, alias text NOT NULL, provider text, model text,
   input_tokens int, output_tokens int, cached_input_tokens int, cost_micro_usd bigint NOT NULL DEFAULT 0,
-  latency_ms int, ttft_ms int, gateway_overhead_ms int, sidecar_ms int,
+  latency_ms int, ttft_ms int, gateway_overhead_ms int,
   cache text NOT NULL DEFAULT 'miss', fallback_count smallint NOT NULL DEFAULT 0, route_reason text,
-  pii_entities int NOT NULL DEFAULT 0, guard_score real, status_code smallint NOT NULL, error_code text,
+  status_code smallint NOT NULL, error_code text,
   PRIMARY KEY (id, ts));
 CREATE TABLE tickets (id int PRIMARY KEY, status text NOT NULL);
 """

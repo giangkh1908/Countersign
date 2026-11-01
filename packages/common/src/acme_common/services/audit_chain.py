@@ -3,7 +3,7 @@
 hash = HMAC-SHA256(key[hmac_kid], prev_hash || canonical(row)); `id` và `ts` do app gán TRƯỚC khi băm.
 `canonical(row)` = canonical JSON (khoá sắp xếp, NFC, không float) của các cột nghiệp vụ + `hmac_kid`.
 `intent_id` chỉ nằm trong hàm băm khi row có khoá đó (bảng `tool_audit`).
-Hàm ở đây thuần (không I/O); ghi DB: `audit.pg`.
+Hàm ở đây thuần (không I/O); ghi DB: `adapters.audit_pg`.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from ..services.canonical import canonical_json
+from .canonical import canonical_json
 
 GENESIS_HASH = bytes(32)
 _HASHED_FIELDS = (

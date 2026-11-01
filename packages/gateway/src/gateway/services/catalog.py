@@ -46,7 +46,7 @@ class ModelCatalog:
         spec = self._aliases.get(alias)
         if spec is None:
             raise GatewayError("invalid_request", f"Unknown model alias '{requested}'.")
-        if "router" in spec:  # M1: router tĩnh, luôn chọn nhánh `simple`
+        if "router" in spec:  # router tĩnh, luôn chọn nhánh `simple`
             alias, reason = str(spec["simple"]), "static_simple"
             spec = self._aliases.get(alias)
             if spec is None:

@@ -15,7 +15,7 @@ fmt:
 	uv run ruff check --fix .
 
 test:
-	uv run pytest
+	uv run --all-packages pytest -q
 
 test-web:
 	cd web && pnpm test

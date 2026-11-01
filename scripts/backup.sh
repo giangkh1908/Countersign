@@ -13,4 +13,4 @@ done
 sha256sum backups/*-"$TS".* > "backups/SHA256SUMS-$TS"
 # giữ 7 bản
 ls -1t backups/globals-*.sql | tail -n +8 | xargs -r rm -f
-echo "Backup xong: backups/*-$TS.* (nhớ backup riêng volume Docker audit_anchors, không cùng nơi với dump)"
+echo "Backup xong: backups/*-$TS.*"

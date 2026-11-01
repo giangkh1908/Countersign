@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from acme_common.audit import GENESIS_HASH, AuditKeyring, seal, verify_chain
+from acme_common.services.audit_chain import GENESIS_HASH, AuditKeyring, seal, verify_chain
 
 KR = AuditKeyring.single("k" * 32, 1)
 

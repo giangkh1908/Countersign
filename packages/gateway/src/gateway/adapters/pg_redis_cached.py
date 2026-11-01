@@ -1,8 +1,8 @@
 """Adapter `pg_redis_cached` cho port `KeyStore`.
 
-M1: L1 (dict TTL trong process: 10s, negative cache 5s) + L3 (Postgres, truy vấn tham số hoá).
-L2 Redis (`gw:key:{prefix}`, TTL 300s) và thu hồi qua pub/sub (< 1s) là M2: tới lúc đó một key bị
-thu hồi có hiệu lực trong tối đa 10s (TTL L1) ở các instance khác; instance thực hiện thu hồi thì ngay lập tức.
+L1 (dict TTL trong process: 10s, negative cache 5s) + L3 (Postgres, truy vấn tham số hoá).
+Chưa có L2 Redis và thu hồi qua pub/sub: một key bị thu hồi có hiệu lực trong tối đa 10s (TTL L1)
+ở các instance khác; instance thực hiện thu hồi thì ngay lập tức.
 Tài liệu: docs/design/01-gateway.md §3.2.
 """
 

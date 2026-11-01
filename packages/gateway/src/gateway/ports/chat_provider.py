@@ -1,6 +1,6 @@
 """Port `ChatProvider`: `complete(req)`, `stream(req)`.
 
-Adapter v1: xem bảng §9.2 (M1: provider thật đầu tiên + `mock`; provider thứ hai: M2). Decorator Retrying/CircuitBreaking/Fallback/Metered: M2.
+Adapter v1: xem bảng §9.2 (một provider thật kèm `mock`). Chưa có decorator Retrying/CircuitBreaking/Fallback.
 Tài liệu: docs/design/00-contracts.md §9.2, 01 §1.2/§7.
 """
 

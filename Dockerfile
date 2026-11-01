@@ -3,13 +3,11 @@
 # Nguồn: docs/design/04-infra-data-eval.md §1.5. Build context = gốc repo.
 # Cần: pyproject.toml (uv workspace) + uv.lock + packages/<svc> (tạo bởi worker khác).
 
-# TODO(M7): pin digest cho mọi image gốc (python, uv, node) bằng `make pin-digests`.
 FROM python:3.12-slim AS base
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
-# TODO(M7): pin digest
 COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
@@ -21,8 +19,6 @@ COPY scripts/check_pth.sh scripts/pth-allowlist.txt ./scripts/
 FROM base AS gateway
 RUN uv sync --frozen --no-dev --no-editable --package acme-gateway
 RUN bash scripts/check_pth.sh /app/.venv
-# named volume audit_anchors kế thừa chủ sở hữu thư mục này khi khởi tạo lần đầu
-RUN mkdir /anchors && chown 10001 /anchors
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH" \
     GW_MODELS_CONFIG=/app/packages/gateway/config/models.yaml
@@ -56,8 +52,6 @@ CMD ["uvicorn", "mcp_docs.main:app", "--host", "0.0.0.0", "--port", "8101", "--n
 FROM base AS mcp_tickets
 RUN uv sync --frozen --no-dev --no-editable --package acme-mcp-tickets
 RUN bash scripts/check_pth.sh /app/.venv
-# named volume audit_anchors kế thừa chủ sở hữu thư mục này khi khởi tạo lần đầu
-RUN mkdir /anchors && chown 10001 /anchors
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "mcp_tickets.main:app", "--host", "0.0.0.0", "--port", "8102", "--no-server-header"]
@@ -71,7 +65,6 @@ ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8200", "--no-server-header"]
 
 # ───────────── bff (8300) — D15: node chỉ ở stage build ─────────────
-# TODO(M7): pin digest
 FROM node:22-slim AS web_build
 WORKDIR /web
 RUN corepack enable

@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   owner_type    text NOT NULL CHECK (owner_type IN ('service','department','user')),
   owner_ref     text NOT NULL,                  -- client_id / dept code / keycloak sub
   department    text NOT NULL REFERENCES departments(code),
-  allowed_models text[] NOT NULL,               -- acme-fast, acme-smart, acme-auto, acme-embed, acme-judge (chỉ EVAL)
+  allowed_models text[] NOT NULL,               -- acme-fast, acme-smart, acme-auto
   rpm_limit     int NOT NULL, tpm_limit int NOT NULL, max_concurrency int NOT NULL DEFAULT 8,
   monthly_budget_micro_usd bigint,              -- NULL = dùng budget phòng ban
   trust_end_user_token boolean NOT NULL DEFAULT false,
@@ -38,10 +38,9 @@ CREATE TABLE IF NOT EXISTS usage_events (        -- PARTITION BY RANGE (ts), m�
   alias text NOT NULL, provider text, model text,
   input_tokens int, output_tokens int, cached_input_tokens int,
   cost_micro_usd bigint NOT NULL DEFAULT 0,
-  latency_ms int, ttft_ms int, gateway_overhead_ms int, sidecar_ms int,
+  latency_ms int, ttft_ms int, gateway_overhead_ms int,
   cache text NOT NULL DEFAULT 'miss' CHECK (cache IN ('miss','exact','semantic')),
   fallback_count smallint NOT NULL DEFAULT 0, route_reason text,
-  pii_entities int NOT NULL DEFAULT 0, guard_score real,
   status_code smallint NOT NULL, error_code text,
   PRIMARY KEY (id, ts)
 ) PARTITION BY RANGE (ts);

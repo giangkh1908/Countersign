@@ -74,9 +74,5 @@ class RateLimiterNotConfigured(NotConfigured):
     pass
 
 
-class AnchorStoreNotConfigured(NotConfigured):
-    pass
-
-
 class ToolServerHostNotConfigured(NotConfigured):
     pass
