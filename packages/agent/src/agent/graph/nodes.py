@@ -1,4 +1,4 @@
-"""Node của đồ thị (03 §3.2). Chỉ import port/registry; sự kiện UI phát qua `get_stream_writer()`.
+"""Node của đồ thị. Chỉ import port/registry; sự kiện UI phát qua `get_stream_writer()`.
 
 Quy ước event: writer nhận `{"event": <tên SSE>, "data": {...}}` (custom stream mode).
 """
@@ -373,7 +373,7 @@ def interrupt_id_of(action_id: str, intent_id: str) -> str:
 
 
 def build_interrupt_payload(pa: PendingAction) -> dict[str, Any]:
-    """Chỉ định danh + JWS mờ đục (03 §7.2). Không có args/preview/diff."""
+    """Chỉ định danh + JWS mờ đục. Không có args/preview/diff."""
     return {
         "interrupt_id": interrupt_id_of(pa.action_id, pa.intent_id),
         "kind": "write_approval",
@@ -493,7 +493,7 @@ async def execute_write(state: AgentState, runtime: Rt) -> dict[str, Any]:
             user_token=ctx.user_token,
             thread_id=ctx.thread_id,
         )
-    except ToolUnavailable:  # không tự retry (03 §7.6)
+    except ToolUnavailable:  # không tự retry
         res = {"ok": False, "error": {"code": "upstream_unavailable", "details": {}}}
     if (
         not res.get("ok")
@@ -532,7 +532,7 @@ _FAIL_TEXT = {
 _GENERIC_FAIL = (
     "Không thể thực hiện thao tác (xác thực phê duyệt không hợp lệ). Chưa có gì được thay đổi."
 )
-# Mã lỗi ghi khiến luồng kết thúc bằng event `error` (03 §1.4).
+# Mã lỗi ghi khiến luồng kết thúc bằng event `error`.
 ERROR_EVENT_CODES = frozenset(
     {"intent_expired", "intent_not_found", "conflict", "approval_expired"}
 )

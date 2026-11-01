@@ -1,5 +1,5 @@
 #!/bin/sh
-# infra/redis/entrypoint.sh  (docs/design/04 §2.3)
+# infra/redis/entrypoint.sh
 # Render /tmp/users.acl từ template + SHA256 của các secret; thiếu secret -> hash "0" (không hợp lệ,
 # fail-closed). Placeholder không có trong template không có trong template bị sed bỏ qua.
 set -eu

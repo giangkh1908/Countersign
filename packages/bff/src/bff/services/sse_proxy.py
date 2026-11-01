@@ -1,4 +1,4 @@
-"""SseProxy: phân tích khung SSE, lọc event, giữ nhịp, giới hạn thời gian, huỷ (07 §2.8).
+"""SseProxy: phân tích khung SSE, lọc event, giữ nhịp, giới hạn thời gian, huỷ.
 
 Chỉ đọc khung `id`/`event`/`data`; mọi event hợp lệ khác chuyển nguyên văn. Luồng luôn kết thúc
 bằng đúng một `done` hoặc `error`.

@@ -1,4 +1,4 @@
-"""Cấu hình approval_signer (pydantic-settings), biến môi trường theo contracts §7.
+"""Cấu hình approval_signer (pydantic-settings), biến môi trường theo contracts §8.
 
 Hậu tố `<BIẾN>_FILE` do `CommonSettings` xử lý (đọc nội dung file, `_FILE` thắng). Khoá ký có hai nguồn:
 `APPROVAL_SIGNER_PRIVATE_KEY_PATH` (đường dẫn PEM, đúng contracts/compose) hoặc nội dung PEM qua
@@ -30,7 +30,7 @@ class Settings(CommonSettings):
 
     @property
     def token_verifier_settings(self) -> "Settings":
-        """Bản sao ép các ràng buộc D13/D15/D16 lên `TokenVerifier` dùng chung."""
+        """Bản sao ép azp, scope và claim bắt buộc của signer lên `TokenVerifier` dùng chung."""
         return self.model_copy(
             update={
                 "token_allowed_azp": self.signer_allowed_azp,

@@ -1,4 +1,4 @@
-"""Port `ReplayGuard`: tiêu thụ `jti` của approval đúng một lần (02 §6.0)."""
+"""Port `ReplayGuard`: tiêu thụ `jti` của approval đúng một lần."""
 
 from __future__ import annotations
 

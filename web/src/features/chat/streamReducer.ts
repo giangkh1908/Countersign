@@ -1,4 +1,4 @@
-// Thuần túy, test được không cần React (07 §3.5).
+// Thuần túy, test được không cần React.
 import type { AgentEvent, Citation, InterruptRef } from "../../api/types";
 
 export interface ToolState {

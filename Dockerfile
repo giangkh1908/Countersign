@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # Dockerfile đa tầng dùng chung cho mọi service Python (chọn bằng `target`).
-# Nguồn: docs/design/04-infra-data-eval.md §1.5. Build context = gốc repo.
+# Build context = gốc repo.
 # Cần: pyproject.toml (uv workspace) + uv.lock + packages/<svc> (tạo bởi worker khác).
 
 FROM python:3.12-slim AS base
@@ -64,7 +64,7 @@ USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8200", "--no-server-header"]
 
-# ───────────── bff (8300) — D15: node chỉ ở stage build ─────────────
+# ───────────── bff (8300) — node chỉ ở stage build ─────────────
 FROM node:22-slim AS web_build
 WORKDIR /web
 RUN corepack enable
@@ -85,7 +85,7 @@ CMD ["uvicorn", "bff.main:app", "--host", "0.0.0.0", "--port", "8300", "--no-ser
 
 # ───────────── job một lần: migrate / seed ─────────────
 # migrate: hiện chỉ tạo schema checkpointer LangGraph của agent (`python -m agent.migrate`, role ag_owner).
-# TODO(M1): Alembic cho các DB khác (hiện bảng nghiệp vụ do infra/postgres/init/sql tạo).
+# TODO: Alembic cho các DB khác (hiện bảng nghiệp vụ do infra/postgres/init/sql tạo).
 FROM base AS migrate
 RUN uv sync --frozen --no-dev --no-editable --package acme-agent
 RUN bash scripts/check_pth.sh /app/.venv
@@ -93,7 +93,7 @@ USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["python", "-m", "agent.migrate"]
 
-# TODO(M1): seed = generator dữ liệu mẫu (docs/design/04 §7).
+# TODO: seed = generator dữ liệu mẫu.
 FROM base AS seed
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"

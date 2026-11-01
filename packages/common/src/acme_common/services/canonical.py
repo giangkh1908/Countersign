@@ -1,4 +1,4 @@
-"""Canonical JSON và `intent_sha256` (contracts §4.1, 02 §6.6).
+"""Canonical JSON và `intent_sha256` (docs/design/approval.md §2.1).
 
 Khoá sắp xếp, không khoảng trắng, UTF-8 không escape, chuẩn hoá NFC, từ chối float/NaN.
 Dùng chung: approval-signer (ký intent), tickets-mcp (băm intent), audit.

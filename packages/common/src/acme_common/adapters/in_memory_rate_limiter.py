@@ -1,6 +1,5 @@
-"""Adapter `in_memory` cho port `RateLimiter`. Degraded mode (D5).
-Milestone: M1.
-Tài liệu: docs/design/00-contracts.md §9.2.
+"""Adapter `in_memory` cho port `RateLimiter`. Degraded mode.
+Tài liệu: docs/design/contracts.md §9.2.
 """
 
 from __future__ import annotations

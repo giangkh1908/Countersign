@@ -4,7 +4,7 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { safeText } from "./safeText";
 
-// Allowlist riêng (07 §3.7): không img, chỉ https, không HTML thô (không dùng rehype-raw).
+// Allowlist riêng: không img, chỉ https, không HTML thô (không dùng rehype-raw).
 const schema = {
   ...defaultSchema,
   tagNames: [

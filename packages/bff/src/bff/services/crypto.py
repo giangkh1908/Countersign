@@ -1,4 +1,4 @@
-"""AES-GCM seal/open + HKDF từ BFF_SESSION_KEY (07 §2.2, §2.3).
+"""AES-GCM seal/open + HKDF từ BFF_SESSION_KEY.
 
 `k_enc` mã hoá các trường `*_enc` của phiên; `k_csrf` ký HMAC cookie CSRF.
 Giá trị mã hoá: base64url(nonce12 || ciphertext), AAD = sid || tên trường.

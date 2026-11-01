@@ -16,7 +16,7 @@ export function t(key: MsgKey, params?: Record<string, string | number>): string
   return raw.replace(/\{(\w+)\}/g, (_, k: string) => String(params[k] ?? ""));
 }
 
-/** Thông điệp theo mã lỗi; không hiện chuỗi thô của server nếu không có bản dịch (07 §3.6). */
+/** Thông điệp theo mã lỗi; không hiện chuỗi thô của server nếu không có bản dịch. */
 export function errorMessage(code: string): string {
   const key = `error.${code}`;
   return key in vi ? t(key as MsgKey) : t("error.unknown");

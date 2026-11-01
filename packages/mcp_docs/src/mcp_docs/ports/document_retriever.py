@@ -1,4 +1,4 @@
-"""Port `DocumentRetriever`: tìm đoạn tài liệu theo quyền của principal (02 §5.0)."""
+"""Port `DocumentRetriever`: tìm đoạn tài liệu theo quyền của principal."""
 
 from __future__ import annotations
 

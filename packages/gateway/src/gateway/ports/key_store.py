@@ -1,7 +1,7 @@
 """Port `KeyStore`: `lookup(prefix)`, `create`, `revoke`.
 
 Adapter v1: `postgres` (L1 trong process + Postgres; chưa có L2 Redis và pub/sub thu hồi).
-Tài liệu: docs/design/00-contracts.md §9.2, 01 §3.
+Tài liệu: docs/design/contracts.md §9.2.
 """
 
 from __future__ import annotations

@@ -1,12 +1,12 @@
 """Lỗi trung lập ở biên các port (contracts §9.1 mục 3).
 
 Message lỗi không bao giờ chứa token, URL, header hay nội dung người dùng; chỉ có mã `reason`
-thuộc tập hữu hạn để service ánh xạ sang HTTP (contracts §6).
+thuộc tập hữu hạn để service ánh xạ sang HTTP (contracts §4).
 """
 
 from __future__ import annotations
 
-# reason -> HTTP status khi một resource server từ chối token (contracts §4, §6).
+# reason -> HTTP status khi một resource server từ chối token (contracts §2, §4).
 _TOKEN_REASON_STATUS: dict[str, int] = {
     "malformed": 401,
     "bad_signature": 401,

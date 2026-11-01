@@ -17,7 +17,7 @@ dependencies = [
     "asyncpg",  # adapter KeyStore postgres (chỉ trong adapters/)
     "anthropic",  # SDK chính thức, chỉ import trong adapters/anthropic.py
     "prometheus-client",
-    # CẤM (D2): onnxruntime, torch, tokenizers, transformers, sentence-transformers, huggingface_hub.
+    # CẤM: onnxruntime, torch, tokenizers, transformers, sentence-transformers, huggingface_hub.
 ]
 
 [tool.uv.sources]

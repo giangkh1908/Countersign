@@ -1,4 +1,4 @@
-"""Port `ApprovalVerifier` (02 §6.7 bước 1-5, 05 §4.3-4.4)."""
+"""Port `ApprovalVerifier`."""
 
 from __future__ import annotations
 

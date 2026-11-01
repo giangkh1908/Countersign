@@ -1,4 +1,4 @@
-"""SignerClient: verify_intent, approve (05 §5.3). Lớp HTTP thường, KHÔNG có khoá ký.
+"""SignerClient: verify_intent, approve. Lớp HTTP thường, KHÔNG có khoá ký.
 
 `approval_token` chỉ đi từ đây vào lời gọi resume của agent; không log, không trả trình duyệt.
 """

@@ -1,4 +1,4 @@
-"""CSRF double-submit có ràng buộc phiên (07 §2.5): header == cookie == HMAC(k_csrf, sid)."""
+"""CSRF double-submit có ràng buộc phiên: header == cookie == HMAC(k_csrf, sid)."""
 
 from __future__ import annotations
 

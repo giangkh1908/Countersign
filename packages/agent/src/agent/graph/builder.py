@@ -1,4 +1,4 @@
-"""Lắp StateGraph từ registry agent (03 §3.4). Không liệt kê tên agent cứng.
+"""Lắp StateGraph từ registry agent. Không liệt kê tên agent cứng.
 
 START -> begin_turn -> router -> {<route>_agent | direct_answer}
 <route>_agent -> <route>_tools -> <route>_agent (vòng ReAct) | final_answer

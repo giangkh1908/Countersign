@@ -1,4 +1,4 @@
-"""Kiểu trung lập ở biên các port của docs-mcp (02 §5.0). Không phụ thuộc vendor."""
+"""Kiểu trung lập ở biên các port của docs-mcp. Không phụ thuộc vendor."""
 
 from __future__ import annotations
 

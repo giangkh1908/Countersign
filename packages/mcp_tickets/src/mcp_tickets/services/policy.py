@@ -1,4 +1,4 @@
-"""Chính sách thuần Python (02 §6.0): đủ an toàn kể cả khi repository KHÔNG có RLS. Không import adapter."""
+"""Chính sách thuần Python: đủ an toàn kể cả khi repository KHÔNG có RLS. Không import adapter."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from ..ports import Audience, Ticket
 
 LEADS = frozenset({"team_lead", "dept_manager"})
 RISK_FLAGS = ("destructive", "internal_comment", "priority_urgent", "possible_downgrade")
-# state machine (02 §6.3b); `closed` là trạng thái cuối
+# state machine; `closed` là trạng thái cuối
 TRANSITIONS: dict[str, frozenset[str]] = {
     "open": frozenset({"in_progress", "resolved", "closed"}),
     "in_progress": frozenset({"open", "resolved", "closed"}),
@@ -43,7 +43,7 @@ def can_close(t: Ticket) -> bool:
 
 
 def taint_flags(taint: TaintView | None, aud: Audience) -> list[str]:
-    """D17: `possible_downgrade` khi `max_class > aud.min_clearance` HOẶC
+    """`possible_downgrade` khi `max_class > aud.min_clearance` HOẶC
     (`aud.dept_set` không là tập con của `taint.dept_set` VÀ `max_class >= 1`). Xét thread lẫn recent.
     `taint is None` (Redis lỗi) => `taint_unknown`."""
     if taint is None:

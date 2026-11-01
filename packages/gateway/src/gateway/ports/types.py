@@ -1,4 +1,4 @@
-"""Kiểu dữ liệu và lỗi trung lập ở biên các port của gateway (contracts §9.1 mục 3; 01 §1.2).
+"""Kiểu dữ liệu và lỗi trung lập ở biên các port của gateway (contracts §9.1 mục 3).
 
 Không mang tên vendor. Message của `ProviderError` không chứa URL, header, key hay nội dung người dùng.
 """

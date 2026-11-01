@@ -1,4 +1,4 @@
-"""Mã lỗi tool MCP chuẩn hoá (contracts §6.3)."""
+"""Mã lỗi tool MCP chuẩn hoá (contracts §4)."""
 
 from __future__ import annotations
 

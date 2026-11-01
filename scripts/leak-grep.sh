@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Leak-grep (docs/design/00-contracts.md §9.1 mục 8). Exit 1 nếu có kết quả.
+# Leak-grep (docs/design/contracts.md §9.1 mục 8). Exit 1 nếu có kết quả.
 # Thư mục chưa tồn tại được coi là pass.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -24,14 +24,14 @@ if [ "${#src_dirs[@]}" -gt 0 ]; then
   report "vendor name leaked outside adapters/factory/settings" "$out"
 fi
 
-# 2. Gateway không nạp model nặng (D2)
+# 2. Gateway không nạp model nặng
 if [ -d packages/gateway/src ]; then
   out=$(grep -rniE "onnxruntime|torch|tokenizers|transformers|sentence_transformers|huggingface_hub" \
           packages/gateway/src --include=*.py || true)
   report "gateway imports model runtime" "$out"
 fi
 
-# 3. Frontend (D15): chỉ src/api/client.ts được dùng fetch/SSE
+# 3. Frontend: chỉ src/api/client.ts được dùng fetch/SSE
 if [ -d web/src ]; then
   out=$(grep -rnE "\bfetch\(|XMLHttpRequest|EventSource|fetch-event-source|axios|keycloak-js|oidc-client" \
           web/src --include=*.ts --include=*.tsx | grep -vE "src/api/client\.ts|\.test\.tsx?:" || true)

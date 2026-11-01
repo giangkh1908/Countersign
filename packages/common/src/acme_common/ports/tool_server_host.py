@@ -3,7 +3,7 @@
 Host chỉ lo giao thức MCP (Streamable HTTP, stateless). KHÔNG làm auth (ADR-003): `AuthMiddleware`
 bọc ngoài `asgi_app()`. `handler` ở mức port là `RawToolHandler` (đã gồm validate/scope/rate limit/
 timeout/audit do `ToolInvoker.wrap` bọc); host không tự validate lần nữa.
-Adapter v1: `mcp_sdk` (mặc định, ADR-003). Milestone M1.
+Adapter v1: `mcp_sdk` (mặc định, ADR-003).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ ASGIApp = Callable[..., Awaitable[None]]
 
 @dataclass(frozen=True, slots=True)
 class ToolSpec:
-    """Khai báo một tool (02 §1.1). `description`/`input_schema` là nguồn của digest pinning."""
+    """Khai báo một tool. `description`/`input_schema` là nguồn của digest pinning."""
 
     name: str
     description: str

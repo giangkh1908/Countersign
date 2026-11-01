@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class Principal:
-    """Danh tính đã xác minh của một token (contracts §4)."""
+    """Danh tính đã xác minh của một token (contracts §2)."""
 
     sub: str
     audience: tuple[str, ...]

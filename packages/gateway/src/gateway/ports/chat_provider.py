@@ -1,7 +1,7 @@
 """Port `ChatProvider`: `complete(req)`, `stream(req)`.
 
-Adapter v1: xem bảng §9.2 (một provider thật kèm `mock`). Chưa có decorator Retrying/CircuitBreaking/Fallback.
-Tài liệu: docs/design/00-contracts.md §9.2, 01 §1.2/§7.
+Adapter v1: xem bảng contracts §9.2 (một provider thật kèm `mock`). Chưa có decorator Retrying/CircuitBreaking/Fallback.
+Tài liệu: docs/design/contracts.md §9.2.
 """
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/bootstrap-gateway-keys.sh  (docs/design/01 §3, 04 §5.1)
+# scripts/bootstrap-gateway-keys.sh
 # Tạo API key gateway cho agent-service và docs-mcp bằng `gateway.cli create-key`,
 # ghi vào secrets/agent_gateway_key và secrets/docs_gateway_key (cùng file mode với gen-secrets.sh).
 #

@@ -1,4 +1,4 @@
-"""Taint theo `(sub, thread_id)` + `recent` (contracts §2.1, 02 §5.7, D8/D17). Module thường, không phải port.
+"""Taint theo `(sub, thread_id)` + `recent` (contracts §6). Module thường, không phải port.
 
 `raise_taint` gộp nguyên tử bằng Lua `taint_merge`: max `max_class`, hợp `dept_set`, nối `sources`
 (tối đa 20), ghi CẢ khoá thread LẪN `:recent` trong một lần gọi. `get_taint` đọc cả hai; lỗi hạ tầng

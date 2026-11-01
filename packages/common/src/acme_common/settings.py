@@ -1,6 +1,6 @@
-"""Cấu hình chung mọi service (contracts §7 mục "Chung").
+"""Cấu hình chung mọi service (contracts §8).
 
-Quy ước secret (contracts §7): mọi trường có thể đặt qua `<BIẾN>_FILE` (đường dẫn file, vd Docker
+Quy ước secret (contracts §8): mọi trường có thể đặt qua `<BIẾN>_FILE` (đường dẫn file, vd Docker
 secret); có cả hai thì `_FILE` thắng. Service con kế thừa `CommonSettings` là có sẵn cơ chế này.
 """
 
@@ -51,7 +51,7 @@ class _FileSecretsSource(PydanticBaseSettingsSource):
 class CommonSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
 
-    # --- Chung (contracts §7) ---
+    # --- Chung (contracts §8) ---
     acme_env: Literal["dev", "test", "eval"] = "dev"
     log_level: str = "INFO"
     otel_exporter_otlp_endpoint: str | None = None
@@ -86,13 +86,13 @@ class CommonSettings(BaseSettings):
     event_sink_adapter: str = "json_log"
     rate_limiter_adapter: str = "in_memory"
 
-    # --- EventSink postgres / audit hash-chain (contracts §3.1, §3.6) ---
+    # --- EventSink postgres / audit hash-chain (contracts §5) ---
     event_sink_database_url: str | None = None  # gateway: usage_events + audit_log
     mcp_audit_database_url: str | None = None  # MCP: tool_audit (role mcp_audit_w)
     audit_hmac_key: str | None = None  # AUDIT_HMAC_KEY hoặc AUDIT_HMAC_KEY_FILE; >= 16 byte
     audit_hmac_key_id: int = 1
 
-    # --- MCP server host (02 §1.2) ---
+    # --- MCP server host ---
     mcp_host: str = "mcp_sdk"  # tên adapter ToolServerHost
     mcp_audience: str = ""
     mcp_allowed_azp: str = ""

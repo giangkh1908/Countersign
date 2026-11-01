@@ -2,7 +2,7 @@
 
 `TokenVerifier`/`TokenBroker`/`Clock` chọn adapter theo tên trong config, qua factory của
 acme_common (registry dict + lazy import). Không bọc `TokenBroker` bằng `CachingTokenBroker`:
-BFF tự cache token theo phiên trong `SessionStore` (D15: không cache chéo phiên).
+BFF tự cache token theo phiên trong `SessionStore` (không cache chéo phiên).
 Redis, httpx là hạ tầng cố định nên dùng trực tiếp.
 """
 

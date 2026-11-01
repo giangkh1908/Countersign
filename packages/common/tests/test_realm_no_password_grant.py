@@ -1,6 +1,6 @@
 """Realm export không được chứa client password-grant (backdoor qua mặt đăng nhập trình duyệt).
 
-Client dev-only `e2e-test` do eval/e2e/close_ticket.py tự tạo/xoá qua Admin API (design 04 §4.2).
+Client dev-only `e2e-test` do eval/e2e/close_ticket.py tự tạo/xoá qua Admin API.
 """
 
 import json

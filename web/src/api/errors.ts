@@ -13,7 +13,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Đọc `{"error":{code,message,retryable,request_id}}` (contracts §6.4); body lạ -> mã `unknown`. */
+/** Đọc `{"error":{code,message,retryable,request_id}}` (contracts §4); body lạ -> mã `unknown`. */
 export async function parseErrorBody(res: Response): Promise<ApiError> {
   try {
     const parsed = ErrorBodySchema.safeParse(await res.json());

@@ -5,7 +5,7 @@ Tên lạ -> raise XxxNotConfigured kèm danh sách tên hợp lệ. ToolServerH
 `acme_common.factory.build_tool_server_host`.
 
 Không có adapter `permissive` cho IntentIssuer/ApprovalVerifier: chỉ thêm khi cần ablation
-(ACME_ENV=eval, §9.1 mục 11).
+(ACME_ENV=eval, contracts §9.1 mục 11).
 """
 
 from __future__ import annotations

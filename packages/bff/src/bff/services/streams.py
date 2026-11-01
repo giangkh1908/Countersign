@@ -1,4 +1,4 @@
-"""StreamService: mở luồng tới agent (chat/resume/approve) và relay SSE về trình duyệt (07 §2.8)."""
+"""StreamService: mở luồng tới agent (chat/resume/approve) và relay SSE về trình duyệt."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Request-id + CSP và security headers (contracts §9.3, 07 §2.5). ASGI thuần để không đệm SSE."""
+"""Request-id + CSP và security headers (contracts §9.3). ASGI thuần để không đệm SSE."""
 
 from __future__ import annotations
 

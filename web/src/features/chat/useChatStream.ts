@@ -13,7 +13,7 @@ export interface DoneInfo {
   status: "completed" | "interrupted" | "rejected";
 }
 
-/** Gom `token` theo khung hình để markdown không parse lại từng token (07 §3.5). */
+/** Gom `token` theo khung hình để markdown không parse lại từng token. */
 export function useChatStream(threadId: string | null, onDone?: (d: DoneInfo) => void) {
   const { agent, approvals } = useApi();
   const [state, dispatch] = useReducer(streamReducer, initialStream);

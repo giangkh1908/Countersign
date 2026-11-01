@@ -1,6 +1,5 @@
 """Adapter `oauth_token_exchange` cho port `TokenBroker`. RFC 8693.
-Milestone: M3.
-Tài liệu: docs/design/00-contracts.md §9.2.
+Tài liệu: docs/design/contracts.md §9.2.
 """
 
 from __future__ import annotations

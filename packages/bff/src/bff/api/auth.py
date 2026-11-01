@@ -1,4 +1,4 @@
-"""Router đăng nhập/callback/logout. Mỏng, gọi services. Docs: 07 §2.3, §2.6."""
+"""Router đăng nhập/callback/logout. Mỏng, gọi services."""
 
 from __future__ import annotations
 

@@ -3,7 +3,6 @@
 L1 (dict TTL trong process: 10s, negative cache 5s) + L3 (Postgres, truy vấn tham số hoá).
 Chưa có L2 Redis và thu hồi qua pub/sub: một key bị thu hồi có hiệu lực trong tối đa 10s (TTL L1)
 ở các instance khác; instance thực hiện thu hồi thì ngay lập tức.
-Tài liệu: docs/design/01-gateway.md §3.2.
 """
 
 from __future__ import annotations

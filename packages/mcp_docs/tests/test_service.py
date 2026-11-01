@@ -77,7 +77,7 @@ def env(redis: Any | None, *, enforce_acl: bool = True, mode: str = "hybrid") ->
 
 
 async def test_other_department_gets_zero_confidential(redis) -> None:
-    """DoD M1: user SALES (clearance 2) không thấy tài liệu mật của HR."""
+    """User SALES (clearance 2) không thấy tài liệu mật của HR."""
     out = await env(redis).call(principal(("SALES",), 2))
     depts = {r["source"].split("/")[1] for r in out["results"]}
     assert depts <= {"ALL", "SALES"}

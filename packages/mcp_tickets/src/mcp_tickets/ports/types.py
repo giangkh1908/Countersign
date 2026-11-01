@@ -51,7 +51,7 @@ class Comment:
 
 @dataclass(frozen=True, slots=True)
 class Audience:
-    """Đối tượng sẽ thấy bản ghi đích (D17): `ticket_audience(draft)`."""
+    """Đối tượng sẽ thấy bản ghi đích: `ticket_audience(draft)`."""
 
     min_clearance: int
     dept_set: frozenset[str]

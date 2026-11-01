@@ -1,4 +1,4 @@
-"""Router health. Mỏng, gọi services. Docs: 07 §2.6."""
+"""Router health. Mỏng, gọi services."""
 
 from __future__ import annotations
 

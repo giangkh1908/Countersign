@@ -55,7 +55,7 @@ def _iso(dt: datetime | None) -> str | None:
 
 
 class Untrusted:
-    """Bọc trường chữ tự do bằng delimiter có nonce (02 §6.1); mỗi phản hồi một nonce."""
+    """Bọc trường chữ tự do bằng delimiter có nonce; mỗi phản hồi một nonce."""
 
     def __init__(self) -> None:
         self.nonce = secrets.token_hex(8)
@@ -222,7 +222,7 @@ class TicketService:
         before = {"title": t.title, "status": t.status, "resolution": t.resolution}
         after = {"title": t.title, "status": "closed", "resolution": resolution}
 
-        taint = await get_taint(self.redis, p.sub, thread_id)  # D17: thread + recent; None = lỗi
+        taint = await get_taint(self.redis, p.sub, thread_id)  # thread + recent; None = lỗi
         aud = await self._repo_call(
             self.repo.ticket_audience(
                 {
@@ -437,7 +437,7 @@ class TicketService:
     async def _not_pending(
         self, intent_id: str, p: Principal, status: str, owner: str | None, updated_at: float
     ) -> NoReturn:
-        """Bảng ánh xạ lỗi D17 cho intent không còn `pending`."""
+        """Bảng ánh xạ lỗi cho intent không còn `pending`."""
         if status == "committed":
             raise await self._replayed(intent_id, p, True)
         if status == "committing":

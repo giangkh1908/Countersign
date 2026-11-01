@@ -1,4 +1,4 @@
-"""Cấu hình gateway (pydantic-settings), biến môi trường theo contracts §7.
+"""Cấu hình gateway (pydantic-settings), biến môi trường theo contracts §8.
 
 Hậu tố `<BIẾN>_FILE` cho mọi secret do `CommonSettings` lo (đọc nội dung file, `_FILE` thắng).
 """

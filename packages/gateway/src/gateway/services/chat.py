@@ -1,4 +1,4 @@
-"""Điều phối một request chat: kiểm alias, gọi provider, dựng response, ghi `usage_events` .
+"""Điều phối một request chat: kiểm alias, gọi provider, dựng response, ghi `usage_events`.
 
 Gateway mỏng: không rate limit, budget, cache, PII, guard, fallback hay breaker (chỉ dùng phần tử
 đầu của chain). Không ghi nội dung prompt/response.
@@ -25,7 +25,7 @@ from .metrics import Metrics
 
 log = logging.getLogger("gateway.chat")
 
-# OpenAI params mà v1 bỏ lặng lẽ (trả header x-acme-ignored-params), 01 §7.2
+# OpenAI params mà v1 bỏ lặng lẽ (trả header x-acme-ignored-params)
 _IGNORED = (
     "logprobs",
     "top_logprobs",
@@ -163,7 +163,7 @@ class ChatService:
         overhead_ms: int,
         ttft_ms: int | None,
     ) -> None:
-        """Ghi `usage_events` (cột theo contracts §3.1). Không chứa nội dung prompt."""
+        """Ghi `usage_events` (cột theo contracts §5). Không chứa nội dung prompt."""
         u = usage or Usage()
         alias = resolved.alias if resolved else requested_alias
         event = {

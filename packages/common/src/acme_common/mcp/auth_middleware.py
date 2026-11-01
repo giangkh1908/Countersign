@@ -1,4 +1,4 @@
-"""`AuthMiddleware` ASGI bọc `ToolServerHost.asgi_app()` (ADR-003, 02 §1.4).
+"""`AuthMiddleware` ASGI bọc `ToolServerHost.asgi_app()` (ADR-003).
 
 Không dùng auth của SDK. Thứ tự: Origin -> đường dẫn công khai -> Bearer -> `TokenVerifier` -> azp ->
 đọc body (<=256 KiB, một JSON-RPC object) -> scope của tool (nếu `tools/call`) -> đặt contextvar.

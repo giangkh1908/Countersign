@@ -1,6 +1,6 @@
 """Port `IntentVerifier`: `verify(intent_jws, principal) -> RenderModel`.
 
-Adapter v1: `es256_jws`. Tài liệu: docs/design/00-contracts.md §4.1, 05 §5.2.
+Adapter v1: `es256_jws`. Tài liệu: docs/design/approval.md §2.1.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""`POST /internal/taint/forget {thread_id}` (02 §5.7, D17). Không phải tool, không nằm trong tools/list.
+"""`POST /internal/taint/forget {thread_id}`. Không phải tool, không nằm trong tools/list.
 
 - Token user (`aud=docs-mcp`): `sub` lấy từ JWT, KHÔNG bao giờ từ body.
 - Job retention (`azp=agent-maintenance`, scope `docs:forget`): body mang `sub` của chủ thread.

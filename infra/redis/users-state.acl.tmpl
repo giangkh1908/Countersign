@@ -1,9 +1,9 @@
-# infra/redis/users-state.acl.tmpl  (docs/design/04 §2.3; contracts §2)
+# infra/redis/users-state.acl.tmpl  (contracts §6)
 # ACL file KHÔNG hỗ trợ comment cuối dòng (sẽ bị parse thành rule); comment ở dòng riêng.
 # Placeholder @@REDIS_*@@ được entrypoint.sh thay bằng SHA256 của mật khẩu.
-# tickets: +multi +exec +discard cho kho intent (HSET+EXPIRE trong MULTI/EXEC, es256_jws.issue). ~mcp:tickets:* gồm intent:{id} và jti:{jti}; taint: đọc (prepare_*) + GHI (get_ticket, N12). Chỉ user này có ~mcp:tickets:intent:*
+# tickets: +multi +exec +discard cho kho intent (HSET+EXPIRE trong MULTI/EXEC, es256_jws.issue). ~mcp:tickets:* gồm intent:{id} và jti:{jti}; taint: đọc (prepare_*) + GHI (get_ticket). Chỉ user này có ~mcp:tickets:intent:*
 # docs: đọc+ghi taint (Lua taint_max) gồm {thread_id} và :recent; forget xoá key thread
-# bff: phiên BFF (D15/D16); không chạm mcp:*; không MULTI/WATCH/EVAL
+# bff: phiên BFF; không chạm mcp:*; không MULTI/WATCH/EVAL
 # default: off + resetpass (không mật khẩu nào). KHÔNG dùng nopass: với protected-mode yes, nopass làm Redis chặn mọi client ngoài loopback.
 user default off resetpass -@all
 user tickets on #@@REDIS_TICKETS@@ ~mcp:tickets:* ~mcp:rl:tickets-mcp:* ~mcp:taint:* +@read +@write +@scripting +multi +exec +discard -@dangerous

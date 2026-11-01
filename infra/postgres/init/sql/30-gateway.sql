@@ -1,4 +1,4 @@
--- gateway (contracts §3.1). Chạy bằng `postgres` trên DB gateway; idempotent.
+-- gateway (contracts §5). Chạy bằng `postgres` trên DB gateway; idempotent.
 GRANT CONNECT ON DATABASE gateway TO gw_owner, gw_app, gw_report;
 GRANT USAGE ON SCHEMA public TO gw_app, gw_report;
 CREATE SCHEMA IF NOT EXISTS acme AUTHORIZATION gw_owner;
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS audit_log_ts_idx ON audit_log (ts);
 CREATE INDEX IF NOT EXISTS audit_log_request_idx ON audit_log (request_id);
 
--- Chặn UPDATE/DELETE/TRUNCATE kể cả với owner (chỉ chống thao tác SQL thường; xem giới hạn ở contracts §3.1)
+-- Chặn UPDATE/DELETE/TRUNCATE kể cả với owner (chỉ chống thao tác SQL thường; xem giới hạn ở contracts §5)
 CREATE OR REPLACE FUNCTION acme.audit_immutable() RETURNS trigger LANGUAGE plpgsql AS
 $$ BEGIN RAISE EXCEPTION '% on % is not allowed (append-only)', TG_OP, TG_TABLE_NAME USING ERRCODE = '42501'; END $$;
 DROP TRIGGER IF EXISTS audit_log_no_mod ON audit_log;

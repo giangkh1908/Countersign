@@ -1,7 +1,7 @@
 """Adapter `Embedder` gọi LLM Gateway: `POST {base}/embeddings`, alias `acme-embed` (OpenAI-compatible).
 
 Plumbing HTTP dùng `RetryingHttpClient` bằng composition. Gateway chuyển tiếp tới runtime embedding
-duy nhất (D2); ingest và query dùng cùng adapter này. Lỗi mọi loại -> `EmbeddingUnavailable(kind)`
+duy nhất; ingest và query dùng cùng adapter này. Lỗi mọi loại -> `EmbeddingUnavailable(kind)`
 (message không chứa URL, key hay nội dung).
 """
 
@@ -15,7 +15,7 @@ from acme_common.http import HttpError, RetryingHttpClient
 from ..ports.embedder import Embedder
 from ..ports.types import EmbeddingUnavailable
 
-BATCH = 32  # 02 §5.1 [4]: tối đa 32 chunk/request
+BATCH = 32  # tối đa 32 chunk/request
 
 
 class GatewayHttpEmbedder(Embedder):

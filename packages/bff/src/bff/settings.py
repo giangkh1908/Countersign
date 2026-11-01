@@ -1,4 +1,4 @@
-"""Cấu hình bff (pydantic-settings). Biến môi trường theo contracts §7.
+"""Cấu hình bff (pydantic-settings). Biến môi trường theo contracts §8.
 
 `CommonSettings` đã hỗ trợ `<BIẾN>_FILE` (đọc secret từ file, `_FILE` thắng).
 """
@@ -74,7 +74,7 @@ class Settings(CommonSettings):
         return key
 
     def validate_runtime(self) -> None:
-        """Từ chối chạy khi cấu hình không an toàn (07 §2.2)."""
+        """Từ chối chạy khi cấu hình không an toàn."""
         if not self.https and self.acme_env != "dev":
             raise SettingsError("BFF_PUBLIC_URL phải là https khi ACME_ENV != dev")
         _ = self.session_key_bytes

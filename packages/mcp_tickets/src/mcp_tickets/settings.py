@@ -1,4 +1,4 @@
-"""Cấu hình mcp_tickets (pydantic-settings). Biến môi trường theo contracts §7.
+"""Cấu hình mcp_tickets (pydantic-settings). Biến môi trường theo contracts §8.
 
 Kế thừa `CommonSettings` (có sẵn `<BIẾN>_FILE`, `mcp_*`, `audit_hmac_key*`, ...); ở đây chỉ thêm/đổi
 mặc định những gì riêng của tickets-mcp.

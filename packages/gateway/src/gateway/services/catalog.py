@@ -1,4 +1,4 @@
-"""Catalog alias model đọc từ `config/models.yaml` (contracts §5). Không có tên vendor trong code."""
+"""Catalog alias model đọc từ `config/models.yaml` (contracts §8). Không có tên vendor trong code."""
 
 from __future__ import annotations
 

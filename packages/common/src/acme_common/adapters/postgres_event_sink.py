@@ -7,7 +7,7 @@
 Một connection đồng bộ + khoá luồng: `append` của port là hàm đồng bộ; nơi gọi trong event loop nên
 chạy `await asyncio.to_thread(sink.append, rec, True)` (ToolInvoker làm sẵn). Lỗi DB: buffer giữ lại
 (giới hạn `max_buffer`, vượt thì bỏ bản cũ nhất và đếm `dropped`); `sync=True` raise cho caller.
-Milestone: M1. Tài liệu: docs/design/00-contracts.md §3.1, §3.6, §9.2.
+Tài liệu: docs/design/contracts.md §5, §9.2.
 """
 
 from __future__ import annotations

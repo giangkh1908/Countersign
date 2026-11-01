@@ -1,6 +1,6 @@
 """Test với Postgres thật; bỏ qua nếu không có TEST_DATABASE_URL (vd postgresql://postgres:pw@localhost:55432/postgres).
 
-Mỗi test chạy trong một schema riêng (DDL mô phỏng contracts §3.1/§3.6, gồm trigger append-only).
+Mỗi test chạy trong một schema riêng (DDL mô phỏng contracts §5, gồm trigger append-only).
 """
 
 from __future__ import annotations

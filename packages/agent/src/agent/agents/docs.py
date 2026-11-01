@@ -16,7 +16,7 @@ _PROMPT = (
 
 
 def extract_citations(tool_name: str, data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Trích nguồn từ `results[]` của search_documents (02 §5.4)."""
+    """Trích nguồn từ `results[]` của search_documents."""
     if tool_name != "search_documents":
         return []
     out: list[dict[str, Any]] = []

@@ -1,4 +1,4 @@
-"""Adapter `DocumentRetriever`: Postgres + pgvector, vector KNN + full-text trộn bằng RRF (02 §5.3).
+"""Adapter `DocumentRetriever`: Postgres + pgvector, vector KNN + full-text trộn bằng RRF.
 
 ACL hai lớp, cùng một nguồn là `Principal`:
   1. `WHERE` tường minh theo phòng ban / clearance / roles (trong từng nhánh vec và fts);

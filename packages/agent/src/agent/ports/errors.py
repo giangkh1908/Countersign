@@ -19,7 +19,7 @@ class ToolUnavailable(Exception):
 
 
 class GatewayError(Exception):
-    """Lỗi từ LLM gateway đã dịch (03 §5.3). `user_message` là câu tiếng Việt an toàn để hiển thị."""
+    """Lỗi từ LLM gateway đã dịch. `user_message` là câu tiếng Việt an toàn để hiển thị."""
 
     def __init__(self, code: str, user_message: str, *, retryable: bool = False) -> None:
         super().__init__(f"gateway_error: {code}")

@@ -1,4 +1,4 @@
-"""Chuẩn hoá văn bản (02 §5.1 [2]): NFC, bỏ ký tự điều khiển và zero-width, gộp khoảng trắng.
+"""Chuẩn hoá văn bản: NFC, bỏ ký tự điều khiển và zero-width, gộp khoảng trắng.
 
 Dùng cho nội dung, tiêu đề và cả truy vấn lúc search (cùng một hàm để FTS/embedding khớp nhau).
 Zero-width cũng là kênh giấu chỉ dẫn nên bị loại ở đây.

@@ -1,4 +1,4 @@
-"""Router chat/SSE và resume. Mỏng, gọi services. Docs: 07 §2.6, §2.8."""
+"""Router chat/SSE và resume. Mỏng, gọi services."""
 
 from __future__ import annotations
 

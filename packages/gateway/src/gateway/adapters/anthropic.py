@@ -1,6 +1,6 @@
 """Adapter `anthropic` cho port `ChatProvider`. Chỉ file này import SDK Anthropic.
 
-Làm đúng 3 việc (01 §7): dịch `ChatRequest` -> tham số Messages API; parse response/SSE -> `ChatResponse`/`ChatChunk`;
+Làm đúng 3 việc: dịch `ChatRequest` -> tham số Messages API; parse response/SSE -> `ChatResponse`/`ChatChunk`;
 ánh xạ lỗi -> `ProviderError`. Message lỗi không chứa URL, header, key hay nội dung. Không retry.
 """
 

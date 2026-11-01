@@ -1,4 +1,4 @@
-"""Ghi hàng audit có hash-chain vào Postgres, TRONG transaction của caller (D6, 02 §6.8).
+"""Ghi hàng audit có hash-chain vào Postgres, TRONG transaction của caller.
 
 Caller truyền connection đang mở transaction; hàm KHÔNG commit/rollback. Nhờ vậy tickets-mcp ghi
 `tool_audit` cùng transaction với UPDATE: lỗi audit => rollback cả hai.

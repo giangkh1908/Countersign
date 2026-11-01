@@ -1,5 +1,5 @@
 /* eslint-disable no-irregular-whitespace, no-control-regex */
-// Escape ký tự bidi / điều khiển / không độ rộng thành token nhìn thấy được (07 §3.6 mục 4).
+// Escape ký tự bidi / điều khiển / không độ rộng thành token nhìn thấy được.
 
 // Bidi: LRM/RLM/ALM, LRE..RLO, LRI..PDI. Điều khiển C0/C1 (trừ \t \n khi allowNewlines).
 const BIDI = /[؜‎‏‪-‮⁦-⁩]/;

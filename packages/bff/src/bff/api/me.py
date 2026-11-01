@@ -1,4 +1,4 @@
-"""Router thông tin người dùng. Mỏng, gọi services. Docs: 07 §2.6."""
+"""Router thông tin người dùng. Mỏng, gọi services."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# infra/prometheus/prometheus.yml  (docs/design/04 §6.1)
+# infra/prometheus/prometheus.yml
 global:
   # demo 15s
   scrape_interval: 5s

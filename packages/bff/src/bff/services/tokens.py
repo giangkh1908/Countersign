@@ -1,4 +1,4 @@
-"""TokenService: token agent/signer theo phiên (D15), single-flight refresh (07 §2.4, §2.10).
+"""TokenService: token agent/signer theo phiên, single-flight refresh.
 
 Mỗi lần exchange chỉ MỘT audience. Token cache theo phiên trong `SessionStore` (không cache chéo
 phiên). Token đăng nhập (`aud=chat-ui`) chỉ dùng làm subject cho exchange, không rời BFF.
@@ -61,7 +61,7 @@ class TokenService:
         return await self._cached(s, "signer", SIGNER_AUD, self._signer_ttl)
 
     async def call(self, s: SessionData, slot: str, fn: Callable[[str], Awaitable[_T]]) -> _T:
-        """Gọi upstream với token của `slot`; 401 thì exchange lại đúng một lần (07 §2.9)."""
+        """Gọi upstream với token của `slot`; 401 thì exchange lại đúng một lần."""
         getter = self.agent_token if slot == "agent" else self.signer_token
         try:
             return await fn(await getter(s))

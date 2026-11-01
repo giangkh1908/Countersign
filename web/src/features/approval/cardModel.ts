@@ -2,7 +2,7 @@ import { z, type ZodType } from "zod";
 import type { CardModel } from "../../api/types";
 import { inspectText } from "../../lib/safeText";
 
-// Tập chuẩn: 05 mục 5.3. Đổi tập phải sửa 05 trước.
+// Tập chuẩn: docs/design/approval.md §3. Đổi tập phải sửa tài liệu đó trước.
 export const KNOWN = ["text", "longtext", "enum", "datetime", "ticket_ref"] as const;
 export type FieldKind = (typeof KNOWN)[number];
 export type Scalar = string | null;

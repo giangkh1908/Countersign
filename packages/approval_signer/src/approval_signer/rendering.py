@@ -1,6 +1,6 @@
-"""Dựng render model từ payload intent đã verify (05 §5.3). Thuần hàm, không I/O.
+"""Dựng render model từ payload intent đã verify. Thuần hàm, không I/O.
 
-Mẫu cố định theo `op`; `display_fields` phủ MỌI khoá của `args_canonical` và `before/after` (N03).
+Mẫu cố định theo `op`; `display_fields` phủ MỌI khoá của `args_canonical` và `before/after`.
 Có khoá lạ / kiểu lạ / giá trị không hiển thị được => `intent_unrenderable`.
 Ký tự điều khiển, bidi, zero-width trong phần `display` được escape thành `\\uXXXX` (hiển thị được).
 """

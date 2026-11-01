@@ -1,4 +1,4 @@
-"""`AclPolicy`: hàm thuần kiểm quyền đọc chunk (cùng quy tắc contracts §3.2 / RLS `chunk_acl`).
+"""`AclPolicy`: hàm thuần kiểm quyền đọc chunk (cùng quy tắc contracts §5 / RLS `chunk_acl`).
 
 `DocumentService` dùng để kiểm lại mọi `RetrievedChunk` do retriever trả về (lớp ACL thứ ba,
 độc lập adapter): thiếu thông tin ACL hoặc principal không có clearance => từ chối (fail-closed).

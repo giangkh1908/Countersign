@@ -1,4 +1,3 @@
-# CI theo docs/design/04-infra-data-eval.md §5.5.
 # TODO(hardening): pin mọi action theo commit SHA đầy đủ (hiện dùng tag major).
 name: ci
 on:
@@ -29,7 +28,7 @@ jobs:
       - run: uv sync --frozen --all-packages
       - name: Leak-grep (contracts §9.1 mục 8)
         run: bash scripts/leak-grep.sh
-      - name: Gateway không chứa model runtime trong cây phụ thuộc (D2)
+      - name: Gateway không chứa model runtime trong cây phụ thuộc
         run: |
           if uv tree --package acme-gateway | grep -iE "onnxruntime|torch|tokenizers|transformers|underthesea"; then
             echo "::error::gateway dependency tree contains model runtime"; exit 1
@@ -59,7 +58,7 @@ jobs:
       - run: docker compose --profile tickets --profile obs --profile seed config -q
 
   # ---- Job nặng: giữ chỗ, bật theo milestone ----
-  e2e:  # TODO(M1/M6): Playwright trên compose (BFF + Keycloak + mock-provider)
+  e2e:  # TODO: Playwright trên compose (BFF + Keycloak + mock-provider)
     if: false
     runs-on: ubuntu-24.04
     needs: [web]
@@ -79,7 +78,7 @@ jobs:
       - if: always()
         run: docker compose logs --no-color > compose-e2e.log && docker compose down -v
 
-  supply-chain:  # TODO(M2): pip-audit, osv-scanner, SBOM
+  supply-chain:  # TODO: pip-audit, osv-scanner, SBOM
     if: false
     runs-on: ubuntu-24.04
     steps:

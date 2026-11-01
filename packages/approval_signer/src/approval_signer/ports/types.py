@@ -8,7 +8,7 @@ from typing import Any
 
 from acme_common.ports import NotConfigured
 
-# code -> HTTP status (contracts §6.3, 05 §5.3)
+# code -> HTTP status (contracts §4)
 STATUS_BY_CODE: dict[str, int] = {
     "unauthorized": 401,
     "forbidden": 403,
@@ -22,7 +22,7 @@ STATUS_BY_CODE: dict[str, int] = {
 
 
 class SignerError(Exception):
-    """Lỗi nghiệp vụ của signer. `code` thuộc contracts §6.3; `details` chỉ chứa mã/đường dẫn trường
+    """Lỗi nghiệp vụ của signer. `code` thuộc contracts §4; `details` chỉ chứa mã/đường dẫn trường
     lấy từ payload đã ký, không chứa token, claim hay khoá."""
 
     def __init__(self, code: str, **details: Any) -> None:
@@ -65,7 +65,7 @@ class VerifiedIntent:
 
 @dataclass(frozen=True, slots=True)
 class RenderModel:
-    """Render model (contracts §4.1, 05 §5.3). `display` là phần SPA render, đã escape ký tự nguy hiểm."""
+    """Render model (docs/design/approval.md §2.1). `display` là phần SPA render, đã escape ký tự nguy hiểm."""
 
     intent_id: str
     op: str

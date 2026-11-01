@@ -1,4 +1,4 @@
-"""Port `DocumentIndexer`: ghi tài liệu + chunk đã embed vào kho (bước [5] của ingest, 02 §5.1)."""
+"""Port `DocumentIndexer`: ghi tài liệu + chunk đã embed vào kho (bước [5] của ingest)."""
 
 from __future__ import annotations
 
