@@ -14,8 +14,6 @@ class Settings(CommonSettings):
     gw_key_pepper: str | None = None  # >= 32 byte; GW_KEY_PEPPER hoặc GW_KEY_PEPPER_FILE
     gw_key_pepper_prev: str | None = None
     anthropic_api_key: str | None = None
-    audit_hmac_key: str | None = None
-    audit_hmac_key_id: str | None = None
     gw_provider_override: str | None = None  # vd "mock"; factory thay mọi chain
     gw_keystore_adapter: str = "postgres"
     gw_models_config: str | None = None  # mặc định ./config/models.yaml

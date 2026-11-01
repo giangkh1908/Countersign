@@ -55,7 +55,7 @@ provision() {
   # stdout = plaintext key (chỉ giữ trong biến); stderr (key_id) bỏ đi để log sạch.
   key="$($COMPOSE exec -T gateway python -m gateway.cli --actor bootstrap-gateway-keys create-key \
         --name "$name" --dept "$DEPT" --owner-type service --owner-ref "$owner" \
-        --allowed-models "$models" "$@" 2>/dev/null | tr -d '\r\n')"
+        --allowed-models "$models" "$@" 2>/dev/null | tr -d '\r\n')" || key=""  # lỗi thì rơi xuống nhánh FAIL, không thoát im lặng vì set -e
   if [ -z "$key" ]; then
     echo "FAIL   $name: gateway.cli create-key không trả key (xem: $COMPOSE logs gateway; kiểm tra bảng/phòng ban $DEPT)" >&2
     return 1
