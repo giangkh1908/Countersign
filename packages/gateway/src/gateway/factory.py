@@ -2,7 +2,7 @@
 
 Quy tắc (contracts §9.1 mục 5): KHÔNG dùng chuỗi if/elif. Mỗi vendor có một hàm loader
 import lười (`from .adapters.<vendor> import ...` nằm TRONG hàm). Tên lạ -> raise
-`XxxNotConfigured` kèm `sorted(_REGISTRY)`. Decorator cross-cutting (retry, breaker, fallback, metered): M2.
+`XxxNotConfigured` kèm `sorted(_REGISTRY)`. Chưa có decorator cross-cutting (retry, breaker, fallback).
 """
 
 from __future__ import annotations

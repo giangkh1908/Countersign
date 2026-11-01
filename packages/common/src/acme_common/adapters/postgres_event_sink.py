@@ -2,7 +2,7 @@
 
 Định tuyến theo `record["event"]`:
 - `usage_event` -> bảng `usage_events` (batch `executemany`, ghi ở `flush()` hoặc khi buffer đầy);
-- `audit_log` / `tool_audit` -> hash-chain HMAC (`acme_common.audit.pg`). `sync=True` ghi ngay
+- `audit_log` / `tool_audit` -> hash-chain HMAC (`acme_common.adapters.audit_pg`). `sync=True` ghi ngay
   (một transaction riêng); `sync=False` vào buffer và ghi ở `flush()`.
 Một connection đồng bộ + khoá luồng: `append` của port là hàm đồng bộ; nơi gọi trong event loop nên
 chạy `await asyncio.to_thread(sink.append, rec, True)` (ToolInvoker làm sẵn). Lỗi DB: buffer giữ lại
@@ -20,17 +20,17 @@ from typing import Any
 
 import psycopg
 
-from ..audit import AuditKeyring
-from ..audit.pg import AUDIT_TABLES, append_audit_sync
 from ..ports.event_sink import EventRecord, EventSink
+from ..services.audit_chain import AuditKeyring
+from .audit_pg import AUDIT_TABLES, append_audit_sync
 
 log = logging.getLogger("acme.postgres_event_sink")
 
 _USAGE_COLUMNS = (
     "ts", "request_id", "key_id", "department", "end_user_sub", "alias", "provider", "model",
     "input_tokens", "output_tokens", "cached_input_tokens", "cost_micro_usd", "latency_ms",
-    "ttft_ms", "gateway_overhead_ms", "sidecar_ms", "cache", "fallback_count", "route_reason",
-    "pii_entities", "guard_score", "status_code", "error_code",
+    "ttft_ms", "gateway_overhead_ms", "cache", "fallback_count", "route_reason",
+    "status_code", "error_code",
 )  # fmt: skip
 _USAGE_REQUIRED = ("request_id", "key_id", "department", "alias", "status_code")
 

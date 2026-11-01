@@ -15,8 +15,8 @@ from pydantic import BaseModel
 USAGE_COLUMNS = {
     "request_id", "key_id", "department", "end_user_sub", "alias", "provider", "model",
     "input_tokens", "output_tokens", "cached_input_tokens", "cost_micro_usd", "latency_ms",
-    "ttft_ms", "gateway_overhead_ms", "sidecar_ms", "cache", "fallback_count", "route_reason",
-    "pii_entities", "guard_score", "status_code", "error_code",
+    "ttft_ms", "gateway_overhead_ms", "cache", "fallback_count", "route_reason",
+    "status_code", "error_code",
 }  # fmt: skip
 
 PING = {

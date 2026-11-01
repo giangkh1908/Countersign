@@ -1,4 +1,4 @@
-"""Metric Prometheus tối thiểu của M1 (registry riêng cho mỗi app, dễ test). Chỉ nhãn có tập giá trị hữu hạn."""
+"""Metric Prometheus tối thiểu (registry riêng cho mỗi app, dễ test). Chỉ nhãn có tập giá trị hữu hạn."""
 
 from __future__ import annotations
 

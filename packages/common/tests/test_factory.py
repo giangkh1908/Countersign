@@ -2,8 +2,6 @@ import pytest
 from acme_common import factory
 from acme_common.caching_token_broker import CachingTokenBroker
 from acme_common.ports import (
-    AnchorStore,
-    AnchorStoreNotConfigured,
     Clock,
     ClockNotConfigured,
     EventSink,
@@ -72,16 +70,6 @@ def test_build_rate_limiter(name: str) -> None:
 def test_build_rate_limiter_unknown() -> None:
     with pytest.raises(RateLimiterNotConfigured, match="in_memory"):
         factory.build_rate_limiter("nope", S, clock=CLOCK)
-
-
-def test_build_anchor_store(tmp_path) -> None:
-    s = CommonSettings(audit_anchor_dir=str(tmp_path))
-    assert isinstance(factory.build_anchor_store("file_append_only", s), AnchorStore)
-
-
-def test_build_anchor_store_unknown() -> None:
-    with pytest.raises(AnchorStoreNotConfigured, match="file_append_only"):
-        factory.build_anchor_store("nope", S)
 
 
 async def test_m2_stubs_fail_loudly() -> None:

@@ -1,9 +1,7 @@
 """Package `ports` của acme_common: ABC, kiểu và lỗi trung lập (không import vendor)."""
 
-from .anchor_store import AnchorStore, AuditAnchor
 from .clock import Clock
 from .errors import (
-    AnchorStoreNotConfigured,
     ClockNotConfigured,
     EventSinkNotConfigured,
     NotConfigured,
@@ -24,9 +22,6 @@ from .types import AccessToken, LimitDecision, Principal
 
 __all__ = [
     "AccessToken",
-    "AnchorStore",
-    "AnchorStoreNotConfigured",
-    "AuditAnchor",
     "Clock",
     "ClockNotConfigured",
     "EventRecord",

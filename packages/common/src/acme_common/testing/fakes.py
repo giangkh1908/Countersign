@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 
-from ..ports.anchor_store import AnchorStore, AuditAnchor
 from ..ports.clock import Clock
 from ..ports.errors import TokenExchangeDenied, TokenInvalid
 from ..ports.event_sink import EventRecord, EventSink
@@ -129,20 +128,6 @@ class FakeRateLimiter(RateLimiter):
 
     async def release_slot(self, key_id: str) -> None:
         self.slots[key_id] = max(0, self.slots.get(key_id, 0) - 1)
-
-
-class FakeAnchorStore(AnchorStore):
-    def __init__(self) -> None:
-        self.anchors: list[AuditAnchor] = []
-
-    async def put(self, anchor: AuditAnchor) -> None:
-        self.anchors.append(anchor)
-
-    async def latest(self) -> AuditAnchor | None:
-        return max(self.anchors, key=lambda a: a.last_id, default=None)
-
-    async def list_since(self, since_id: int) -> list[AuditAnchor]:
-        return sorted((a for a in self.anchors if a.last_id > since_id), key=lambda a: a.last_id)
 
 
 class FakeToolServerHost(ToolServerHost):

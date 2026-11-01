@@ -16,9 +16,9 @@ from dataclasses import replace
 from typing import Any
 
 import psycopg
-from acme_common.audit import AuditKeyring
-from acme_common.audit.pg import append_audit
+from acme_common.adapters.audit_pg import append_audit
 from acme_common.ports import Principal
+from acme_common.services.audit_chain import AuditKeyring
 from psycopg import errors as pgerr
 from psycopg.types.json import Jsonb
 

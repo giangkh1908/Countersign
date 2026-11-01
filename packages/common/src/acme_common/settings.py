@@ -52,7 +52,7 @@ class CommonSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
 
     # --- Chung (contracts §7) ---
-    acme_env: Literal["dev", "test", "bench", "eval"] = "dev"
+    acme_env: Literal["dev", "test", "eval"] = "dev"
     log_level: str = "INFO"
     otel_exporter_otlp_endpoint: str | None = None
     keycloak_issuer: str = "http://keycloak.acme.local:8080/realms/acme"
@@ -85,7 +85,6 @@ class CommonSettings(BaseSettings):
     token_broker_adapter: str = "oauth_token_exchange"
     event_sink_adapter: str = "json_log"
     rate_limiter_adapter: str = "in_memory"
-    anchor_store_adapter: str = "file_append_only"
 
     # --- EventSink postgres / audit hash-chain (contracts §3.1, §3.6) ---
     event_sink_database_url: str | None = None  # gateway: usage_events + audit_log
@@ -105,9 +104,6 @@ class CommonSettings(BaseSettings):
     mcp_redis_url: str | None = None
     taint_recent_ttl_s: int = 86400
     agent_thread_retention_days: int = 30
-
-    # --- AnchorStore file_append_only ---
-    audit_anchor_dir: str = "./data/audit-anchors"
 
     @classmethod
     def settings_customise_sources(

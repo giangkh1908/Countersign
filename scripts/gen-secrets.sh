@@ -59,7 +59,7 @@ put_empty() {
 
 for n in pg_superuser_password gw_owner_password gw_app_password kn_owner_password kn_app_password \
          kn_ingest_password tk_owner_password tk_app_password \
-         ag_app_password ag_owner_password mcp_audit_password kc_app_password lf_app_password \
+         ag_app_password ag_owner_password mcp_audit_password kc_app_password \
          gw_report_password redis_gateway_password redis_tickets_password redis_docs_password \
          redis_bff_password redis_ops_password redis_health_password \
          kc_admin_password grafana_admin_password; do
@@ -74,14 +74,11 @@ put agent_checkpoint_key   rand_b64 32
 put bff_session_key        rand_b64 32
 put kc_agent_client_secret rand_hex 24
 put bff_oidc_client_secret rand_hex 24
-put lf_nextauth_secret     rand_b64 32
-put lf_salt                rand_b64 32
 
 # Key cần tạo sau khi hệ thống chạy / do người dùng cấp: file rỗng làm placeholder
 put_empty docs_gateway_key      # key service docs-mcp -> gateway (Admin API POST /admin/keys)
 put_empty agent_gateway_key     # key của agent-service (tạo sau khi gateway chạy)
 put_empty anthropic_api_key     # điền key thật nếu dùng provider thật
-put_empty gemini_api_key
 
 # URL đầy đủ cho gateway (ghi chú 1 của §1.3); mật khẩu chỉ gồm [A-Za-z0-9] nên không cần url-encode
 if should_write gw_database_url || [ "$ROTATE" = "gw_app_password" ]; then
@@ -128,5 +125,5 @@ fi
 if [ "$CI" -eq 1 ]; then
   echo "gen-secrets (--ci): đã ghi đè $SEC và .env (chỉ dùng cho kiểm tra, không dùng thật)."
 else
-  echo "gen-secrets: xong. Thư mục: $SEC (đã gitignore). Điền anthropic_api_key/gemini_api_key nếu cần provider thật."
+  echo "gen-secrets: xong. Thư mục: $SEC (đã gitignore). Điền anthropic_api_key nếu cần provider thật."
 fi

@@ -1,7 +1,7 @@
 -- Idempotent: chạy lại không lỗi (role/DB đã có thì bỏ qua; mật khẩu luôn được đồng bộ lại từ secret).
 -- Mọi role: NOSUPERUSER NOBYPASSRLS NOREPLICATION; không role app nào là superuser/BYPASSRLS
 SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION', r)
-FROM (VALUES ('gw_owner'), ('gw_app'), ('gw_report'), ('kn_owner'), ('kn_app'), ('kn_ingest'), ('tk_owner'), ('tk_app'), ('ag_owner'), ('ag_app'), ('mcp_audit_w'), ('kc_app'), ('lf_app')) AS v(r)
+FROM (VALUES ('gw_owner'), ('gw_app'), ('gw_report'), ('kn_owner'), ('kn_app'), ('kn_ingest'), ('tk_owner'), ('tk_app'), ('ag_owner'), ('ag_app'), ('mcp_audit_w'), ('kc_app')) AS v(r)
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = v.r) \gexec
 
 SELECT format('ALTER ROLE %I PASSWORD %L', r, pw)
@@ -17,12 +17,11 @@ FROM (VALUES
   ('ag_owner', :'ag_owner_pw'),
   ('ag_app', :'ag_app_pw'),
   ('mcp_audit_w', :'mcp_audit_pw'),
-  ('kc_app', :'kc_app_pw'),
-  ('lf_app', :'lf_app_pw')
+  ('kc_app', :'kc_app_pw')
 ) AS v(r, pw) \gexec
 
 SELECT format('CREATE DATABASE %I OWNER %I', d, o)
-FROM (VALUES ('gateway', 'gw_owner'), ('knowledge', 'kn_owner'), ('tickets', 'tk_owner'), ('agent', 'ag_owner'), ('keycloak', 'kc_app'), ('langfuse', 'lf_app')) AS v(d, o)
+FROM (VALUES ('gateway', 'gw_owner'), ('knowledge', 'kn_owner'), ('tickets', 'tk_owner'), ('agent', 'ag_owner'), ('keycloak', 'kc_app')) AS v(d, o)
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = v.d) \gexec
 -- ag_app chỉ DML; quyền cấp ở 30-agent.sql (default privileges cho bảng setup() tạo sau)
 

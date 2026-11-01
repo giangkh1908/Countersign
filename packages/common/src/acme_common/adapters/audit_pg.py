@@ -17,7 +17,7 @@ from typing import Any
 from psycopg import AsyncConnection, Connection
 from psycopg.types.json import Jsonb
 
-from .chain import GENESIS_HASH, AuditKeyring, seal
+from ..services.audit_chain import GENESIS_HASH, AuditKeyring, seal
 
 # bảng -> (sequence, có cột intent_id). Whitelist: tên bảng không bao giờ lấy từ input.
 AUDIT_TABLES: dict[str, tuple[str, bool]] = {

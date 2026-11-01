@@ -1,6 +1,7 @@
-"""Điều phối một request chat: kiểm alias, gọi provider, dựng response, ghi `usage_events` (M1, mỏng).
+"""Điều phối một request chat: kiểm alias, gọi provider, dựng response, ghi `usage_events` .
 
-Chưa có (M2): rate limit, budget, cache, PII, guard, fallback, breaker. Không ghi nội dung prompt/response.
+Gateway mỏng: không rate limit, budget, cache, PII, guard, fallback hay breaker (chỉ dùng phần tử
+đầu của chain). Không ghi nội dung prompt/response.
 """
 
 from __future__ import annotations
@@ -127,7 +128,7 @@ class ChatService:
         if parsed.alias not in caller.key.allowed_models:
             raise GatewayError("model_not_allowed")
         resolved = self._catalog.resolve(parsed.alias)
-        ref = resolved.chain[0]  # M1: chưa có fallback
+        ref = resolved.chain[0]  # chưa có fallback
         try:
             provider = self._providers(ref.provider)
         except ProviderNotConfigured:
@@ -178,16 +179,13 @@ class ChatService:
             "input_tokens": u.prompt_tokens,
             "output_tokens": u.completion_tokens,
             "cached_input_tokens": u.cached_tokens,
-            "cost_micro_usd": 0,  # M2: pricing.yaml
+            "cost_micro_usd": 0,  # chưa có bảng giá
             "latency_ms": latency_ms,
             "ttft_ms": ttft_ms,
             "gateway_overhead_ms": overhead_ms,
-            "sidecar_ms": 0,
             "cache": "miss",
             "fallback_count": 0,
             "route_reason": resolved.route_reason if resolved else None,
-            "pii_entities": 0,
-            "guard_score": None,
             "status_code": status,
             "error_code": error_code,
         }

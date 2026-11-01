@@ -17,7 +17,6 @@ dependencies = [
     "asyncpg",  # adapter KeyStore pg_redis_cached (chỉ trong adapters/)
     "anthropic",  # SDK chính thức, chỉ import trong adapters/anthropic.py
     "prometheus-client",
-    # M2: redis (L2 cache key, rate limit, breaker), google-genai (adapter gemini).
     # CẤM (D2): onnxruntime, torch, tokenizers, transformers, sentence-transformers, huggingface_hub.
 ]
 

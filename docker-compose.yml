@@ -31,9 +31,6 @@ volumes:
   prom_data: {}
   grafana_data: {}
   backups: {}
-  audit_anchors: {}
-  # Anchor audit append-only (D6). Dev: named volume audit_anchors (gateway + tickets-mcp ghi chung).
-  # Prod: bucket object-lock (AUDIT_ANCHOR_BUCKET), mục 22.2.
 
 secrets:                                   # sinh bởi scripts/gen-secrets.sh (./secrets, gitignore)
   pg_superuser_password:   { file: ./secrets/pg_superuser_password }
@@ -49,19 +46,17 @@ secrets:                                   # sinh bởi scripts/gen-secrets.sh (
   ag_owner_password:       { file: ./secrets/ag_owner_password }
   mcp_audit_password:      { file: ./secrets/mcp_audit_password }
   kc_app_password:         { file: ./secrets/kc_app_password }
-  lf_app_password:         { file: ./secrets/lf_app_password }
   gw_report_password:      { file: ./secrets/gw_report_password }       # role đọc usage cho Grafana
   redis_gateway_password:  { file: ./secrets/redis_gateway_password }
   redis_tickets_password:  { file: ./secrets/redis_tickets_password }
   redis_docs_password:     { file: ./secrets/redis_docs_password }
-  docs_gateway_key:        { file: ./secrets/docs_gateway_key }         # API key service cho docs-mcp -> gateway (acme-embed)
+  docs_gateway_key:        { file: ./secrets/docs_gateway_key }         # API key service cho docs-mcp -> gateway
   metrics_token:           { file: ./secrets/metrics_token }
   redis_ops_password:      { file: ./secrets/redis_ops_password }
   redis_health_password:   { file: ./secrets/redis_health_password }    # user chỉ có +ping
   gw_key_pepper:           { file: ./secrets/gw_key_pepper }            # >= 32 byte ngẫu nhiên
   gw_admin_token:          { file: ./secrets/gw_admin_token }
   anthropic_api_key:       { file: ./secrets/anthropic_api_key }
-  gemini_api_key:          { file: ./secrets/gemini_api_key }
   kc_admin_password:       { file: ./secrets/kc_admin_password }
   kc_agent_client_secret:  { file: ./secrets/kc_agent_client_secret }
   bff_oidc_client_secret:  { file: ./secrets/bff_oidc_client_secret }   # secret của client Keycloak `chat-ui` (D15)
@@ -75,8 +70,6 @@ secrets:                                   # sinh bởi scripts/gen-secrets.sh (
   audit_hmac_key:          { file: ./secrets/audit_hmac_key }                   # >= 32 byte; khoá ngoài DB (D6)
   agent_checkpoint_key:    { file: ./secrets/agent_checkpoint_key }             # khoá mã hoá checkpoint LangGraph (D7)
   grafana_admin_password:  { file: ./secrets/grafana_admin_password }
-  lf_nextauth_secret:      { file: ./secrets/lf_nextauth_secret }
-  lf_salt:                 { file: ./secrets/lf_salt }
   # URL đầy đủ (DSN/redis) dựng bởi gen-secrets.sh từ các mật khẩu ở trên; app đọc qua <BIẾN>_FILE
   docs_database_url:          { file: ./secrets/docs_database_url }          # role kn_app
   docs_audit_database_url:    { file: ./secrets/docs_audit_database_url }    # role mcp_audit_w @ knowledge
@@ -89,7 +82,7 @@ secrets:                                   # sinh bởi scripts/gen-secrets.sh (
 services:
   # ───────────── dữ liệu ─────────────
   postgres:
-    image: pgvector/pgvector:pg17           # TODO(M7): pin digest
+    image: pgvector/pgvector:pg17
     <<: *hardened
     read_only: false                        # PGDATA ghi nhiều; giữ volume riêng
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]   # entrypoint chuyển quyền sang user postgres
@@ -104,7 +97,7 @@ services:
                -c log_connections=on -c log_min_duration_statement=500
     secrets: [pg_superuser_password, gw_owner_password, gw_app_password, kn_owner_password, kn_app_password,
               kn_ingest_password, tk_owner_password, tk_app_password,
-              ag_app_password, ag_owner_password, mcp_audit_password, kc_app_password, lf_app_password, gw_report_password]
+              ag_app_password, ag_owner_password, mcp_audit_password, kc_app_password, gw_report_password]
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -120,7 +113,7 @@ services:
     deploy: { resources: { limits: { cpus: "2", memory: 1g } } }
 
   redis-state:
-    image: redis:8                          # TODO(M7): pin digest
+    image: redis:8
     <<: *hardened
     user: "999:999"                         # cap_drop ALL => root không có DAC_OVERRIDE; chạy thẳng user redis
     entrypoint: ["/bin/sh", "/etc/redis/entrypoint.sh"]       # render users.acl từ secret (mục 2.3)
@@ -140,7 +133,7 @@ services:
     deploy: { resources: { limits: { cpus: "0.5", memory: 384m } } }
 
   redis-cache:
-    image: redis:8                          # TODO(M7): pin digest; redis:8 đã gộp Query Engine (FT.*) [cần xác minh]
+    image: redis:8
     <<: *hardened
     user: "999:999"
     entrypoint: ["/bin/sh", "/etc/redis/entrypoint.sh"]
@@ -160,7 +153,7 @@ services:
 
   # ───────────── danh tính ─────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8.1   # TODO(M7): pin digest; 26.8.1 vá CVE-2026-97846 (04 §4.3)
+    image: quay.io/keycloak/keycloak:26.8.1   # 26.8.1 vá CVE-2026-97846 (04 §4.3)
     <<: *hardened
     read_only: false                        # dev mode ghi vào /opt/keycloak/data
     entrypoint: ["/bin/bash", "-c"]
@@ -223,29 +216,12 @@ services:
       GW_DATABASE_URL_FILE: /run/secrets/gw_database_url       # URL dựng từ gw_app_password (ghi chú 1)
       EVENT_SINK_ADAPTER: postgres                              # usage_events + audit_log vào DB gateway (mặc định json_log chỉ ra stdout)
       EVENT_SINK_DATABASE_URL_FILE: /run/secrets/gw_database_url  # role gw_app (INSERT usage_events, audit_log)
-      GW_REDIS_STATE_URL: redis://gateway@redis-state:6379/0
-      GW_REDIS_STATE_PASSWORD_FILE: /run/secrets/redis_gateway_password
-      GW_REDIS_CACHE_URL: redis://gateway@redis-cache:6379/0
-      GW_REDIS_CACHE_PASSWORD_FILE: /run/secrets/redis_gateway_password
       GW_KEY_PEPPER_FILE: /run/secrets/gw_key_pepper
-      GW_ADMIN_TOKEN_FILE: /run/secrets/gw_admin_token
       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
-      GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
-      GW_PROVIDER_OVERRIDE: ${GW_PROVIDER_OVERRIDE:-mock}      # M1: mặc định mock (chưa có khoá provider thật); factory chọn adapter `mock` (§9.1 mục 5)
-      GW_GUARD_TOOL_FAIL_POLICY: ${GW_GUARD_TOOL_FAIL_POLICY:-redact}   # D17: redact|closed (không có open)
-      GW_GUARD_USER_FAIL_POLICY: ${GW_GUARD_USER_FAIL_POLICY:-open}     # D17: open|redact|closed
-      GW_NER_EXTERNAL_FAIL_POLICY: ${GW_NER_EXTERNAL_FAIL_POLICY:-closed} # D17
-      GW_NER_FAIL_POLICY: skip_on_error
-      GW_INSTANCES: ${GW_INSTANCES:-1}                          # N_instance cho degraded mode (D5)
-      GW_WORKERS: ${GW_WORKERS:-2}
-      GW_DEGRADED_MAX_S: "600"
+      GW_PROVIDER_OVERRIDE: ${GW_PROVIDER_OVERRIDE:-mock}      # mặc định mock (chưa có khoá provider thật); factory chọn adapter `mock` (§9.1 mục 5)
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key          # khoá ngoài DB (D6)
       AUDIT_HMAC_KEY_ID: ${AUDIT_HMAC_KEY_ID:-1}
-      AUDIT_ANCHOR_DIR: /anchors                                # dev; prod dùng AUDIT_ANCHOR_BUCKET
-    secrets: [gw_app_password, gw_database_url, gw_key_pepper, gw_admin_token, anthropic_api_key, gemini_api_key,
-              redis_gateway_password, audit_hmac_key, metrics_token]
-    volumes:
-      - audit_anchors:/anchors                  # file anchor mở O_APPEND
+    secrets: [gw_app_password, gw_database_url, gw_key_pepper, anthropic_api_key, audit_hmac_key, metrics_token]
     ports: ["8000:8000"]                      # dev; publish được vì gateway có mặt ở network egress (non-internal)
     networks: [core, egress]
     depends_on:
@@ -324,12 +300,10 @@ services:
       MCP_DATABASE_URL_FILE: /run/secrets/docs_database_url   # role kn_app (SELECT)
       MCP_AUDIT_DATABASE_URL_FILE: /run/secrets/docs_audit_database_url
       MCP_REDIS_URL_FILE: /run/secrets/docs_redis_url
-      DOCS_GATEWAY_URL: http://gateway:8000/v1                 # embedding qua alias acme-embed
-      DOCS_GATEWAY_KEY_FILE: /run/secrets/docs_gateway_key     # key owner_type=service, allowed_models={acme-embed}
+      DOCS_GATEWAY_URL: http://gateway:8000/v1                 # embedding qua gateway (alias acme-embed: chưa phục vụ)
+      DOCS_GATEWAY_KEY_FILE: /run/secrets/docs_gateway_key     # key owner_type=service
       MCP_HOST: ${MCP_HOST:-mcp_sdk}
       MCP_PORT: "8101"
-      MCP_TAINT_RETENTION_DAYS: "30"                           # D17
-      MCP_TAINT_RECENT_TTL_S: "86400"                          # D17
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key
     secrets: [docs_database_url, docs_audit_database_url, docs_redis_url, docs_gateway_key, audit_hmac_key, metrics_token]
     networks: [core]
@@ -362,13 +336,8 @@ services:
       INTENT_KEY_ID: tickets-mcp-1                                    # = secrets/intent-keys/<kid>.pem do gen-secrets.sh tạo (cố định, không đọc .env)
       INTENT_TTL_S: "300"
       TAINT_POLICY: ${TAINT_POLICY:-warn}                            # warn|block (D8)
-      MCP_TAINT_RETENTION_DAYS: "30"
-      MCP_TAINT_RECENT_TTL_S: "86400"
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key
-      AUDIT_ANCHOR_DIR: /anchors
     secrets: [tickets_database_url, tickets_audit_database_url, tickets_redis_url, approval_public_key, intent_private_key, audit_hmac_key, metrics_token]
-    volumes:
-      - audit_anchors:/anchors
     networks: [core]
     depends_on:
       postgres:    { condition: service_healthy }
@@ -447,7 +416,7 @@ services:
   # ───────────── quan sát ─────────────
   prometheus:
     profiles: ["obs"]
-    image: prom/prometheus:v3.5.0           # TODO(M7): pin digest
+    image: prom/prometheus:v3.5.0
     <<: *hardened
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -468,7 +437,7 @@ services:
 
   grafana:
     profiles: ["obs"]
-    image: grafana/grafana:12.2.0           # TODO(M7): pin digest
+    image: grafana/grafana:12.2.0
     <<: *hardened
     environment:
       GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
@@ -492,11 +461,6 @@ services:
       retries: 10
     deploy: { resources: { limits: { cpus: "0.5", memory: 256m } } }
 
-  # Langfuse (profile `obs`, TUỲ CHỌN, NẶNG): v3 cần web + worker + ClickHouse + MinIO + Redis riêng.
-  # TODO(M5): thêm infra/langfuse/ (compose chính thức đã pin) rồi:
-  #   include: [{ path: ./infra/langfuse/docker-compose.langfuse.yml, project_directory: ./infra/langfuse }]
-  # KHÔNG dùng lại redis-state/redis-cache. Ước lượng thêm ~3-4 GB RAM; tắt khi bench.
-
   seed:
     profiles: ["seed"]
     build: { context: ., dockerfile: Dockerfile, target: seed }
@@ -505,11 +469,7 @@ services:
     restart: "no"
     environment:
       <<: *pyapp-env
-      SEED: "20261028"
-      GATEWAY_URL: http://gateway:8000/v1
-      SEED_LLM_CACHE_DIR: /cache
     secrets: [kn_ingest_password, tk_owner_password, gw_admin_token]
-    volumes: ["./data/.llm_cache:/cache"]
     networks: [core]
     depends_on:
       gateway: { condition: service_healthy }
