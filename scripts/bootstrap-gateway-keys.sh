@@ -9,7 +9,8 @@
 #                                                           # thu hồi bằng `gateway.cli revoke-key`)
 #
 # Cần: stack compose đang chạy (gateway healthy; bảng api_keys/departments đã có; seed phòng ban IT đã nạp).
-# Không bao giờ in key ra stdout/log. Sau khi tạo: docker compose restart agent docs-mcp (hoặc --restart).
+# Không bao giờ in key ra stdout/log. Sau khi tạo: docker compose restart agent docs-mcp (hoặc --restart:
+# restart rồi chờ agent + docs-mcp healthy mới thoát, chờ thất bại thì exit khác 0).
 # Biến môi trường: SECRETS_MODE (mặc định 644, như gen-secrets.sh), GW_KEYS_DEPT (mặc định IT).
 set -euo pipefail
 
@@ -77,5 +78,8 @@ provision docs_gateway_key docs-mcp docs-mcp acme-embed \
 
 if [ "$created" -eq 1 ] && [ "$RESTART" -eq 1 ]; then
   $COMPOSE restart agent docs-mcp
+  # restart thoát ngay khi service còn `starting`; chờ healthy để bước kế tiếp (smoke.sh) không FAIL giả.
+  # `up -d --wait` trả exit khác 0 nếu chờ thất bại; set -e làm script thoát theo.
+  $COMPOSE up -d --wait agent docs-mcp
 fi
 echo "bootstrap-gateway-keys: xong."
