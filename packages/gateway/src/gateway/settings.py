@@ -17,10 +17,6 @@ class Settings(CommonSettings):
     gw_key_pepper_prev: str | None = None
     anthropic_api_key: str | None = None
     gemini_api_key: str | None = None
-    gw_sidecar_url: str = "http://policy-sidecar:8010"
-    sidecar_token: str | None = None
-    sidecar_token_prev: str | None = None
-    gw_sidecar_timeout_ms: int = 2000
     gw_guard_tool_fail_policy: str = "redact"
     gw_guard_user_fail_policy: str = "open"  # open|closed
     gw_ner_external_fail_policy: str = "closed"
@@ -38,7 +34,6 @@ class Settings(CommonSettings):
     gw_anthropic_base_url: str | None = None  # None = endpoint công khai của SDK
     gw_provider_timeout_s: float = 60.0  # trần timeout HTTP tới provider
     gw_max_body_bytes: int = 4 * 1024 * 1024
-    gw_features: str = "auth,ratelimit,budget,pii,guard,cache,router"
     gw_pii_strict: bool = False
     gw_sink_flush_interval_s: float = 2.0  # chu kỳ đẩy buffer EventSink (usage_events)
 

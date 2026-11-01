@@ -14,11 +14,9 @@ members = [
     "acme-bff",
     "acme-common",
     "acme-gateway",
-    "acme-mcp-analytics",
     "acme-mcp-docs",
     "acme-mcp-tickets",
     "acme-mock-provider",
-    "acme-policy-sidecar",
     "acme-workspace",
 ]
 
@@ -194,25 +192,6 @@ dev = [
 ]
 
 [[package]]
-name = "acme-mcp-analytics"
-version = "0.1.0"
-source = { editable = "packages/mcp_analytics" }
-dependencies = [
-    { name = "acme-common" },
-    { name = "fastapi" },
-    { name = "pydantic-settings" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "acme-common", editable = "packages/common" },
-    { name = "fastapi" },
-    { name = "pydantic-settings" },
-    { name = "uvicorn", extras = ["standard"] },
-]
-
-[[package]]
 name = "acme-mcp-docs"
 version = "0.1.0"
 source = { editable = "packages/mcp_docs" }
@@ -309,25 +288,6 @@ dev = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "httpx2", specifier = ">=2.16.0" },
     { name = "openai", specifier = ">=3.41.0" },
-]
-
-[[package]]
-name = "acme-policy-sidecar"
-version = "0.0.0"
-source = { editable = "packages/policy_sidecar" }
-dependencies = [
-    { name = "acme-common" },
-    { name = "fastapi" },
-    { name = "pydantic-settings" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "acme-common", editable = "packages/common" },
-    { name = "fastapi" },
-    { name = "pydantic-settings" },
-    { name = "uvicorn", extras = ["standard"] },
 ]
 
 [[package]]

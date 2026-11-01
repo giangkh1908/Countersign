@@ -13,7 +13,6 @@ h() {
 sed -e "s/@@REDIS_GATEWAY@@/$(h redis_gateway_password)/" \
     -e "s/@@REDIS_TICKETS@@/$(h redis_tickets_password)/" \
     -e "s/@@REDIS_DOCS@@/$(h redis_docs_password)/" \
-    -e "s/@@REDIS_ANALYTICS@@/$(h redis_analytics_password)/" \
     -e "s/@@REDIS_BFF@@/$(h redis_bff_password)/" \
     -e "s/@@REDIS_OPS@@/$(h redis_ops_password)/" \
     -e "s/@@REDIS_HEALTH@@/$(h redis_health_password)/" \

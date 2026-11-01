@@ -8,7 +8,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 SEED_DIR="${1:-data/generated}"
 COMPOSE="${COMPOSE:-docker compose}"
 
-for pair in gateway:gateway knowledge:knowledge tickets:tickets analytics:analytics; do
+for pair in gateway:gateway knowledge:knowledge tickets:tickets; do
   db="${pair%%:*}"; f="$SEED_DIR/sql/${pair##*:}.sql"
   [ -f "$f" ] || { echo "thiếu $f - chạy: uv run python -m data.generator" >&2; exit 1; }
   echo ">> $db <- $f"

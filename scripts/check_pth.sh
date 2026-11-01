@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Liệt kê *.pth, sitecustomize.py, usercustomize.py trong site-packages của venv;
-# fail nếu ngoài allowlist (eval/security/pth-allowlist.txt, mỗi dòng một glob tên file).
-# Dùng: bash eval/security/check_pth.sh [venv_dir=.venv]
+# fail nếu ngoài allowlist (scripts/pth-allowlist.txt, mỗi dòng một glob tên file).
+# Dùng: bash scripts/check_pth.sh [venv_dir=.venv]
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 venv="${1:-.venv}"

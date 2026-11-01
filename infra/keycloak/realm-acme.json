@@ -282,28 +282,6 @@
           }
         }
       ]
-    },
-    {
-      "name": "analytics:read",
-      "description": "",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "false"
-      },
-      "protocolMappers": [
-        {
-          "name": "aud-analytics-mcp",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.client.audience": "analytics-mcp",
-            "id.token.claim": "false",
-            "access.token.claim": "true"
-          }
-        }
-      ]
     }
   ],
   "scopeMappings": [
@@ -372,8 +350,7 @@
         "llm:invoke",
         "docs:read",
         "tickets:read",
-        "tickets:write",
-        "analytics:read"
+        "tickets:write"
       ]
     },
     {
@@ -408,20 +385,6 @@
       "clientId": "tickets-mcp",
       "name": "tickets-mcp",
       "description": "resource server: tickets MCP",
-      "enabled": true,
-      "bearerOnly": true,
-      "fullScopeAllowed": false,
-      "protocol": "openid-connect",
-      "publicClient": false,
-      "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
-      "defaultClientScopes": [],
-      "optionalClientScopes": []
-    },
-    {
-      "clientId": "analytics-mcp",
-      "name": "analytics-mcp",
-      "description": "resource server: analytics MCP",
       "enabled": true,
       "bearerOnly": true,
       "fullScopeAllowed": false,

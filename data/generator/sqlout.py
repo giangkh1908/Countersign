@@ -129,35 +129,3 @@ def tickets_sql(data: dict[str, list[dict]]) -> str:
         + _setval("ticket_events")
         + "COMMIT;\n"
     )
-
-
-def analytics_sql(data: dict[str, list[dict]]) -> str:
-    spec = {
-        "core.customers": [
-            "id",
-            "name",
-            "segment",
-            "region",
-            "phone",
-            "email",
-            "tax_code",
-            "account_manager_sub",
-            "owning_dept",
-        ],
-        "core.products": ["id", "sku", "name", "category", "price_vnd"],
-        "core.orders": [
-            "id",
-            "customer_id",
-            "order_date",
-            "status",
-            "total_vnd",
-            "sales_rep_sub",
-            "owning_dept",
-        ],
-        "core.order_items": ["id", "order_id", "product_id", "quantity", "unit_price_vnd"],
-    }
-    out = ["BEGIN;\n"]
-    for table, cols in spec.items():
-        out.append(upsert(table, cols, _rows(data[table.split(".")[1]], cols)))
-    out.append("COMMIT;\n")
-    return "".join(out)

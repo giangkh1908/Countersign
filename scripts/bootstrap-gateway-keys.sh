@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# infra/scripts/bootstrap-gateway-keys.sh  (docs/design/01 §3, 04 §5.1)
+# scripts/bootstrap-gateway-keys.sh  (docs/design/01 §3, 04 §5.1)
 # Tạo API key gateway cho agent-service và docs-mcp bằng `gateway.cli create-key`,
 # ghi vào secrets/agent_gateway_key và secrets/docs_gateway_key (cùng file mode với gen-secrets.sh).
 #
 # Dùng:
-#   bash infra/scripts/bootstrap-gateway-keys.sh            # idempotent: bỏ qua key mà file đã khác rỗng
-#   bash infra/scripts/bootstrap-gateway-keys.sh --rotate   # tạo key mới cho cả hai (key cũ KHÔNG tự thu hồi;
+#   bash scripts/bootstrap-gateway-keys.sh            # idempotent: bỏ qua key mà file đã khác rỗng
+#   bash scripts/bootstrap-gateway-keys.sh --rotate   # tạo key mới cho cả hai (key cũ KHÔNG tự thu hồi;
 #                                                           # thu hồi bằng `gateway.cli revoke-key`)
 #
 # Cần: stack compose đang chạy (gateway healthy; bảng api_keys/departments đã có; seed phòng ban IT đã nạp).
@@ -13,7 +13,7 @@
 # Biến môi trường: SECRETS_MODE (mặc định 644, như gen-secrets.sh), GW_KEYS_DEPT (mặc định IT).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SEC="$ROOT/secrets"
 MODE="${SECRETS_MODE:-644}"
 DEPT="${GW_KEYS_DEPT:-IT}"

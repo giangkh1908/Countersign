@@ -36,7 +36,6 @@ def test_counts(out):
     assert c["documents"] == 30
     assert c["tickets"] == 100
     assert c["users"] == 16
-    assert c["customers"] == 40 and c["orders"] == 300
 
 
 def _docs(out):

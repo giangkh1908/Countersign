@@ -47,7 +47,7 @@ done
 
 echo "== Gateway: gọi chat có xác thực + usage_events (tuỳ chọn, cần secrets/agent_gateway_key) =="
 if [ ! -s secrets/agent_gateway_key ]; then
-  echo "  WARN  secrets/agent_gateway_key rỗng: bỏ qua (chạy: bash infra/scripts/bootstrap-gateway-keys.sh --restart)"
+  echo "  WARN  secrets/agent_gateway_key rỗng: bỏ qua (chạy: bash scripts/bootstrap-gateway-keys.sh --restart)"
 else
   hdr="$(mktemp)"
   code="$(curl -s -o /dev/null -D "$hdr" -m 15 -w '%{http_code}' http://localhost:8000/v1/chat/completions     -H "Authorization: Bearer $(tr -d '
