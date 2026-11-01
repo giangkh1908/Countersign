@@ -14,8 +14,8 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, Field, ValidationError
 
-from ..clients.agent_client import AgentClient
-from ..clients.signer_client import SignerClient
+from ..adapters.agent_client import AgentClient
+from ..adapters.signer_client import SignerClient
 from .errors import ApiError, UpstreamStatus
 from .session import SessionData, SessionStore, user_hash
 from .tokens import TokenService

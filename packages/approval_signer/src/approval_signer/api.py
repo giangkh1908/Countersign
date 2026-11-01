@@ -16,10 +16,10 @@ from acme_common.ports import Principal, TokenInvalid, TokenServiceUnavailable, 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
-from ..factory import build_approval_signer, build_intent_verifier
-from ..ports import SignerError
-from ..services.approval import ApprovalService
-from ..settings import Settings
+from .approval import ApprovalService
+from .factory import build_approval_signer, build_intent_verifier
+from .ports import SignerError
+from .settings import Settings
 
 log = logging.getLogger("approval_signer")
 _MSG = {

@@ -16,8 +16,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..chunking import embed_text, split
-from ..normalize import normalize_text
 from ..ports import (
     DocumentIndexer,
     DocumentLoader,
@@ -26,6 +24,8 @@ from ..ports import (
     Embedder,
     IndexedChunk,
 )
+from ..services.chunking import embed_text, split
+from ..services.normalize import normalize_text
 
 log = logging.getLogger("acme.docs.ingest")
 

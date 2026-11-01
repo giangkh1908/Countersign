@@ -20,7 +20,6 @@ from acme_common.factory import (
 from acme_common.mcp import AuthMiddleware, ToolInvoker
 from acme_common.ports import Clock, ToolServerHost
 
-from .api.tools import register_tools, required_scopes_for
 from .factory import (
     build_approval_verifier,
     build_intent_issuer,
@@ -29,6 +28,7 @@ from .factory import (
 )
 from .services.ticket_service import TicketService
 from .settings import Settings
+from .tools import register_tools, required_scopes_for
 
 log = logging.getLogger("acme.mcp_tickets")
 

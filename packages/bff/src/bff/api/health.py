@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
+from ..adapters.oidc import OidcUnavailable
 from ..factory import Container
-from ..services.oidc import OidcUnavailable
 from .deps import get_container
 
 router = APIRouter()

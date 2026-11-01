@@ -11,8 +11,14 @@ from dataclasses import dataclass
 from acme_common.http import HttpError
 from acme_common.ports import Clock, TokenInvalid, TokenServiceUnavailable, TokenVerifier
 
-from ..clients.agent_client import AgentClient
-from .oidc import OidcClient, OidcInvalidGrant, OidcUnavailable, claims_of_verified, pkce_pair
+from ..adapters.agent_client import AgentClient
+from ..adapters.oidc import (
+    OidcClient,
+    OidcInvalidGrant,
+    OidcUnavailable,
+    claims_of_verified,
+    pkce_pair,
+)
 from .session import SessionData, SessionStore
 from .tokens import TokenService
 

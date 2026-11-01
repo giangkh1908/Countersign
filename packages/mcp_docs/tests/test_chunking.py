@@ -1,7 +1,8 @@
 from pathlib import Path
 
 from mcp_docs.adapters.markdown import MarkdownLoader
-from mcp_docs.chunking import (
+from mcp_docs.ports import Document, Section
+from mcp_docs.services.chunking import (
     HARD_MAX,
     MIN_SECTION,
     SOFT_MAX,
@@ -9,8 +10,7 @@ from mcp_docs.chunking import (
     embed_text,
     split,
 )
-from mcp_docs.normalize import normalize_query, normalize_text
-from mcp_docs.ports import Document, Section
+from mcp_docs.services.normalize import normalize_query, normalize_text
 
 
 def words(n: int, prefix: str = "từ") -> str:

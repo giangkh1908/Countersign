@@ -16,12 +16,12 @@ from acme_common.http import RetryingHttpClient
 from acme_common.ports import Clock, TokenBroker, TokenVerifier
 from redis.asyncio import Redis
 
-from .clients.agent_client import AgentClient
-from .clients.signer_client import SignerClient
+from .adapters.agent_client import AgentClient
+from .adapters.oidc import OidcClient
+from .adapters.signer_client import SignerClient
 from .services.approval_flow import ApprovalFlow
 from .services.auth import AuthService
 from .services.crypto import Crypto
-from .services.oidc import OidcClient
 from .services.rate_limit import RateLimits
 from .services.session import SessionStore
 from .services.streams import StreamService

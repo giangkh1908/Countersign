@@ -15,7 +15,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from .api.app import ApiError, error_response, router
+from .api import ApiError, error_response, router
 from .container import Container, build_container, refresh_optional_agents
 from .factory import build_service_probe
 from .settings import Settings

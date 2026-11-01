@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 
 from acme_common.http import HttpError, RetryingHttpClient
 
-from .crypto import b64u, b64u_decode
+from ..services.crypto import b64u, b64u_decode
 
 
 class OidcUnavailable(Exception):

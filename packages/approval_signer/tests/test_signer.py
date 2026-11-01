@@ -13,7 +13,8 @@ from acme_common.services.canonical import intent_sha256
 from acme_common.testing import FakeClock, FakeRateLimiter, FakeTokenVerifier, TestSigner
 from approval_signer.adapters.es256_jws import Es256JwsIntentVerifier
 from approval_signer.adapters.es256_jwt import Es256JwtApprovalSigner
-from approval_signer.api.app import Deps, create_app
+from approval_signer.api import Deps, create_app
+from approval_signer.approval import ApprovalService
 from approval_signer.factory import build_approval_signer, build_intent_verifier
 from approval_signer.ports import (
     ApprovalSignerNotConfigured,
@@ -21,7 +22,6 @@ from approval_signer.ports import (
     SignerError,
 )
 from approval_signer.rendering import escape_text
-from approval_signer.services.approval import ApprovalService
 from approval_signer.settings import Settings
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec

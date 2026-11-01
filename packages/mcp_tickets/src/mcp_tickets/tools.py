@@ -7,7 +7,7 @@ from typing import Any
 from acme_common.mcp import CallerContext, ToolInvoker, ToolOutput
 from acme_common.ports import ToolServerHost, ToolSpec
 
-from ..services.ticket_service import TicketService
+from .services.ticket_service import TicketService
 
 SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 _CODE = {"type": "string", "pattern": "^TCK-[0-9]{6,}$"}

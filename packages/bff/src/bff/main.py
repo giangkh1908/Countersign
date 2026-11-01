@@ -18,9 +18,9 @@ from redis.exceptions import RedisError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .api import approvals, auth, chat, health, me, threads
+from .api.headers import RequestContextMiddleware
+from .api.origin import OriginGuardMiddleware
 from .factory import Container, build_container
-from .security.headers import RequestContextMiddleware
-from .security.origin import OriginGuardMiddleware
 from .services.crypto import CryptoError
 from .services.errors import ApiError, UpstreamStatus, error_body, to_http_error
 from .settings import Settings
