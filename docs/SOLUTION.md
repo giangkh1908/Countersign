@@ -1,7 +1,8 @@
-# Giải pháp: Trợ lý tri thức nội bộ có trích dẫn kiểm chứng được
+# Giải pháp: Trợ lý AI nội bộ có trích dẫn kiểm chứng được và hành động qua MCP
 
-> Phiên bản 2.0, 2026-10-30. Phạm vi theo [ADR-006](adr/ADR-006-scope-rag-citations.md), lộ trình ở [`ROADMAP.md`](ROADMAP.md) v2.0.
-> Bản v1.3 (gateway đầy đủ, ticket/phê duyệt ký số, analytics, policy-sidecar, quan sát, hardening) xem lịch sử git; các phần đó nay đóng băng (mục 8).
+> Phiên bản 2.1, 2026-11-01. Phạm vi theo [ADR-006](adr/ADR-006-scope-rag-citations.md) và [ADR-007](adr/ADR-007-actions-cache-observability.md), lộ trình ở [`ROADMAP.md`](ROADMAP.md) v2.1.
+> **ADR-007 mở lại ticket, cache, quan sát và thêm báo cáo nhóm chat:** khi tài liệu này mâu thuẫn với ADR-007 thì theo ADR-007. Các mục dưới mô tả phần hỏi đáp (đang làm); phần hành động, cache, quan sát sẽ viết chi tiết ở A1 và Q1.
+> Bản v1.3 (gateway đầy đủ, analytics, policy-sidecar, hardening) xem lịch sử git; phần còn đóng băng ở mục 8.
 > Hợp đồng dùng chung và quy tắc Ports & Adapters: [`design/00-contracts.md`](design/00-contracts.md) (§9 là nguồn chân lý). Quyết định D0–D15: [`design/DECISIONS-v1.2.md`](design/DECISIONS-v1.2.md).
 
 ## 1. Bài toán
@@ -10,6 +11,7 @@ Nhân viên cần tra cứu quy định và tài liệu của công ty. Hệ th�
 
 1. **Mọi câu trả lời dẫn nguồn kiểm chứng được:** mỗi câu gắn mã `[n]` trỏ tới một đoạn cụ thể (văn bản, Điều, khoản, vị trí ký tự) mà người dùng mở ra đối chiếu. Không đủ nguồn thì từ chối, không bịa.
 2. **Không bao giờ lộ tài liệu người dùng không được xem:** phân quyền thực thi ở tầng cơ sở dữ liệu, không dựa vào prompt. Tài liệu độc (prompt injection gián tiếp) không được điều khiển agent.
+3. **Thực hiện được việc qua MCP một cách an toàn** (ADR-007): tạo và xử lý ticket, gửi báo cáo vào nhóm chat. Quyền theo vai trò thực thi ở server, thao tác ghi hoặc gửi ra ngoài phải được người dùng duyệt.
 
 ## 2. Câu hỏi nghiên cứu
 
@@ -19,7 +21,11 @@ Nhân viên cần tra cứu quy định và tài liệu của công ty. Hệ th�
 | RQ2 Trích dẫn | Bước kiểm chứng sau sinh (mỗi câu ↔ đoạn nguồn) nâng citation precision và faithfulness bao nhiêu, đổi lại chi phí và độ trễ bao nhiêu? | citation precision/recall, faithfulness, tỉ lệ từ chối đúng; chi phí/câu, độ trễ p50/p95; có và không có bộ kiểm chứng | R2 |
 | RQ3 An toàn | Với ACL ở tầng DB (RLS) và spotlighting, tỉ lệ rò tài liệu trái quyền và tỉ lệ tấn công thành công của tài liệu độc là bao nhiêu? | leak rate (đích: 0), ASR theo kỹ thuật injection, có/không từng lớp phòng thủ | R3 |
 
-Chưa có số đo nào cho RQ1–RQ3 tại thời điểm viết; các bảng kết quả là sản phẩm của R1–R3.
+| RQ4 Cache (ADR-007) | Cache tiết kiệm bao nhiêu chi phí và độ trễ, có làm giảm chất lượng hay rò dữ liệu giữa các phạm vi quyền không? | hit rate, chi phí, độ trễ, chất lượng có/không cache, số lần rò | Q1 |
+
+RQ3 mở rộng theo ADR-007: đo cả việc tài liệu độc lừa agent tạo ticket hoặc gửi dữ liệu mật vào nhóm chat.
+
+Chưa có số đo nào cho RQ1–RQ4 tại thời điểm viết; các bảng kết quả là sản phẩm của R1–R3 và Q1.
 
 ## 3. Kiến trúc
 
@@ -138,10 +144,9 @@ Code và test được giữ, tắt khỏi compose mặc định qua profile; b�
 
 | Hạng mục | Profile | Thiết kế tham chiếu |
 |---|---|---|
-| tickets-mcp, approval-signer, luồng intent/approval ký số | `tickets` | [`design/05-approval-flow.md`](design/05-approval-flow.md), [`design/02-mcp-servers.md`](design/02-mcp-servers.md) |
 | analytics-mcp | `analytics` | [`design/02-mcp-servers.md`](design/02-mcp-servers.md) |
-| policy-sidecar (guard, NER), Langfuse, Prometheus/Grafana | `sidecar`, `obs` | [`design/06-policy-sidecar.md`](design/06-policy-sidecar.md) |
-| Gateway đầy đủ (rate limit, budget, fallback, PII, cache, router chi phí) | không có (bỏ, chỉ giữ ghi usage + chi phí) | [`design/01-gateway.md`](design/01-gateway.md) |
+| policy-sidecar (guard, NER) | `sidecar` | [`design/06-policy-sidecar.md`](design/06-policy-sidecar.md) |
+| Gateway đầy đủ (rate limit, budget, fallback, router chi phí) | không có (bỏ, chỉ giữ ghi usage + chi phí; cache mở lại theo ADR-007) | [`design/01-gateway.md`](design/01-gateway.md) |
 | Trang admin, i18n, HA, mTLS, Helm, secret manager | bỏ | |
 
 ## 9. Tài liệu thiết kế

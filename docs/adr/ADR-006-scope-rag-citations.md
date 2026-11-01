@@ -1,6 +1,6 @@
 # ADR-006: Thu hẹp đề tài về trợ lý tri thức nội bộ có trích dẫn kiểm chứng được
 
-- Trạng thái: Đã chấp nhận (2026-10-30)
+- Trạng thái: Đã chấp nhận (2026-10-30). Phần phạm vi ticket, cache, quan sát được sửa bởi [ADR-007](ADR-007-actions-cache-observability.md).
 - Thay thế phạm vi của: `docs/ROADMAP.md` v1.3 (M2–M7). Không thay D0–D15 về bảo mật, identity, Ports & Adapters.
 
 ## Bối cảnh

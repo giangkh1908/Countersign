@@ -1,4 +1,6 @@
-# AI_EXAMPLE — Trợ lý tri thức nội bộ có trích dẫn kiểm chứng được
+# AI_EXAMPLE — Trợ lý AI nội bộ có trích dẫn kiểm chứng được
+
+> Phạm vi mở rộng theo [ADR-007](docs/adr/ADR-007-actions-cache-observability.md): hành động qua MCP (ticket, báo cáo nhóm chat), phân quyền theo vai trò, cache, quan sát. Các phần này chưa làm, xem [`docs/ROADMAP.md`](docs/ROADMAP.md) (A1, Q1).
 
 Trợ lý trả lời từ tài liệu công ty, mỗi câu kèm trích dẫn trỏ tới đoạn nguồn cụ thể, có phân quyền theo người dùng (ACL ở tầng DB). Stack: LangGraph (agent), MCP (docs-mcp), LLM Gateway mỏng tự phát triển, Keycloak + BFF + SPA React/TS. Phạm vi theo [ADR-006](docs/adr/ADR-006-scope-rag-citations.md).
 

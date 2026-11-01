@@ -1,7 +1,7 @@
 # AI_EXAMPLE — Nền tảng trợ lý AI nội bộ doanh nghiệp
 
-Đề tài (từ 2026-10-30, `docs/adr/ADR-006-scope-rag-citations.md`): trợ lý tri thức nội bộ trả lời từ tài liệu công ty, **trích dẫn kiểm chứng được**, có phân quyền theo user. Nghiên cứu: truy xuất hybrid tiếng Việt, kiểm chứng trích dẫn sau sinh, rò rỉ trái quyền và prompt injection gián tiếp. Corpus: luật Việt Nam từ vbpl.vn (`data/SOURCES.md`).
-Giữ: Keycloak + BFF + SPA, gateway bản mỏng, docs-mcp, agent LangGraph. Đóng băng qua compose profile: tickets/approval (`tickets`), analytics, sidecar, obs.
+Đề tài (`docs/adr/ADR-006-scope-rag-citations.md`, sửa bởi `ADR-007-actions-cache-observability.md`): trợ lý AI nội bộ trả lời từ tài liệu công ty, **trích dẫn kiểm chứng được**, thực hiện việc qua MCP (ticket, báo cáo nhóm chat), phân quyền theo vai trò, có cache và quan sát (log, trace, metric, eval). Nghiên cứu: truy xuất hybrid tiếng Việt, kiểm chứng trích dẫn sau sinh, rò rỉ trái quyền và prompt injection gián tiếp, cache an toàn theo quyền. Corpus: luật Việt Nam từ vbpl.vn (`data/SOURCES.md`).
+Giữ: Keycloak + BFF + SPA, gateway bản mỏng + cache, docs-mcp, tickets-mcp + approval-signer (profile `tickets`), notify-mcp (dự kiến, profile `notify`), agent LangGraph, quan sát (profile `obs`). Đóng băng: analytics, sidecar.
 
 ## Đội agent
 | Vai trò | Agent | Model | Nhiệm vụ |
@@ -26,8 +26,8 @@ Chi tiết ở `docs/design/00-contracts.md` §9. Tóm tắt:
 ## Tài liệu
 - `docs/design/00-contracts.md` — hợp đồng dùng chung (nguồn chân lý)
 - `docs/design/DECISIONS-v1.2.md` — các quyết định D0–D15 (thắng khi mâu thuẫn)
-- `docs/design/01..07` — thiết kế chi tiết: 01 gateway, 02 MCP, 03 agent, 04 hạ tầng/dữ liệu/đánh giá, 05 luồng phê duyệt, 06 policy-sidecar, 07 web (React + TS) + BFF
+- `docs/design/01..08` — thiết kế chi tiết: 01 gateway, 02 MCP, 03 agent, 04 hạ tầng/dữ liệu/đánh giá, 05 luồng phê duyệt, 06 policy-sidecar, 07 web (React + TS) + BFF, 08 RAG + trích dẫn
 - `docs/SOLUTION.md` — giải pháp & kiến trúc
-- `docs/ROADMAP.md` — milestone M0–M7
+- `docs/ROADMAP.md` — milestone R0–R4, A1, Q1
 - `docs/adr/`, `docs/reviews/` — ADR và review
 - `docs/research/` — kết quả research
