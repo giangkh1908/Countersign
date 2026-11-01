@@ -439,16 +439,3 @@ services:
       timeout: 3s
       retries: 10
     deploy: { resources: { limits: { cpus: "0.5", memory: 256m } } }
-
-  seed:
-    profiles: ["seed"]
-    build: { context: ., dockerfile: Dockerfile, target: seed }
-    image: acme/seed:dev
-    <<: *hardened
-    restart: "no"
-    environment:
-      <<: *pyapp-env
-    secrets: [kn_ingest_password, tk_owner_password, gw_admin_token]
-    networks: [core]
-    depends_on:
-      gateway: { condition: service_healthy }

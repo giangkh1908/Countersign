@@ -6,7 +6,7 @@ Trợ lý trả lời câu hỏi từ tài liệu công ty, mỗi câu kèm trí
 
 M0, M1 xong (walking skeleton chạy đầu-cuối trên compose). Đang ở R0. Chưa làm: embedder thật và loader luật (R1), trích dẫn kiểm chứng (R2), tạo ticket và `notify-mcp` (A1), cache và trace (Q1). Chưa có số đo RAM. Lộ trình: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-Compose mặc định: postgres, redis-state, keycloak, migrate, mock-provider, gateway, docs-mcp, agent, bff. Profile: `tickets` (tickets-mcp, approval-signer), `obs` (prometheus, grafana), `seed`. Không bật `tickets` thì agent tự tắt route ticket và các API phê duyệt của BFF trả `503 upstream_unavailable`.
+Compose mặc định: postgres, redis-state, keycloak, migrate, mock-provider, gateway, docs-mcp, agent, bff. Profile: `tickets` (tickets-mcp, approval-signer), `obs` (prometheus, grafana). Không bật `tickets` thì agent tự tắt route ticket và các API phê duyệt của BFF trả `503 upstream_unavailable`.
 
 ## Yêu cầu
 

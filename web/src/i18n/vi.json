@@ -84,7 +84,6 @@
   "error.intent_unrenderable": "Không thể hiển thị đầy đủ nội dung cần duyệt nên không cho phép duyệt.",
   "error.intent_mismatch": "Nội dung duyệt không khớp với đề xuất. Hãy làm mới.",
   "error.intent_rejected_recently": "Đề xuất này đã bị bạn từ chối, trợ lý không thể gửi lại trong 10 phút.",
-  "error.budget_exceeded": "Đã vượt ngân sách sử dụng.",
   "error.upstream_unavailable": "Dịch vụ tạm thời không khả dụng.",
   "error.upstream_timeout": "Dịch vụ phản hồi quá chậm.",
   "error.network": "Mất kết nối mạng.",

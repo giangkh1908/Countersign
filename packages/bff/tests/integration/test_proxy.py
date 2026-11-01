@@ -343,13 +343,11 @@ async def test_unknown_agent_events_are_dropped_and_others_forwarded_verbatim(
 
 async def test_agent_sse_error_is_forwarded(logged_in: Env) -> None:
     logged_in.backends.agent_body = sse(
-        ("error", {"code": "budget_exceeded", "message": "Hết ngân sách", "retryable": False})
+        ("error", {"code": "rate_limited", "message": "Quá tải", "retryable": True})
     )
     r = await logged_in.browser.post("/api/chat", json={**CHAT, "thread_id": THREAD})
     events = parse_sse(r.text)
-    assert events == [
-        ("error", {"code": "budget_exceeded", "message": "Hết ngân sách", "retryable": False})
-    ]
+    assert events == [("error", {"code": "rate_limited", "message": "Quá tải", "retryable": True})]
 
 
 async def test_streaming_response_is_incremental_end_to_end(logged_in: Env) -> None:

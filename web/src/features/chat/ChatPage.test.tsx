@@ -59,11 +59,11 @@ describe("ChatPage", () => {
     const agent = new FakeAgentStream([
       { event: "run_start", data: {} },
       { event: "token", data: { text: "một phần" } },
-      { event: "error", data: { code: "budget_exceeded", message: "raw", retryable: false } },
+      { event: "error", data: { code: "rate_limited", message: "raw", retryable: false } },
     ]);
     renderChat(agent);
     await ask("hi");
-    expect(await screen.findByRole("alert")).toHaveTextContent("Đã vượt ngân sách sử dụng.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Bạn thao tác quá nhanh");
     expect(screen.getByText("một phần")).toBeInTheDocument();
   });
 
