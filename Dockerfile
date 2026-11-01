@@ -85,16 +85,9 @@ CMD ["uvicorn", "bff.main:app", "--host", "0.0.0.0", "--port", "8300", "--no-ser
 
 # ───────────── job một lần: migrate / seed ─────────────
 # migrate: hiện chỉ tạo schema checkpointer LangGraph của agent (`python -m agent.migrate`, role ag_owner).
-# TODO: Alembic cho các DB khác (hiện bảng nghiệp vụ do infra/postgres/init/sql tạo).
 FROM base AS migrate
 RUN uv sync --frozen --no-dev --no-editable --package acme-agent
 RUN bash scripts/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["python", "-m", "agent.migrate"]
-
-# TODO: seed = generator dữ liệu mẫu.
-FROM base AS seed
-USER 10001
-ENV PATH="/app/.venv/bin:$PATH"
-CMD ["sh", "-c", "echo 'TODO: seed placeholder (generator chưa có)'"]

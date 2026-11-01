@@ -131,7 +131,7 @@
     },
     {
       "name": "aud-chat-ui",
-      "description": "aud=chat-ui (D15)",
+      "description": "aud=chat-ui",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
@@ -398,7 +398,7 @@
     {
       "clientId": "approval-signer",
       "name": "approval-signer",
-      "description": "resource server: approval-signer (D15)",
+      "description": "resource server: approval-signer",
       "enabled": true,
       "bearerOnly": true,
       "fullScopeAllowed": false,

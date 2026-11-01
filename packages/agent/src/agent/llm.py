@@ -100,10 +100,6 @@ def make_chat_model(
 
 
 _USER_MESSAGES: dict[str, tuple[str, bool]] = {
-    "budget_exceeded": (
-        "Ngân sách AI của phòng ban trong tháng đã hết. Vui lòng liên hệ quản trị viên.",
-        False,
-    ),
     "rate_limited": ("Hệ thống đang bận. Vui lòng thử lại sau ít giây.", True),
     "pii_blocked": ("Tin nhắn chứa thông tin cá nhân nhạy cảm mà chính sách không cho gửi.", False),
     "injection_blocked": ("Yêu cầu bị chặn vì có dấu hiệu cố điều khiển hệ thống.", False),
@@ -126,8 +122,6 @@ def translate_llm_error(exc: BaseException) -> GatewayError | None:
         err = body.get("error", body) if isinstance(body, dict) else {}
         code = err.get("code") if isinstance(err, dict) else None
         st = exc.status_code
-        if st == 402 or code == "budget_exceeded":
-            return _gw("budget_exceeded")
         if st == 429:
             return _gw("rate_limited")
         if code == "pii_blocked":

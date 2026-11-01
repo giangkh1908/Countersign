@@ -55,7 +55,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: bash scripts/gen-secrets.sh --ci
       - run: docker compose config -q
-      - run: docker compose --profile tickets --profile obs --profile seed config -q
+      - run: docker compose --profile tickets --profile obs config -q
 
   # ---- Job nặng: giữ chỗ, bật theo milestone ----
   e2e:  # TODO: Playwright trên compose (BFF + Keycloak + mock-provider)

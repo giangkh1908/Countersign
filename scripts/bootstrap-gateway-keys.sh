@@ -4,7 +4,7 @@
 # ghi vào secrets/agent_gateway_key và secrets/docs_gateway_key (cùng file mode với gen-secrets.sh).
 #
 # Dùng:
-#   bash scripts/bootstrap-gateway-keys.sh            # idempotent: bỏ qua key mà file đã khác rỗng
+#   bash scripts/bootstrap-gateway-keys.sh            # idempotent: bỏ qua key mà file đã có và còn hợp lệ trong DB
 #   bash scripts/bootstrap-gateway-keys.sh --rotate   # tạo key mới cho cả hai (key cũ KHÔNG tự thu hồi;
 #                                                           # thu hồi bằng `gateway.cli revoke-key`)
 #
@@ -37,8 +37,19 @@ created=0
 provision() {
   local fname="$1" file="$SEC/$1" name="$2" owner="$3" models="$4"; shift 4
   if [ -s "$file" ] && [ "$ROTATE" -eq 0 ]; then
-    echo "skip   $name: $fname đã có key (dùng --rotate để tạo lại)"
-    return 0
+    # Kiểm key trong file còn dùng được trong DB (DB mới sau `down -v` thì file cũ vô nghĩa).
+    # Key đi qua stdin, không qua argv/env; check-key không in gì ra khỏi container.
+    local rc=0
+    $COMPOSE exec -T gateway python -m gateway.cli check-key < "$file" >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      echo "skip   $name: $fname đã có key hợp lệ (dùng --rotate để tạo lại)"
+      return 0
+    elif [ "$rc" -eq 3 ]; then
+      echo "key trong secrets/$fname không có trong DB (DB mới?), tạo key mới"
+    else
+      echo "FAIL   $name: không kiểm được key trong secrets/$fname (rc=$rc; xem: $COMPOSE logs gateway)" >&2
+      return 1
+    fi
   fi
   local key
   # stdout = plaintext key (chỉ giữ trong biến); stderr (key_id) bỏ đi để log sạch.

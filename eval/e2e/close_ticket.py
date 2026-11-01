@@ -36,8 +36,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from acme_common.audit.chain import AuditKeyring, verify_chain
-from acme_common.audit.pg import select_sql
+from acme_common.adapters.audit_pg import select_sql
+from acme_common.services.audit_chain import AuditKeyring, verify_chain
 
 ROOT = Path(__file__).resolve().parents[2]
 KC = "http://localhost:8080"  # issuer cố định bởi KC_HOSTNAME nên gọi qua localhost vẫn đúng `iss`

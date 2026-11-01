@@ -3,6 +3,7 @@
     python -m gateway.cli create-key --name agent --dept IT --owner-type service --owner-ref agent-service \\
         --allowed-models acme-fast,acme-smart --rpm 120 --tpm 200000 --trust-end-user-token
     python -m gateway.cli revoke-key --key-id <uuid> --reason "leaked"
+    echo "$KEY" | python -m gateway.cli check-key   # key đọc từ stdin; exit 0 = dùng được, 3 = không có/đã thu hồi
 
 Cần `GW_DATABASE_URL`(_FILE) và `GW_KEY_PEPPER`(_FILE). Plaintext chỉ in ra stdout đúng một lần.
 Mỗi thao tác ghi một sự kiện `audit` qua `EventSink.append(sync=True)` (không chứa secret).
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hmac
 import sys
 from datetime import datetime
 from typing import Any
@@ -22,7 +24,7 @@ from acme_common.ports import Clock, EventSink
 from .factory import build_key_store
 from .ports.errors import KeyAlreadyExists, KeyNotFound
 from .ports.key_store import KeyStore
-from .services.key_admin import issue_key
+from .services.key_admin import hmac_secret, issue_key, parse_key
 from .settings import Settings
 
 
@@ -87,6 +89,29 @@ async def revoke_key(
     return 0
 
 
+EXIT_KEY_MISSING = 3  # key không có trong DB hoặc đã thu hồi (khác 1/2 = lỗi hạ tầng)
+
+
+async def check_key(
+    args: argparse.Namespace, keys: KeyStore, sink: EventSink, clock: Clock, settings: Settings
+) -> int:
+    """Đọc key từ stdin (không argv/env), không in key. 0 = tồn tại và active; 3 = không; 2 = lỗi hạ tầng."""
+    parsed = parse_key(sys.stdin.read().strip())
+    if parsed is None:
+        return EXIT_KEY_MISSING
+    prefix, secret = parsed
+    try:
+        rec = await keys.lookup(prefix)
+    except Exception:  # noqa: BLE001 - mọi lỗi hạ tầng (DB...) gộp thành exit 2, không lộ chi tiết
+        print("error: không tra được key store", file=sys.stderr)
+        return 2
+    if rec is None or rec.status != "active":
+        return EXIT_KEY_MISSING
+    if not hmac.compare_digest(rec.secret_hmac, hmac_secret(secret, settings.key_pepper)):
+        return EXIT_KEY_MISSING
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="gateway.cli")
     p.add_argument("--actor", default="cli", help="ghi vào created_by/audit")
@@ -106,6 +131,7 @@ def parser() -> argparse.ArgumentParser:
     r = sub.add_parser("revoke-key")
     r.add_argument("--key-id", required=True)
     r.add_argument("--reason", required=True)
+    sub.add_parser("check-key", help="kiểm key (đọc stdin) còn dùng được trong DB")
     return p
 
 
@@ -116,7 +142,9 @@ async def run(argv: list[str] | None = None, settings: Settings | None = None) -
     keys = build_key_store(settings.gw_keystore_adapter, settings, clock=clock)
     sink = build_event_sink(settings.event_sink_adapter, settings)
     try:
-        handler = create_key if args.cmd == "create-key" else revoke_key
+        handler = {"create-key": create_key, "revoke-key": revoke_key, "check-key": check_key}[
+            args.cmd
+        ]
         return await handler(args, keys, sink, clock, settings)
     finally:
         await keys.aclose()

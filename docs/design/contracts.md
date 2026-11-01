@@ -19,7 +19,7 @@ Mục 9 (Ports & Adapters) là quy tắc bắt buộc, `CLAUDE.md` dẫn tới �
 | `tickets-mcp` | `packages/mcp_tickets` | 8102 | core | `tickets` | Giữ khoá riêng ký intent |
 | `approval-signer` | `packages/approval_signer` | 8310 | core | `tickets` | Giữ khoá riêng ký approval, không DB, không Redis |
 | `prometheus`, `grafana` | image gốc | 9090, 3000 | core, edge | `obs` | Scrape `/metrics` bằng bearer |
-| `migrate`, `seed` | job một lần | | core | mặc định, `seed` | Migration và dữ liệu mẫu |
+| `migrate` | job một lần | | core | mặc định | Migration (dữ liệu mẫu nạp từ host: `data/load_seed.sh`) |
 | `notify-mcp` | | | | `notify` | Chưa làm (A1) |
 
 Nguyên tắc mạng:
