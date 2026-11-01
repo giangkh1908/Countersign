@@ -1,195 +1,125 @@
-# Lộ trình triển khai theo milestone (v1.3)
+# Lộ trình (v2.1): Trợ lý AI nội bộ có trích dẫn kiểm chứng được và hành động qua MCP
 
-> Dự án sản phẩm phát triển tự do, lộ trình theo **milestone** (không theo tuần cố định). Mỗi milestone kết thúc bằng một **bản chạy được** và test xanh, đạt **Definition of Done (DoD)** đo được. Ký hiệu agent: **R** = reader (Haiku), **W** = worker (Sonnet), **O** = orchestrator (quyết định + review).
-> Phiên bản 1.3, 2026-10-29. Khớp `design/DECISIONS-v1.2.md` (D0–D15). D15: UI = React + TS + BFF ngay từ M1 (Chainlit đã thay, ADR-002).
+> Phiên bản 2.1, 2026-11-01. Phạm vi theo [ADR-006](adr/ADR-006-scope-rag-citations.md) và [ADR-007](adr/ADR-007-actions-cache-observability.md). Lộ trình v1.3 (gateway đầy đủ, analytics, admin, hardening) xem git tag `backup/pre-prune-20261101`.
+> Mỗi milestone kết thúc bằng bản chạy được, test xanh, đạt DoD đo được. Ký hiệu: **R** = reader, **W** = worker, **O** = orchestrator.
+> Quy tắc vận hành: mỗi lúc một worker, phạm vi hẹp; review và merge xong mới giao việc tiếp; backup trước mọi thay đổi trạng thái.
 
-## Cấu trúc repo (uv workspace)
+## Tổng quan
 
-```
-AI_EXAMPLE/
-├─ pyproject.toml            # uv workspace root
-├─ docker-compose.yml
-├─ models.lock               # model ML: repo, revision sha, sha256 từng file, license (D3)
-├─ infra/                    # keycloak realm, postgres init (roles, RLS), redis ACL, prometheus, grafana
-├─ web/                      # SPA Vite + React 18 + TS strict (pnpm); build vào image bff (D15)
-├─ packages/
-│  ├─ common/                # config, logging, JWT verify, Clock, audit hash-chain HMAC, schemas, testing/Fake*
-│  ├─ gateway/               # FastAPI LLM gateway (egress mỏng, không model ML)
-│  ├─ policy_sidecar/        # embed (bge-m3 ONNX), guard (Prompt Guard 2), NER (underthesea); core-only
-│  ├─ approval_signer/       # giữ khoá ký approval, verify intent, render model (~300 dòng); core-only
-│  ├─ mcp_docs/              # MCP RAG (+ taint)
-│  ├─ mcp_tickets/           # MCP ticket (prepare_* / commit_intent, ký intent)
-│  ├─ mcp_analytics/         # MCP DB read-only (tool tham số hoá)
-│  ├─ agent/                 # LangGraph graph + service
-│  ├─ bff/                   # FastAPI BFF :8300: phục vụ SPA + /auth + /api; giữ phiên + token (D15); không giữ khoá ký
-│  └─ mock_provider/         # mock LLM có độ trễ/lỗi cấu hình được
-├─ data/                     # generator dữ liệu ACME giả lập + corpus độc + tập test PII viết tay
-├─ eval/                     # benchmark (k6/vegeta), promptfoo, security regression (pytest), notebook phân tích
-└─ docs/                     # SOLUTION, ROADMAP, design/, adr/, research/, reviews/
-```
-
-## Tổng quan milestone
-
-| Milestone | Chủ đề | Phụ thuộc |
+| Milestone | Chủ đề | Trạng thái |
 |---|---|---|
-| M0 | Spikes + phương án B | — |
-| M1 v0.1 | Walking skeleton | M0 |
-| M2 v0.2 | Gateway production-core | M1 |
-| M3 v0.3 | Nghiệp vụ đầy đủ | M1, M2 (audit) |
-| M4 v0.4 | Policy sidecar & tối ưu chi phí | M2, M3 |
-| M5 v0.5 | Bộ đánh giá & red-team | M3, M4 |
-| M6 v0.6 | Trang admin + polish UX/a11y/i18n (BFF + SPA có từ M1) | M3 (có thể song song M4–M5) |
-| M7 v1.0 | Production hardening | M5, M6 |
-| Tuỳ chọn | Sau v1.0 | M7 |
+| M0 | Spikes (identity, token exchange, checkpoint) | Xong |
+| M1 | Walking skeleton trên compose | Xong |
+| R0 | Thu gọn stack | |
+| R1 | Truy xuất thật + bộ đánh giá truy xuất | |
+| R2 | Câu trả lời có trích dẫn kiểm chứng được | |
+| A1 | Hành động qua MCP: ticket, báo cáo nhóm, phân quyền theo vai trò | |
+| Q1 | Cache và quan sát (log, trace, metric) | |
+| R3 | An toàn: phân quyền, tài liệu độc, tấn công qua hành động | |
+| R4 | Đánh giá tổng hợp, demo, báo cáo | |
 
----
+## M1 — Walking skeleton (đã đạt phần lớn)
 
-## M0 — Spikes (mỗi spike time-box 2 ngày, có phương án B)
+Đã có:
+- compose khoẻ, `scripts/smoke.sh`;
+- gateway ghi `usage_events`;
+- E2E đóng ticket 56/56 trên stack thật (profile `tickets`);
+- Playwright: đăng nhập thật qua BFF, chat mock, khẳng định không có token trong trình duyệt.
 
-Quy tắc: hết 2 ngày chưa đạt tiêu chí thì **chuyển sang phương án B** và ghi ADR; không kéo dài. (R21)
+README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke đạt ngay lần đầu, E2E 50/50. Lần đo có cache Docker và uv; chưa thử trên máy hoàn toàn mới, và chưa thử đăng nhập trình duyệt theo bước sửa file hosts.
 
-| Việc | Agent | Tiêu chí xong (đạt) | Phương án B nếu thất bại |
-|---|---|---|---|
-| Xác minh các mục "việc cần xác minh" ở SOLUTION §11 | R | Báo cáo có nguồn trong `docs/research/05-*.md` | — |
-| Khung uv workspace, ruff, pytest, pre-commit, docker compose (postgres+pgvector, redis, keycloak) | W | `docker compose up` chạy; `uv run pytest` xanh | — |
-| Spike A: MCP SDK stateless + identity: MCP server nhỏ kiểm JWT Keycloak, đọc claims trong tool | W | Tool trả `sub` và `department` của caller; sai audience bị 401 | **FastAPI tool server** tự viết (JSON-RPC tối giản) + middleware ASGI kiểm JWT; port `ToolServerHost` giữ nguyên |
-| Spike B: BFF OIDC + exchange 2 audience (xác minh luật Keycloak exchange V2): BFF (client `chat-ui`) đăng nhập code + PKCE, exchange ra `aud=agent-service` và `aud=approval-signer`; LangGraph `interrupt()` + resume qua BFF | W | Token đăng nhập `aud=chat-ui` (không có `agent-service`/`approval-signer`); cả 2 exchange thành công; token `aud=agent-service` gọi signer bị 401/403; `agent-service` exchange tới signer bị Keycloak từ chối; một luồng approve/reject qua BFF | Cấu hình audience mapper/permission theo luật V2 khác (ghi ADR); nếu exchange không khả thi: BFF dùng client-credentials + header user token đã verify (giới hạn ghi rõ) |
-| Spike C: Keycloak token exchange (RFC 8693) phía agent | W | Đổi token `aud=agent-service` lấy token `aud=tickets-mcp`, `aud=llm-gateway` | **client-credentials** + header `X-Acme-User-Token` đã verify; adapter `client_credentials_with_user_token` của `TokenBroker` |
-| Spike D: serializer mã hoá checkpoint LangGraph (`PostgresSaver`) | W | Checkpoint trong DB là ciphertext, resume sau `interrupt` đọc lại đúng | Mã hoá ở lớp lưu trữ (cột/ pgcrypto) + retention ngắn; ghi giới hạn |
-| Pilot Prompt Guard 2 tiếng Việt: 50 mẫu độc + 50 mẫu lành | W + R (thu thập mẫu) | Báo cáo TPR/FPR; quyết định bật/tắt ở M4 | Giữ guard tắt; dùng heuristic + spotlighting; xem lại ở M4 |
-| Chốt SDK MCP, UI, phương án token, serializer → ADR-001..004 | O | ADR được merge | — |
-
-**DoD M0:** (D15) spike B xác minh được luật Keycloak V2 hoặc đã ghi phương án B; 4 spike + pilot có kết luận bằng văn bản (đạt hoặc chuyển B), mỗi cái ≤ 2 ngày; `docker compose up` chạy; ADR đã merge.
-
-## M1 v0.1 — Walking skeleton
-
-**Mục tiêu:** `docker compose up` chạy đầu-cuối: SPA React + BFF → agent (router + HITL) → gateway mỏng → docs-mcp + tickets-mcp, kể cả `close_ticket` qua luồng intent/approval.
+## R0 — Thu gọn stack
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| `common`: config, log, `TokenVerifier` (`oidc_jwks`), `Clock`, kiểu/lỗi trung lập, `Fake*` | W | Test verify JWT đúng/sai `aud`, `exp` (dùng `FakeClock`) |
-| `mock_provider` (OpenAI/Anthropic/Gemini, streaming, độ trễ/lỗi chỉnh được) | W | Dùng được cho test gateway |
-| Gateway mỏng: auth key (HMAC+pepper), user token, 1 provider (Anthropic) + mock, `/v1/chat/completions` (stream + non-stream, tool calling), `usage_events` | W | Pass test bằng `openai` SDK và `ChatOpenAI` |
-| docs-mcp: ingest (embed qua gateway `acme-embed`, có thể mock ở M1) + `search_documents` + ACL SQL/RLS + spotlighting | W | User phòng khác nhận 0 kết quả mật |
-| tickets-mcp: tool đọc + `prepare_close_ticket` + `commit_intent`; khoá intent | W | Luồng intent → commit chạy; intent hết hạn/hash sai bị từ chối |
-| `approval-signer`: `/v1/intents/verify`, `/v1/approvals` | W | Token sai `aud`/`sub` bị từ chối; không phụ thuộc Redis/DB |
-| Agent: StateGraph (router + docs + ticket), token exchange (hoặc phương án B), `interrupt({intent_jws})` | W | 10 kịch bản mẫu chạy được |
-| `bff` (FastAPI, `packages/bff`): OIDC code + PKCE (client `chat-ui`), cookie `__Host-sid` HttpOnly/SameSite=Strict, session `bff:sess:{sid}` (Redis ACL user `bff`), CSRF `X-CSRF-Token`, CSP, exchange `aud=agent-service` + `aud=approval-signer`, proxy SSE `/api/chat`, `/api/intents/verify`, `/api/approvals`, `/api/threads`, `/api/requests/{id}`; không giữ khoá ký | W | Test BFF với `FakeTokenBroker`/fake signer; token không có trong response tới trình duyệt |
-| `web/` SPA tối thiểu (Vite + React + TS strict, TanStack Query, shadcn/ui): login, chat streaming (SSE qua POST), thẻ duyệt render từ render model (mọi `display_fields`, bidi escape), trích nguồn, chi phí; một `src/api/client.ts` (`request()`, `sse()`), component không gọi `fetch`; markdown `rehype-sanitize` | W | Demo đóng ticket có duyệt trên SPA; Vitest + MSW xanh |
-| CI job `web` (pnpm frozen-lockfile, lint, typecheck, vitest, build) + Playwright E2E trên compose; image `bff` multi-stage | W | CI xanh |
-| Seed tối thiểu (ACME: 2 phòng ban, ~30 tài liệu, ~100 ticket) | W | Seed lặp lại được |
+| ✅ (345f304) Đưa tickets-mcp + approval-signer vào profile `tickets`; agent chạy được khi không có ticket (router chỉ docs/direct) | W | `docker compose up` mặc định không có 2 service này; smoke xanh; `--profile tickets` + E2E đóng ticket vẫn xanh |
+| ✅ Gỡ `depends_on` của agent → tickets-mcp và bff → approval-signer; xoá analytics-mcp, policy-sidecar, `GW_FEATURES`, `GW_SIDECAR_URL`, spikes, bench (dọn dẹp 2026-11-01) | W | Stack mặc định khoẻ khi không có tickets |
+| Đo RAM/CPU lúc rảnh ✅ 1,2 GiB (bảng trong README); còn đo khi chạy 20 câu hỏi, làm cùng R1 khi có truy xuất thật | W | Bảng số đo thật; mục tiêu < 2,5 GB lúc rảnh |
+| Tắt `directAccessGrants` của client `admin-cli` trong realm `acme` | W | Test realm: không client nào cho password grant |
+| Cập nhật CLAUDE.md, SOLUTION theo ADR-006 | O | Xong (2026-10-30) |
 
-**DoD M1:** (1) `docker compose up` rồi chạy kịch bản "đóng ticket" đầu-cuối thành công; (2) 5 kiểm thử bảo mật tối thiểu qua: sai `args` sau duyệt -> `intent_mismatch`, replay `jti` -> `approval_replayed`, intent hết hạn -> `intent_expired`, ticket đổi sau duyệt -> `conflict`, user khác phòng không đọc được tài liệu mật; **agent gọi `/v1/approvals` bằng chính token agent cầm (`aud=agent-service`, nhận được từ BFF) -> 401/403, token đăng nhập không có `aud ∋ {agent-service, approval-signer}`, và `agent-service` exchange tới `approval-signer` bị Keycloak từ chối (D13/D15, sửa N01/N02; không dùng token dựng riêng)**; (3) `uv run pytest` xanh, leak-grep rỗng; (4) README chạy từ máy sạch ≤ 15 phút; **(5) UI/BFF (D15):** (a) quét token: không có access/refresh/signer token hay khoá trong JS, localStorage, cookie (ngoài `sid` HttpOnly) hay response tới trình duyệt; (b) Playwright approve và reject xanh trên compose; (c) CSP chặn ảnh/script ngoài (ca exfil qua markdown `![](https://evil/...)` không phát sinh request); (d) thẻ duyệt hiển thị đủ `display_fields`, signer trả `intent_unrenderable` thì nút Duyệt bị khoá; (e) leak-grep `web/src` rỗng, job CI `web` xanh. M1 dài thêm ~1–1,5 tuần so với bản Chainlit.
+**DoD R0:** compose mặc định chỉ gồm postgres, redis, keycloak, gateway, mock-provider, docs-mcp, agent, bff; smoke xanh; profile `tickets` vẫn xanh; bảng tài nguyên trong README.
 
-## M2 v0.2 — Gateway production-core
-
-**Mục tiêu:** gateway đủ dùng nội bộ.
+## R1 — Truy xuất thật + bộ đánh giá truy xuất
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Rate limit RPM+TPM (Lua token bucket) + concurrency | W | Test đồng thời không vượt hạn mức |
-| Usage + cost (`pricing.yaml`), budget key/phòng ban, reconcile 5 phút | W | Số liệu khớp `usage` của provider |
-| Adapter Gemini; retry, timeout, circuit breaker, fallback theo alias | W | Chaos: provider A sập thì chuyển B |
-| Thu hồi key qua pub/sub | W | Thu hồi < 1 s |
-| Exact cache, `scope_hash` có `sub`; ẩn `x-acme-cache` với user thường | W | Canary: 0 hit chéo user/phòng ban |
-| PII regex VN (CCCD, SĐT, STK, email, biển số, PERSON có stop-word) + pseudonymization | W | Recall ≥ 95% trên tập dev CCCD/SĐT/email |
-| Degraded mode Redis (D5) | W | Test: tắt Redis, chi vượt ≤ ngưỡng đo được, 600 s -> 503 |
-| Audit chain HMAC (`AUDIT_HMAC_KEY`) + anchor hằng giờ + script verify | W | Verify phát hiện được log bị sửa/xoá |
-| Prometheus/Grafana (latency theo stage, cache, fallback, cost, degraded) | W | Dashboard chi phí theo phòng ban |
-| Benchmark E1/E2 bản đầu (mock) | W | Có số baseline |
+| Gateway `/v1/embeddings` (OpenAI-compatible), thêm alias `acme-embed` vào `models.yaml` (hiện chỉ có `acme-fast`, `acme-smart`), port `EmbeddingProvider`, adapter provider thật + mock tất định; ghi `usage_events` | W | Test hợp đồng bằng SDK `openai`; leak-grep rỗng |
+| Chọn model embedding; migration `chunks` theo đúng số chiều (bỏ cứng `vector(1024)`), thêm cột `article`, `clause`, `char_start`, `char_end` | W | Migration lên/xuống được; kiểm số chiều khi khởi động |
+| docs-mcp: loader `vbpl_articles` (JSON Điều từ `data/vbpl`, cắt Điều dài theo khoản), gán `department`/`classification` theo nhóm như `data/SOURCES.md` | W | 19 văn bản / 1.557 Điều nạp đủ; nạp lại ra cùng số chunk |
+| docs-mcp: embedder thật qua gateway (bỏ `fake_hash` khỏi đường mặc định); ingest corpus luật + 30 tài liệu ACME tổng hợp | W | Ingest lặp lại được; số chunk khớp |
+| Bộ câu hỏi có nhãn ~150 câu trên corpus luật: LLM sinh nháp từ từng Điều, người kiểm; nhãn vàng (văn bản, Điều, khoản); loại câu (tra cứu, tổng hợp nhiều Điều/luật, không có câu trả lời); câu hỏi viết theo giọng nhân viên, không chép lời luật | W + O duyệt mẫu | Kiểm tay 100% nhãn; phân bố theo nhóm và loại câu ghi trong manifest |
+| (Phụ) Chạy cùng script đánh giá trên Zalo legal (corpus riêng) làm benchmark ngoài | W | Có số recall@k để so với công bố khác |
+| Hybrid search: pgvector + Postgres full-text (tiếng Việt bỏ dấu/không bỏ dấu), trộn RRF; rerank tuỳ chọn qua gateway; tra trực tiếp khi câu hỏi nêu số Điều/số hiệu | W | Bật/tắt từng thành phần bằng config |
+| Script đánh giá truy xuất: recall@k, MRR, nDCG theo loại câu; so 4 cấu hình (vector, BM25, hybrid, hybrid+rerank) | W | Bảng kết quả có seed, phiên bản, chi phí |
 
-**DoD M2:** (1) overhead p95 < 30 ms ở 100 RPS khi chưa bật guard/NER (mock provider); (2) ≥ 99% request thành công khi một provider sập; (3) thu hồi key < 1 s; (4) 0 cache hit chéo user trong test canary; (5) verify audit phát hiện 100% bản ghi bị sửa trong test; (6) leak-grep rỗng, đặc biệt gateway không import `onnxruntime/torch/tokenizers`.
+**DoD R1:** có bảng recall@5/@10 và MRR cho 4 cấu hình trên ~150 câu. Cấu hình mặc định được chọn theo số đo, không theo cảm tính. Toàn bộ chạy lại được bằng một lệnh.
 
-## M3 v0.3 — Nghiệp vụ đầy đủ
-
-**Mục tiêu:** đủ luồng nghiệp vụ, an toàn dữ liệu nội bộ.
+## R2 — Câu trả lời có trích dẫn kiểm chứng được
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| tickets-mcp: đủ `prepare_*`/`commit_intent` cho `create_ticket`, `add_comment`, `update_status`, `close_ticket`; audit ghi cùng transaction | W | Rollback đồng thời khi một bước lỗi; 0 thao tác ghi thiếu audit |
-| analytics-mcp: **chỉ tool tham số hoá**, view `security_barrier` mask PII, RLS FORCE, thu hồi quyền cột PII, role read-only | W | `an_reader` không đọc được `core.*`; test SQL/GUC không có đường vào |
-| Taint (D17): docs-mcp, analytics-mcp, `get_ticket` ghi `mcp:taint:{sub}:{thread_id}` + `:recent`; `acme.ticket_audience(draft)`; `prepare_*` gắn `possible_downgrade`; `TAINT_POLICY=warn\|block` | W | Test: đọc tài liệu mật rồi ghi ticket công khai -> cờ đỏ / bị chặn; taint còn hiệu lực qua ngày (khoá `recent`) và qua phòng ban |
-| Máy trạng thái intent (00 §4.2), Redis lưu JWS + verify lại, `ticket_events.intent_id UNIQUE`, BFF `:rej` + giới hạn thẻ | W | Test máy trạng thái (xem DoD M3 mục 6) |
-| Checkpoint mã hoá + retention 30 ngày + API xoá thread | W | Test: DB chỉ chứa ciphertext; job xoá hoạt động |
-| Agent đủ 3 subgraph (docs, ticket, data) + input_guard; tập 150 câu có nhãn | W | Routing accuracy đo được |
-| Dữ liệu ACME đầy đủ: 4 phòng ban, ~200 tài liệu, ~2.000 ticket, DB bán hàng | W | Seed lặp lại, seed cố định |
-| Security regression v1 (E6) trong CI | W | Bảng vượt quyền = 0 |
+| Định dạng trả lời: mỗi câu có mã trích `[n]` trỏ tới đoạn cụ thể (văn bản, Điều, khoản, vị trí ký tự); agent chỉ được trích đoạn đã truy xuất | W | Test: trích nguồn ngoài danh sách bị loại |
+| Bộ kiểm chứng sau sinh: tách câu → kiểm từng câu có được đoạn trích hỗ trợ (LLM-judge, JSON có cấu trúc; thêm alias `acme-judge` vào `models.yaml`); câu không được hỗ trợ bị gắn cờ hoặc bỏ; không đủ nguồn thì trả lời "không tìm thấy trong tài liệu" | W | Bật/tắt bằng config; đo được chi phí và độ trễ thêm |
+| UI: bấm `[n]` mở đoạn nguồn, tô đúng câu được trích; hiển thị câu bị gắn cờ "chưa kiểm chứng" | W | Vitest + Playwright |
+| Hiệu chuẩn judge: 30–50 câu chấm tay, Cohen's κ người–judge | O + R | Báo cáo κ |
+| Đánh giá: citation precision/recall, faithfulness, tỉ lệ từ chối đúng với câu không có đáp án; có và không có bộ kiểm chứng | W | Bảng so sánh kèm chi phí/câu và độ trễ p50/p95 |
 
-**DoD M3:** (1) mọi tool ghi chạy qua intent/approval, 100% ghi có `tool_audit` cùng transaction, và ca "agent gọi `/v1/approvals` bằng chính token agent cầm -> 401/403" vẫn xanh với mọi MCP/audience mới (D13); (2) E6 = 0 truy cập trái phép trong ≥ 30 ca; (3) DB `agent` không chứa plaintext hội thoại; (4) routing accuracy ≥ 90% trên 150 câu; (5) `uv run pytest` xanh, leak-grep rỗng; (6) test máy trạng thái intent: 2 `commit_intent` song song cho cùng intent -> đúng 1 thành công, cái kia `approval_replayed`; crash giả lập ở `committing` -> sau 30s khôi phục đúng (`committed` nếu có `ticket_events.intent_id`, ngược lại `failed`); `expected_updated_at` lệch -> `failed` + `conflict`; (7) taint qua ngày (khoá `recent`, `thread_id` giả) và qua phòng ban ra `possible_downgrade` đúng.
+**DoD R2:** báo cáo được mức cải thiện của bộ kiểm chứng (citation precision, faithfulness) kèm khoảng tin cậy và chi phí. Câu hỏi không có đáp án trong tài liệu được từ chối đúng ở mức đo được.
 
-## M4 v0.4 — Policy sidecar & tối ưu chi phí
-
-**Mục tiêu:** tách model nặng khỏi gateway; giảm chi phí có kiểm soát.
+## A1 — Hành động qua MCP và phân quyền theo vai trò
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| `policy-sidecar`: `/v1/embed`, `/v1/guard`, `/v1/pii/ner`; verify `models.lock`; script convert/quantize chạy CI | W | Sidecar từ chối khởi động khi hash lệch; parity recall@k fp32 vs int8 (Δ ≤ 1 điểm) |
-| Gateway gọi sidecar: timeout + fail-policy (`guard: fail_open\|fail_closed`, `ner: skip_on_error`) | W | Test sập sidecar: hành vi đúng chính sách |
-| Chuyển ingest docs-mcp sang một runtime embedding duy nhất (qua `acme-embed`) | W | Cùng runtime cho ingest và query |
-| Router `acme-auto` (`complexity_v1`) + provider prompt caching | W | Chạy được E3 |
-| Semantic cache: chỉ populate từ nguồn tin cậy, per-scope | W | False-hit đo được; 0 rò chéo scope; mặc định tắt |
-| Guard bật theo kết quả pilot M0/M4 | O + W | Có quyết định bật/tắt kèm TPR/FPR |
-| NER underthesea, tập test PII ≥ 300 câu viết tay; so regex vs regex+CRF | W | CI theo entity (Wilson) |
+| Ma trận quyền vai trò × tool × kênh (dự thảo ở ADR-007), thực thi ở MCP server | O + W | Test mọi ô của ma trận, cả cho phép lẫn từ chối |
+| tickets-mcp: `prepare_create_ticket` qua intent + phê duyệt ký số; router agent thêm nhánh tạo ticket | W | E2E tạo ticket xanh; từ chối thì không ghi gì |
+| `notify-mcp`: port `MessageChannel`, adapter `telegram` + `fake`, tool `prepare_send_group_report`, bí danh kênh, mức mật theo kênh, profile `notify` | W | E2E gửi qua `fake`; chat ID tuỳ ý bị từ chối; dữ liệu vượt mức mật bị chặn; leak-grep rỗng |
+| Eval hành động: chọn đúng tool và tham số, từ chối đúng khi thiếu quyền, không hành động khi chỉ hỏi | W | Bảng kết quả theo vai trò, chạy lại bằng một lệnh |
+| Đo RAM khi bật `tickets` + `notify` | W | Bảng số đo thật trong README |
 
-**DoD M4:** (1) gateway image không chứa onnxruntime/torch/tokenizers; (2) E3 trên trace agent thật: giảm chi phí ≥ 50% tại iso-quality (chất lượng giảm ≤ 3 điểm %) so với baseline tất-cả-đắt, và vượt router ngẫu nhiên cùng tỉ lệ; (3) semantic cache: 0 rò chéo scope, false-hit < 1% (đo, bật mặc định tắt); (4) độ trễ có/không sidecar được báo cáo phân rã theo stage; (5) PII recall ≥ 95% (CCCD/SĐT/email), precision PERSON được báo cáo riêng; (6) ca sidecar quá tải/timeout/429: không đoạn tool/RAG chưa kiểm tra nào tới provider (bị thay bằng `[nội dung đã ẩn...]`), không tên người nào tới provider ngoài (`503 policy_unavailable`), embed ingest không làm đói guard/NER online; `gw_policy_skipped_total` tăng và alert kích hoạt.
+**DoD A1:** user tạo ticket và gửi báo cáo Telegram qua chat, có thẻ duyệt; ma trận quyền có test đầy đủ; thêm kênh mới chỉ là thêm file adapter.
 
-## M5 v0.5 — Bộ đánh giá & red-team
-
-**Mục tiêu:** đo và khoá chất lượng/bảo mật bằng CI.
+## Q1 — Cache và quan sát
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Benchmark E1 đầy đủ (từng tính năng, nhiều mức RPS, VM Linux cpuset), E2 chaos | W | Bảng + biểu đồ, phân rã theo stage |
-| E3 chi phí/chất lượng: baseline tất-cả-rẻ, router ngẫu nhiên, router oracle; Pareto | W | Bảng + Pareto |
-| **Security regression suite** trong CI: fault-injection (đổi args, replay `jti`, đổi ticket sau duyệt, intent giả, key sai, **agent gọi `/v1/approvals` bằng token của mình -> 403, agent exchange tới `approval-signer` bị từ chối**), cache chéo user, corpus RAG độc, ablation adapter `permissive` (profile `eval`) | W | CI fail khi hồi quy; 100% fault-injection bị từ chối |
-| E4(1): tỉ lệ đề xuất độc hại tới thẻ duyệt + bị duyệt bởi approver mô phỏng | W | Bảng ASR/utility |
-| E4(2): **user study 8–12 người**: thẻ args thô vs intent do server tính | O (thiết kế) + R (tổng hợp) | Tỉ lệ duyệt nhầm với khoảng tin cậy |
-| E7/E8: Wilson CI theo nhóm, ≥ 2 model, 20% reject/edit; ≥ 100 mẫu gán nhãn bởi người, κ người–người/người–judge, `acme-judge` khác họ | W + R | Báo cáo kèm seed/prompt/phiên bản |
-| promptfoo/garak quét; ánh xạ OWASP LLM 2025 + Agentic 2026 | R | Bảng ánh xạ |
+| Exact cache (thêm lại service `redis-cache`, hiện chưa có): khoá gồm model, prompt, phạm vi quyền; không cache thao tác ghi; giữ nguyên trích dẫn đã kiểm chứng | W | Test: khác phạm vi quyền thì không trúng cache |
+| Đánh giá RQ4: hit rate, chi phí, độ trễ, chất lượng khi có/không cache; semantic cache ở dạng thử nghiệm, kèm đo rò rỉ | W | Bảng so sánh; semantic cache mặc định vẫn tắt |
+| OpenTelemetry xuyên BFF → agent → gateway → MCP; chọn backend trace nhẹ ở profile `obs` | W | Một câu hỏi cho ra một trace đủ các hop |
+| Log JSON có `trace_id`; dashboard Grafana: truy xuất, chi phí, cache, hành động | W | Dashboard chạy trên số thật |
+| Trace và log không chứa nội dung prompt/tài liệu | W | Quét canary trên trace = 0 |
 
-**Ngân sách M5:** phòng EVAL trần cứng **160 USD** (dự kiến ~130 USD), key riêng `eval-regression` cho nightly regression (D14).
+**DoD Q1:** có báo cáo RQ4; từ một câu hỏi lần ra được toàn bộ đường đi, chi phí và độ trễ từng hop.
 
-**DoD M5:** (1) security regression chạy trong CI mỗi PR, fail build khi hồi quy; (2) fault-injection 100% bị từ chối, ASR thao tác ghi = 0%; (3) có số liệu E1–E8 theo SLO của SOLUTION §9 (đạt hoặc có issue theo dõi cho mục chưa đạt); (4) user study hoàn tất với ≥ 8 người, báo cáo tỉ lệ duyệt nhầm kèm CI; (5) kết quả công bố seed/prompt/phiên bản; (6) security regression gồm các ca D17: commit song song/replay (`approval_replayed`), crash ở `committing`, taint qua ngày/qua phòng ban, intent đã từ chối bị trình lại, vượt 10 thẻ/thread/giờ, sidecar quá tải không lọt nội dung chưa kiểm.
-
-## M6 v0.6 — Trang admin + polish UX/a11y/i18n
-
-> BFF + SPA đã có từ M1 (D15, `docs/adr/ADR-002-ui-react-bff.md`, thay ADR-001/Chainlit). M6 mở rộng trên cùng codebase. Có thể chạy song song M4–M5 sau khi M3 xong.
+## R3 — An toàn
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Trang admin (`features/admin`, BFF `/api/admin/*` yêu cầu role `admin`, proxy admin API gateway): quản lý key, budget, chi phí theo phòng ban, bật/tắt cache scope | W | Thay thao tác curl/Swagger; user không có role nhận 403 |
-| Polish UX: sửa tham số (gọi lại `prepare_*`), diff trước/sau, `risk_flags` đỏ, lịch sử thread, trạng thái lỗi/tải | W | Review UX với ≥ 3 người dùng thử |
-| a11y: điều hướng bàn phím, ARIA cho thẻ duyệt, tương phản; kiểm tra axe trong Playwright | W | 0 lỗi axe mức serious/critical |
-| i18n (vi/en) cho toàn bộ chuỗi UI | W | Không còn chuỗi cứng trong component (lint) |
-| Test BFF/SPA bổ sung cho `/api/admin/*` và các lỗi §6.4 (`session_expired`, `csrf_failed`) | W | Vitest + Playwright xanh |
+| Kiểm tra rò rỉ: mỗi user trong 16 user hỏi bộ câu chạm tài liệu trái quyền; kiểm cả câu trả lời, trích dẫn, cache | W | 0 tài liệu trái quyền xuất hiện ở bất kỳ đâu |
+| Tấn công qua hành động: tài liệu độc lừa agent tạo ticket hoặc gửi dữ liệu mật vào nhóm (dùng adapter `fake`) | W | Bảng ASR có/không từng lớp (phê duyệt, mức mật kênh, taint) |
+| Xây corpus độc (`data/corpus/` hiện trống; ≥ 50 tài liệu, 8 kỹ thuật injection, có ground truth) và nạp vào kho; đo tỉ lệ tấn công thành công (ASR) có/không spotlighting và bộ kiểm chứng | W | Bảng ASR theo kỹ thuật |
+| Canary trong tài liệu mật không bao giờ ra khỏi phạm vi quyền (log, response, usage) | W | Quét tự động = 0 |
+| Security regression chạy trong CI | W | CI fail khi hồi quy |
 
-**DoD M6:** (1) e2e "đóng ticket" + e2e admin chạy trên SPA; (2) quét token như DoD M1 (5a) vẫn xanh với trang admin; (3) CSP + sanitize qua security regression; (4) axe sạch lỗi serious/critical; (5) i18n vi/en đầy đủ.
+**DoD R3:** rò rỉ trái quyền = 0 trên toàn bộ ca thử; có bảng ASR theo kỹ thuật injection, kèm số đo ảnh hưởng của từng lớp phòng thủ.
 
-## M7 v1.0 — Production hardening
+## R4 — Đánh giá tổng hợp, demo, báo cáo
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| TLS nội bộ (mTLS hoặc TLS + cert nội bộ), issuer/hostname thật | W | Không còn HTTP giữa service; test chứng chỉ sai bị từ chối |
-| HA: ≥ 2 gateway, Redis Sentinel hoặc managed, Postgres backup + PITR | W | Diễn tập: tắt 1 gateway / failover Redis / restore PITR đạt RTO, RPO đề ra |
-| Secret manager (Vault/SOPS), xoay khoá (pepper, HMAC audit, khoá intent/approval) | W | Xoay khoá không downtime |
-| Audit anchor sang bucket object-lock | W | Verify audit từ anchor |
-| Helm chart (tuỳ chọn) | W | `helm install` chạy được trên cluster thử |
-| Runbook, SLO + alert (burn-rate), kiểm toán dependency (`uv.lock` hash, digest, `models.lock`) | W + O | Runbook diễn tập; alert bắn đúng trong chaos |
-| Quét bảo mật cuối (SAST/dependency/container) | W | 0 lỗ hổng mức cao chưa xử lý |
+| Ablation: bỏ từng thành phần (hybrid, rerank, kiểm chứng, spotlighting) → ảnh hưởng chất lượng, an toàn, chi phí | W | Bảng + biểu đồ |
+| Chạy với ≥ 2 model thật (một rẻ, một mạnh) trong ngân sách cố định | W + O | Ngân sách và chi phí thực ghi rõ |
+| Demo Playwright: đăng nhập → hỏi → câu trả lời có trích dẫn → mở nguồn; user khác phòng không thấy tài liệu mật; tạo ticket và báo cáo nhóm có thẻ duyệt | W | Xanh trên compose |
+| Bản deploy gọn: VPS 4 GB, reverse proxy + HTTPS, hướng dẫn | W | Chạy được trên VPS thật |
+| Báo cáo: phương pháp, số liệu, giới hạn, công bố seed/prompt/phiên bản | O + R | Hoàn chỉnh |
 
-**DoD M7:** (1) diễn tập sự cố đạt SLO đã ghi (availability, p95, thu hồi key); (2) không secret nào trong image/repo (quét tự động); (3) restore PITR thành công trong thời gian cam kết; (4) security regression + benchmark xanh trên bản release; (5) gắn tag v1.0 với changelog và runbook.
+**DoD R4:** mọi số liệu trong báo cáo tái lập được bằng script trong repo; demo chạy trên VPS 4 GB.
 
-## Tuỳ chọn sau v1.0
-| Hạng mục | Ghi chú |
+## Ngoài phạm vi (đóng băng hoặc bỏ)
+
+| Hạng mục | Tình trạng |
 |---|---|
-| Raw SQL analytics (`run_readonly_sql`) + HMAC ctx (`app.sig`) + sqlglot allowlist | Thiết kế giữ ở `00-contracts` §3.4; bật bằng `ANALYTICS_ENABLE_RAW_SQL` |
-| So sánh LiteLLM/Portkey (E9) | Pin digest, cùng mock |
-| Langfuse (profile `obs`) | Chỉ metadata hoặc nội dung đã mask |
-| Step-up WebAuthn/CIBA cho phê duyệt rủi ro cao | Giảm rủi ro UI backend bị chiếm; adapter `ApprovalSigner` |
-| Jira adapter cho `TicketRepository` | Thêm `adapters/jira.py` + registry |
-
-## Cách vận hành đội agent
-1. Đầu mỗi milestone, **O** tách việc thành task có mục tiêu, file, tiêu chí xong và định dạng báo cáo.
-2. Task độc lập chạy song song: các MCP server giao cho nhiều **W** cùng lúc, mỗi worker dùng một worktree riêng.
-3. **R** làm research và đọc log/kết quả benchmark rồi tóm tắt lại.
-4. **O** review diff, chạy test trước khi merge; quyết định mới thì ghi ADR.
+| analytics-mcp | Đã xoá (dọn dẹp 2026-11-01) |
+| policy-sidecar (guard, NER) | Đã xoá (dọn dẹp 2026-11-01) |
+| Rate limit, budget đầy đủ, fallback nhiều provider, router chi phí | Bỏ (chỉ giữ ghi usage + chi phí) |
+| Trang admin, i18n, HA, mTLS, Helm, secret manager | Bỏ |

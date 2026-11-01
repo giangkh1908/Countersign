@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "acme-mock-provider"
+version = "0.0.0"
+description = "Mock provider (giả lập OpenAI/Anthropic/Gemini)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "acme-common",
+    # Không thêm dependency nặng.
+]
+
+[tool.uv.sources]
+acme-common = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mock_provider"]
+
+[dependency-groups]
+dev = [
+    "anthropic>=2.3.0",
+    "httpx>=0.28.1",
+    "httpx2>=2.16.0",
+    "openai>=3.41.0",
+]

@@ -1,0 +1,1 @@
+"""Package `adapters` của gateway."""

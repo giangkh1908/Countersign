@@ -1,0 +1,88 @@
+# TODO(hardening): pin mọi action theo commit SHA đầy đủ (hiện dùng tag major).
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+  workflow_dispatch:
+  schedule: [{ cron: "17 2 * * *" }]
+permissions: { contents: read }
+concurrency: { group: "ci-${{ github.ref }}", cancel-in-progress: true }
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync --frozen --all-packages
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+
+  architecture:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --all-packages
+      - name: Leak-grep (contracts §9.1 mục 8)
+        run: bash scripts/leak-grep.sh
+      - name: Gateway không chứa model runtime trong cây phụ thuộc
+        run: |
+          if uv tree --package acme-gateway | grep -iE "onnxruntime|torch|tokenizers|transformers|underthesea"; then
+            echo "::error::gateway dependency tree contains model runtime"; exit 1
+          fi
+
+  web:
+    runs-on: ubuntu-24.04
+    defaults: { run: { working-directory: web } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: web/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: web/pnpm-lock.yaml }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  compose-config:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/gen-secrets.sh --ci
+      - run: docker compose config -q
+      - run: docker compose --profile tickets --profile obs config -q
+
+  # ---- Job nặng: giữ chỗ, bật theo milestone ----
+  e2e:  # TODO: Playwright trên compose (BFF + Keycloak + mock-provider)
+    if: false
+    runs-on: ubuntu-24.04
+    needs: [web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: web/package.json }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: web/pnpm-lock.yaml }
+      - run: bash scripts/gen-secrets.sh --ci
+      - run: docker compose up -d --wait --wait-timeout 300
+      - run: pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
+        working-directory: web
+      - run: pnpm e2e
+        working-directory: web
+        env: { E2E_BASE_URL: "http://localhost:8300" }
+      - if: always()
+        run: docker compose logs --no-color > compose-e2e.log && docker compose down -v
+
+  supply-chain:  # TODO: pip-audit, osv-scanner, SBOM
+    if: false
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv export --frozen --no-dev --format requirements-txt --hashes -o req.txt
+      - run: uvx pip-audit -r req.txt --require-hashes --strict

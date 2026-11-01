@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "acme-gateway"
+version = "0.0.0"
+description = "LLM Gateway (bảo mật + kiểm soát chi phí)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "acme-common",
+    "httpx",
+    "pyyaml",
+    "asyncpg",  # adapter KeyStore postgres (chỉ trong adapters/)
+    "anthropic",  # SDK chính thức, chỉ import trong adapters/anthropic.py
+    "prometheus-client",
+    # CẤM: onnxruntime, torch, tokenizers, transformers, sentence-transformers, huggingface_hub.
+]
+
+[tool.uv.sources]
+acme-common = { workspace = true }
+acme-mock-provider = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gateway"]
+
+[dependency-groups]
+dev = [
+    "acme-mock-provider",
+    "httpx2",  # anthropic SDK dùng httpx2 cho http_client tiêm vào (test qua ASGI)
+    "langchain-openai",
+    "openai",
+    "pytest",
+    "pytest-asyncio",
+]

@@ -27,8 +27,7 @@ secrets/
 *.key
 *.p12
 
-# Models & data sinh ra
-models/
+# Dữ liệu sinh ra
 data/generated/
 eval/results/
 
@@ -41,3 +40,6 @@ eval/results/
 Thumbs.db
 .idea/
 .vscode/
+
+backups/
+data/raw/

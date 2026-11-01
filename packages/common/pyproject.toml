@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "acme-common"
+version = "0.0.0"
+description = "Thư viện dùng chung (ports, audit, testing, http)"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic",
+    "pydantic-settings",
+    "httpx",
+    "pyjwt[crypto]",
+    "mcp>=2.3,<2.4",  # adapter mcp_sdk dùng ToolManager nội bộ của SDK: nâng minor phải chạy lại test
+    "jsonschema>=4.26.0",
+    "redis>=8.1.0",
+    "psycopg[binary]>=3.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/acme_common"]
+
+[dependency-groups]
+dev = [
+    "fakeredis[lua]>=2.40.0",
+]
