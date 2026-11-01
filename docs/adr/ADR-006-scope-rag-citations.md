@@ -1,7 +1,9 @@
 # ADR-006: Thu hẹp đề tài về trợ lý tri thức nội bộ có trích dẫn kiểm chứng được
 
+> Ghi chú: các thành phần đóng băng nêu dưới đây (analytics-mcp, policy-sidecar, spikes, benchmark) đã bị xoá theo dọn dẹp 2026-11-01; bản cũ ở git tag `backup/pre-prune-20261101`. Phần còn lại giữ nguyên văn lịch sử.
+
 - Trạng thái: Đã chấp nhận (2026-10-30). Phần phạm vi ticket, cache, quan sát được sửa bởi [ADR-007](ADR-007-actions-cache-observability.md).
-- Thay thế phạm vi của: `docs/ROADMAP.md` v1.3 (M2–M7). Không thay D0–D15 về bảo mật, identity, Ports & Adapters.
+- Thay thế phạm vi của lộ trình v1.3 (M2–M7, xem git tag `backup/pre-prune-20261101`). Không thay các quyết định về bảo mật, identity, Ports & Adapters.
 
 ## Bối cảnh
 
@@ -60,4 +62,4 @@ Thay đổi khung cần làm (đưa vào R1):
 - Compose mặc định chạy trên VPS 2–4 vCPU, 4 GB RAM. Mục tiêu: dưới 2,5 GB RAM lúc rảnh, đo và ghi vào README.
 - Embedding gọi qua gateway (`acme-embed`) tới API provider. Không chạy model nặng tại chỗ. Thêm port `EmbeddingProvider` phía gateway; mỗi vendor một adapter.
 - Đánh giá xoay quanh một bộ câu hỏi có nhãn (đoạn nguồn đúng), corpus độc `data/corpus/`, và kiểm tra rò rỉ theo user/phòng ban.
-- Nếu sau này mở rộng lại, chỉ cần bật profile; thiết kế 01–07 vẫn là tham chiếu.
+- Nếu sau này mở rộng lại, thiết kế cũ nằm ở git tag `backup/pre-prune-20261101`.

@@ -1,6 +1,6 @@
 # Lộ trình (v2.1): Trợ lý AI nội bộ có trích dẫn kiểm chứng được và hành động qua MCP
 
-> Phiên bản 2.1, 2026-11-01. Phạm vi theo [ADR-006](adr/ADR-006-scope-rag-citations.md) và [ADR-007](adr/ADR-007-actions-cache-observability.md). Lộ trình v1.3 (gateway đầy đủ, analytics, admin, hardening) xem lịch sử git.
+> Phiên bản 2.1, 2026-11-01. Phạm vi theo [ADR-006](adr/ADR-006-scope-rag-citations.md) và [ADR-007](adr/ADR-007-actions-cache-observability.md). Lộ trình v1.3 (gateway đầy đủ, analytics, admin, hardening) xem git tag `backup/pre-prune-20261101`.
 > Mỗi milestone kết thúc bằng bản chạy được, test xanh, đạt DoD đo được. Ký hiệu: **R** = reader, **W** = worker, **O** = orchestrator.
 > Quy tắc vận hành: mỗi lúc một worker, phạm vi hẹp; review và merge xong mới giao việc tiếp; backup trước mọi thay đổi trạng thái.
 
@@ -23,7 +23,7 @@
 Đã có:
 - compose khoẻ, `scripts/smoke.sh`;
 - gateway ghi `usage_events`;
-- E2E đóng ticket 56/56 trên stack thật (luồng này nay đóng băng, profile `tickets`);
+- E2E đóng ticket 56/56 trên stack thật (profile `tickets`);
 - Playwright: đăng nhập thật qua BFF, chat mock, khẳng định không có token trong trình duyệt.
 
 Còn lại:
@@ -34,7 +34,7 @@ Còn lại:
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
 | ✅ (345f304) Đưa tickets-mcp + approval-signer vào profile `tickets`; agent chạy được khi không có ticket (router chỉ docs/direct) | W | `docker compose up` mặc định không có 2 service này; smoke xanh; `--profile tickets` + E2E đóng ticket vẫn xanh |
-| Gỡ `depends_on` của agent → tickets-mcp và bff → approval-signer; gateway mặc định `GW_FEATURES=auth` (+ ghi usage), bỏ `GW_SIDECAR_URL` khỏi mặc định | W | Stack mặc định khoẻ khi không có tickets/sidecar |
+| ✅ Gỡ `depends_on` của agent → tickets-mcp và bff → approval-signer; xoá analytics-mcp, policy-sidecar, `GW_FEATURES`, `GW_SIDECAR_URL`, spikes, bench (dọn dẹp 2026-11-01) | W | Stack mặc định khoẻ khi không có tickets |
 | Đo RAM/CPU lúc rảnh và khi chạy 20 câu hỏi; ghi bảng vào README | W | Bảng số đo thật; mục tiêu < 2,5 GB lúc rảnh |
 | Tắt `directAccessGrants` của client `admin-cli` trong realm `acme` | W | Test realm: không client nào cho password grant |
 | Cập nhật CLAUDE.md, SOLUTION theo ADR-006 | O | Xong (2026-10-30) |
@@ -120,7 +120,7 @@ Còn lại:
 
 | Hạng mục | Tình trạng |
 |---|---|
-| analytics-mcp | Đóng băng, profile `analytics` |
-| policy-sidecar (guard, NER) | Đóng băng, profile `sidecar` |
+| analytics-mcp | Đã xoá (dọn dẹp 2026-11-01) |
+| policy-sidecar (guard, NER) | Đã xoá (dọn dẹp 2026-11-01) |
 | Rate limit, budget đầy đủ, fallback nhiều provider, router chi phí | Bỏ (chỉ giữ ghi usage + chi phí) |
 | Trang admin, i18n, HA, mTLS, Helm, secret manager | Bỏ |
