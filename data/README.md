@@ -1,44 +1,30 @@
-# data/ — dữ liệu giả lập "ACME Việt Nam"
+# data/ — dữ liệu "ACME Việt Nam" và corpus luật
 
-Thiết kế: `docs/design/04-infra-data-eval.md` PHẦN B (§7–§8). Mọi PII là giả.
+Mọi PII là giả. Nguồn và giấy phép corpus luật: [`SOURCES.md`](SOURCES.md).
 
 | Thư mục | Nội dung |
 |---|---|
-| `generator/` | Generator ACME có seed (`20261028`), chỉ dùng stdlib, không gọi LLM: 30 tài liệu, 100 ticket, analytics nhỏ, user từ realm |
+| `generator/` | Generator ACME có seed (`20261028`), stdlib, không gọi LLM: 30 tài liệu, 100 ticket, SQL seed, user lấy từ realm |
 | `tests/` | Test offline của generator (`uv run pytest data/tests`) |
 | `load_seed.sh` | Nạp SQL seed vào Postgres trong compose (idempotent) |
-| `corpus/` | Corpus độc cho RQ3 (**chưa xây**, dự kiến R3: >= 50 tài liệu, 8 kỹ thuật injection, có ground truth) |
-| `pii_testset/` | Tập test PII viết tay (tập chính cho bộ lọc PII, R11/R13) |
-| `generated/` | Đầu ra của generator, đã gitignore |
-| `vbpl/` | Công cụ tải corpus luật thật từ vbpl.vn + danh sách chọn (`selection.json`); nguồn và giấy phép ở `SOURCES.md` |
-| `raw/` | Dữ liệu thô tải về (vbpl, Zalo legal, ...), đã gitignore |
+| `vbpl/` | Tải corpus luật từ vbpl.vn; danh sách chọn `selection.json` |
+| `generated/`, `raw/` | Đầu ra generator và dữ liệu tải về, gitignore |
 
-## Chạy seed (M1)
+Corpus độc cho R3 chưa có; thư mục sẽ được tạo khi làm.
 
-```bash
-uv run python -m data.generator                  # -> data/generated/ (xoá và ghi lại toàn bộ)
-docker compose up -d postgres                    # init schema chạy khi pg_data còn trống
-bash data/load_seed.sh                           # nạp vào gateway/knowledge/tickets/analytics
-bash infra/postgres/verify/run.sh                # kiểm chứng RLS/quyền trên DB thật (assert)
+## Chạy seed
+
+```
+uv run python -m data.generator        # -> data/generated/ (xoá và ghi lại toàn bộ)
+bash data/load_seed.sh                 # nạp gateway, knowledge, tickets
+bash infra/postgres/verify/run.sh      # kiểm RLS và quyền trên DB thật
 ```
 
-Tuỳ chọn: `--seed N`, `--out DIR`, `--realm FILE`, `--sub-map FILE`.
-Cùng seed => đầu ra giống hệt từng byte (xem `manifest.json`, có sha256 từng file, không có timestamp).
-Nạp lại nhiều lần là an toàn (`INSERT ... ON CONFLICT (id) DO UPDATE`). Seed chạy bằng superuser
-`postgres` nên bỏ qua RLS ở bước nạp; `-p <project>` qua biến `COMPOSE="docker compose -p <project>"`.
+Tuỳ chọn generator: `--seed N`, `--out DIR`, `--realm FILE`, `--sub-map FILE`. Cùng seed thì đầu ra giống từng byte (`manifest.json` có sha256). Seed chạy bằng superuser `postgres` nên bỏ qua RLS ở bước nạp. Ingest vào kho tri thức: xem README gốc.
 
 ## Nội dung seed
 
-- **Phòng ban dữ liệu:** `ALL` (6 tài liệu), `SALES`, `HR`. Tài liệu: 30 (c0=5, c1=11, c2=8, c3=6; xem `documents.jsonl`),
-  mỗi tài liệu c2/c3 có đúng một canary `ACME-CANARY-<DEPT>-<nnnn>`; `allowed_roles` trên một số tài liệu c2 và
-  toàn bộ c3 của HR. Corpus markdown ở `generated/corpus/<DEPT>/*.md`; **không embed** — ingest/embedding là việc
-  của docs-mcp (`chunks` để trống).
-- **Ticket:** 100 ticket (`assignee_dept` SALES 55 / HR 45; open 20, in_progress 25, resolved 25, closed 30),
-  khoảng 170 bình luận (25% internal), sự kiện `create/status/close`; ~15% mô tả có PII giả
-  (danh sách trong `manifest.json`).
-- **Analytics:** 40 khách hàng (10% thuộc CS), 12 sản phẩm, 300 đơn, ~735 dòng đơn, 3 đơn bất thường (x20).
-- **Gateway:** bảng `departments` (SALES, ENG, HR, CS, IT, EVAL). Không seed `api_keys` (cần `GW_KEY_PEPPER`;
-  tạo bằng lệnh admin của gateway).
-- **User:** đọc `infra/keycloak/realm-acme.json` (16 user). Realm cố định `id` mỗi user (uuid5 theo
-  username) nên `requester_sub` khớp `sub` của JWT thật. Keycloak đã import realm từ trước bản có `id`
-  thì xoá volume Keycloak để import lại, hoặc dùng `--sub-map map.json` (`{"an.nguyen": "<uuid>", ...}`).
+- Tài liệu: 30 (c0=5, c1=11, c2=8, c3=6) ở phòng `ALL`, `SALES`, `HR`; mỗi tài liệu c2/c3 có một canary `ACME-CANARY-<DEPT>-<nnnn>`. Markdown ở `generated/corpus/<DEPT>/*.md`.
+- Ticket: 100 ticket kèm bình luận và sự kiện; khoảng 15% mô tả có PII giả.
+- Gateway: bảng `departments` (SALES, ENG, HR, CS, IT, EVAL). Không seed `api_keys`; tạo bằng `scripts/bootstrap-gateway-keys.sh`.
+- User: đọc `infra/keycloak/realm-acme.json` (16 user, `id` cố định theo uuid5 của username nên `requester_sub` khớp `sub` của JWT). Keycloak đã import realm cũ thì xoá volume Keycloak, hoặc dùng `--sub-map map.json`.
