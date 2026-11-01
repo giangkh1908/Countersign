@@ -27,8 +27,7 @@ secrets/
 *.key
 *.p12
 
-# Models & data sinh ra
-models/
+# Dữ liệu sinh ra
 data/generated/
 eval/results/
 
@@ -42,7 +41,5 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Audit anchor (dev, bind mount)
-audit-anchors/
 backups/
 data/raw/

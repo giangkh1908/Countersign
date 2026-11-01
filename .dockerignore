@@ -31,9 +31,7 @@ docs
 data/generated
 data/.llm_cache
 eval/results
-models
 backups
-audit-anchors
 
 # Secrets & env: KHÔNG bao giờ vào image
 secrets

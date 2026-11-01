@@ -15,32 +15,24 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY packages ./packages
 # check_pth.sh: liệt kê .pth/sitecustomize lạ, fail nếu ngoài allowlist (pth-allowlist.txt cùng thư mục).
-COPY eval/security/check_pth.sh eval/security/pth-allowlist.txt ./eval/security/
+COPY scripts/check_pth.sh scripts/pth-allowlist.txt ./scripts/
 
 # ───────────── gateway (8000) ─────────────
 FROM base AS gateway
 RUN uv sync --frozen --no-dev --no-editable --package acme-gateway
-RUN bash eval/security/check_pth.sh /app/.venv
+RUN bash scripts/check_pth.sh /app/.venv
+# named volume audit_anchors kế thừa chủ sở hữu thư mục này khi khởi tạo lần đầu
+RUN mkdir /anchors && chown 10001 /anchors
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH" \
     GW_MODELS_CONFIG=/app/packages/gateway/config/models.yaml
 CMD ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
 
-# ───────────── policy-sidecar (8010) ─────────────
-FROM base AS policy_sidecar
-# onnxruntime/tokenizers/underthesea CHỈ ở target này
-RUN uv sync --frozen --no-dev --no-editable --package acme-policy-sidecar
-RUN bash eval/security/check_pth.sh /app/.venv
-USER 10001
-ENV PATH="/app/.venv/bin:$PATH"
-# models KHÔNG nằm trong image (mount read-only, verify theo models.lock); image không chứa token HF
-CMD ["uvicorn", "policy_sidecar.main:app", "--host", "0.0.0.0", "--port", "8010", "--no-server-header"]
-
 # ───────────── approval-signer (8310) ─────────────
 FROM base AS approval_signer
 # chỉ fastapi + pyjwt + cryptography
 RUN uv sync --frozen --no-dev --no-editable --package acme-approval-signer
-RUN bash eval/security/check_pth.sh /app/.venv
+RUN bash scripts/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "approval_signer.main:app", "--host", "0.0.0.0", "--port", "8310", "--no-server-header"]
@@ -48,37 +40,32 @@ CMD ["uvicorn", "approval_signer.main:app", "--host", "0.0.0.0", "--port", "8310
 # ───────────── mock-provider (8900) ─────────────
 FROM base AS mock_provider
 RUN uv sync --frozen --no-dev --no-editable --package acme-mock-provider
-RUN bash eval/security/check_pth.sh /app/.venv
+RUN bash scripts/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "mock_provider.main:app", "--host", "0.0.0.0", "--port", "8900", "--no-server-header"]
 
-# ───────────── MCP servers (8101/8102/8103) ─────────────
+# ───────────── MCP servers (8101/8102) ─────────────
 FROM base AS mcp_docs
 RUN uv sync --frozen --no-dev --no-editable --package acme-mcp-docs
-RUN bash eval/security/check_pth.sh /app/.venv
+RUN bash scripts/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "mcp_docs.main:app", "--host", "0.0.0.0", "--port", "8101", "--no-server-header"]
 
 FROM base AS mcp_tickets
 RUN uv sync --frozen --no-dev --no-editable --package acme-mcp-tickets
-RUN bash eval/security/check_pth.sh /app/.venv
+RUN bash scripts/check_pth.sh /app/.venv
+# named volume audit_anchors kế thừa chủ sở hữu thư mục này khi khởi tạo lần đầu
+RUN mkdir /anchors && chown 10001 /anchors
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "mcp_tickets.main:app", "--host", "0.0.0.0", "--port", "8102", "--no-server-header"]
 
-FROM base AS mcp_analytics
-RUN uv sync --frozen --no-dev --no-editable --package acme-mcp-analytics
-RUN bash eval/security/check_pth.sh /app/.venv
-USER 10001
-ENV PATH="/app/.venv/bin:$PATH"
-CMD ["uvicorn", "mcp_analytics.main:app", "--host", "0.0.0.0", "--port", "8103", "--no-server-header"]
-
 # ───────────── agent (8200) ─────────────
 FROM base AS agent
 RUN uv sync --frozen --no-dev --no-editable --package acme-agent
-RUN bash eval/security/check_pth.sh /app/.venv
+RUN bash scripts/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "agent.main:app", "--host", "0.0.0.0", "--port", "8200", "--no-server-header"]
@@ -96,7 +83,7 @@ RUN pnpm build
 
 FROM base AS bff
 RUN uv sync --frozen --no-dev --no-editable --package acme-bff
-RUN bash eval/security/check_pth.sh /app/.venv
+RUN bash scripts/check_pth.sh /app/.venv
 # BFF phục vụ SPA cùng origin
 COPY --from=web_build /web/dist /app/static
 USER 10001
@@ -108,7 +95,7 @@ CMD ["uvicorn", "bff.main:app", "--host", "0.0.0.0", "--port", "8300", "--no-ser
 # TODO(M1): Alembic cho các DB khác (hiện bảng nghiệp vụ do infra/postgres/init/sql tạo).
 FROM base AS migrate
 RUN uv sync --frozen --no-dev --no-editable --package acme-agent
-RUN bash eval/security/check_pth.sh /app/.venv
+RUN bash scripts/check_pth.sh /app/.venv
 USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["python", "-m", "agent.migrate"]

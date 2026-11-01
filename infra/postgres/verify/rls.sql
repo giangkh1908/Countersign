@@ -96,30 +96,3 @@ BEGIN
 END $$;
 ROLLBACK;
 \echo OK tickets
-
-\echo == analytics: an_reader chỉ thấy view, đúng phòng, đã mask
-\c analytics
-BEGIN;
-SET LOCAL ROLE an_reader;
-DO $$
-DECLARE n int; p text;
-BEGIN
-  BEGIN
-    PERFORM 1 FROM core.customers LIMIT 1;
-    RAISE EXCEPTION 'an_reader đọc được core.customers';
-  EXCEPTION WHEN insufficient_privilege THEN NULL;
-  END;
-  PERFORM set_config('app.depts', '', true); PERFORM set_config('app.roles', '', true);
-  SELECT count(*) INTO n FROM api.v_orders; ASSERT n = 0, 'no-context thấy đơn: ' || n;
-  PERFORM set_config('app.depts', 'HR', true);
-  SELECT count(*) INTO n FROM api.v_orders; ASSERT n = 0, 'HR thấy đơn SALES/CS: ' || n;
-  PERFORM set_config('app.depts', 'CS', true);
-  SELECT count(*) INTO n FROM api.v_customers WHERE owning_dept <> 'CS'; ASSERT n = 0, 'CS thấy khách ngoài CS';
-  SELECT count(*) INTO n FROM api.v_customers; ASSERT n = 4, 'CS phải thấy 4 khách, có ' || n;
-  SELECT phone INTO p FROM api.v_customers LIMIT 1;
-  ASSERT p ~ '^\*+\d{3}$', 'phone chưa mask: ' || p;
-  PERFORM set_config('app.roles', 'management', true);
-  SELECT count(*) INTO n FROM api.v_orders; ASSERT n = 300, 'management phải thấy 300, có ' || n;
-END $$;
-ROLLBACK;
-\echo OK analytics

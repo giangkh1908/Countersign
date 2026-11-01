@@ -8,7 +8,6 @@ import shutil
 from pathlib import Path
 
 from . import sqlout
-from .analytics import build_analytics
 from .docs import build_docs
 from .tickets import build_tickets
 from .users import DEFAULT_REALM, REPO_ROOT, load_users
@@ -43,7 +42,6 @@ def build(
     users = load_users(realm_path, sub_map)
     docs = build_docs(users)
     tk = build_tickets(users, seed)
-    an = build_analytics(users, seed)
 
     if out.exists():
         shutil.rmtree(out)
@@ -78,7 +76,6 @@ def build(
     files["sql/gateway.sql"] = _write(out / "sql" / "gateway.sql", sqlout.gateway_sql(DEPARTMENTS))
     files["sql/knowledge.sql"] = _write(out / "sql" / "knowledge.sql", sqlout.knowledge_sql(docs))
     files["sql/tickets.sql"] = _write(out / "sql" / "tickets.sql", sqlout.tickets_sql(tk))
-    files["sql/analytics.sql"] = _write(out / "sql" / "analytics.sql", sqlout.analytics_sql(an))
 
     manifest = {
         "generator_version": GENERATOR_VERSION,
@@ -89,10 +86,6 @@ def build(
             "tickets": len(tk["tickets"]),
             "ticket_comments": len(tk["comments"]),
             "ticket_events": len(tk["events"]),
-            "customers": len(an["customers"]),
-            "products": len(an["products"]),
-            "orders": len(an["orders"]),
-            "order_items": len(an["order_items"]),
             "departments": len(DEPARTMENTS),
         },
         "synthetic_pii_tickets": [t["code"] for t in tk["tickets"] if t["synthetic_pii"]],

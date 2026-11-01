@@ -31,7 +31,7 @@ class ToolSpec:
     timeout_s: float = 10.0
     max_output_bytes: int = 32_768
     requires_approval: bool = False
-    timeout_code: str = "upstream_unavailable"  # analytics: "query_timeout"
+    timeout_code: str = "upstream_unavailable"
 
 
 @dataclass(frozen=True, slots=True)

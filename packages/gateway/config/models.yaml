@@ -1,11 +1,11 @@
 # Alias model của gateway (contracts §5). Model id lấy từ đây, không hardcode trong code.
 # Đối chiếu id chính xác với docs của provider trước khi chạy thật (contracts §5 ghi chú).
 # M1: chỉ dùng phần tử đầu của `chain` (fallback là M2); `acme-auto` tạm resolve sang `simple`
-# (router complexity_v1 là M2); `acme-embed` chưa phục vụ (sidecar, M4).
+# (router complexity_v1 là M2); `acme-embed` chưa phục vụ.
 default_max_output: 4096          # Anthropic bắt buộc max_tokens; dùng khi client không gửi
 aliases:
   acme-fast:  { chain: [anthropic/claude-haiku-5-5, gemini/gemini-2.5-flash-lite], timeout_s: 30 }
   acme-smart: { chain: [anthropic/claude-sonnet-5-5, gemini/gemini-3.1-pro-preview], timeout_s: 90 }
   acme-auto:  { router: complexity_v1, simple: acme-fast, complex: acme-smart }
-  acme-embed: { chain: [sidecar/embed] }
+  acme-embed: { chain: [local/embed] }
   acme-judge: { chain: [gemini/gemini-3.1-pro-preview, anthropic/claude-sonnet-5-5], timeout_s: 90 }

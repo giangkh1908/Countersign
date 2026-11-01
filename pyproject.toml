@@ -24,8 +24,7 @@ dev = [
 line-length = 100
 target-version = "py312"
 # Ruff mới format cả code block trong .md — docs/ là tài liệu thiết kế, không để tool tự sửa.
-# spikes/: code thử nghiệm M0 (bằng chứng cho ADR), không phải code sản phẩm.
-extend-exclude = ["docs", "web", "spikes", "*.md"]
+extend-exclude = ["docs", "web", "*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC"]

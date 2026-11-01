@@ -43,7 +43,6 @@ class Settings(CommonSettings):
     # --- MCP ---
     mcp_docs_url: str = "http://docs-mcp:8101/mcp"
     mcp_tickets_url: str = "http://tickets-mcp:8102/mcp"  # rỗng = tắt agent ticket
-    mcp_analytics_url: str = "http://analytics-mcp:8103/mcp"
 
     # --- Giới hạn vòng lặp (03 §3.5) ---
     agent_max_tool_calls_turn: int = 8
@@ -84,7 +83,6 @@ class Settings(CommonSettings):
         all_servers = {
             "docs-mcp": self.mcp_docs_url,
             "tickets-mcp": self.mcp_tickets_url,
-            "analytics-mcp": self.mcp_analytics_url,
         }
         return {aud: url for aud, url in all_servers.items() if url}
 
