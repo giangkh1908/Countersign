@@ -14,7 +14,7 @@ Hiện trạng (kiểm trong code 2026-11-01):
 | Ticket | `list_my_tickets`, `get_ticket`, `search_tickets`, `prepare_close_ticket` + phê duyệt ký số | Tạo ticket |
 | Báo cáo nhóm | Không | Toàn bộ |
 | Vai trò | 6 realm role (`employee`, `team_lead`, `dept_manager`, `management`, `admin`, `auditor`); `allowed_roles` + RLS trên tài liệu | Ma trận quyền theo tool và theo kênh |
-| Cache | Port `ResponseCache`, adapter `redis_exact`, `redis_semantic`, `null_cache` | Khoá theo phạm vi quyền, số đo |
+| Cache | Không | Toàn bộ (port, adapter, khoá theo phạm vi quyền, số đo); `redis-cache` có trong compose nhưng chưa có code dùng |
 | Trace | Biến `OTEL_EXPORTER_OTLP_ENDPOINT` | Instrument trong service |
 | Metric, log | Prometheus + Grafana (profile `obs`), log có cấu trúc, hash-chain audit | Dashboard RAG/cache, gom log |
 
@@ -56,6 +56,7 @@ Dự thảo ma trận, chốt ở milestone A1:
 - Bật **exact cache** trước, khoá gồm model, nội dung prompt và phạm vi quyền (phòng ban, cấp mật, vai trò).
 - Semantic cache chỉ là thử nghiệm trong RQ4, mặc định tắt. Hai câu "gần giống nhau" của hai người khác quyền là nguồn rò rỉ, nên phải có số đo mới được bật.
 - Không cache câu trả lời có thao tác ghi. Câu trả lời cache vẫn phải giữ nguyên trích dẫn đã kiểm chứng.
+- Rò rỉ cache giữa các phạm vi quyền đã có báo cáo thực tế (CacheAttack, arXiv 2601.23088; một CVE của LiteLLM). Vì vậy phạm vi quyền đi vào khoá dạng literal và canary được quét trong cache.
 
 ### Quan sát
 
@@ -71,11 +72,11 @@ Thêm eval hành động: chọn đúng tool, đúng tham số, từ chối đú
 ### Vẫn giữ nguyên quyết định của ADR-006
 
 Bỏ: trang admin, i18n, HA, mTLS, Helm, secret manager, router chi phí, rate limit và budget đầy đủ, fallback nhiều provider.
-Đóng băng: `analytics-mcp`, `policy-sidecar`.
+`analytics-mcp` và `policy-sidecar` đã bị xoá khỏi repo (dọn dẹp 2026-11-01; bản cũ ở git tag `backup/pre-prune-20261101`).
 
 ## Tự xây hay dùng lại
 
-Khảo sát GitHub ([`research/06-github-survey.md`](../research/06-github-survey.md)): không thấy dự án mở nào có đủ tổ hợp này, nên giữ hướng tự xây lõi.
+Khảo sát GitHub ([`research/github-survey.md`](../research/github-survey.md)): không thấy dự án mở nào có đủ tổ hợp này, nên giữ hướng tự xây lõi.
 - `notify-mcp` tự viết, adapter Telegram dùng Bot API. MCP Telegram phổ biến nhất chạy bằng tài khoản người dùng, và các MCP nhắn tin có sẵn không có bí danh kênh, mức mật, phê duyệt.
 - Quan sát: thử OpenLLMetry (OTel) trước khi cân nhắc Langfuse.
 - Eval: metric tự viết là chính; DeepEval/Ragas chạy đối chứng.

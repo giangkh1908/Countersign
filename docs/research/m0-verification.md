@@ -1,4 +1,6 @@
-# 05 — Xác minh M0: SOLUTION §11 và các mục [cần xác minh]
+# Xác minh M0: các mục cần xác minh trước khi dựng M1
+
+> Mã spike (`spikes/`), `models.lock` và các tài liệu thiết kế được nhắc trong file này đã bị xoá khi dọn repo 2026-11-01; bản cũ ở git tag `backup/pre-prune-20261101`. Kết luận còn hiệu lực nằm ở ADR-003, ADR-004, ADR-005.
 
 > Reader (Haiku) nghiên cứu, orchestrator review và đối chiếu với kết quả chạy thật, 2026-10-29.
 > Thang tin cậy: **Cao** = mã nguồn hoặc tài liệu/advisory chính thức; **TB** = nguồn chính thức thiếu chi tiết hoặc nhiều nguồn thứ cấp khớp nhau; **Thấp** = suy luận hoặc chỉ một nguồn.

@@ -2,8 +2,8 @@
 
 - **Trạng thái:** Đã chấp nhận (2026-10-29), sau Spike A (M0).
 - **Người quyết định:** orchestrator; chủ dự án review
-- **Bằng chứng:** `spikes/a_mcp_identity/README.md`, `docs/research/05-m0-verification.md` §1
-- **Liên quan:** contracts §9.2 (`ToolServerHost`), `docs/design/02-mcp-servers.md` §1.4
+- **Bằng chứng:** Spike A (mã đã xoá khi dọn repo, xem git tag `backup/pre-prune-20261101`), [`research/m0-verification.md`](../research/m0-verification.md) §1
+- **Liên quan:** [`design/contracts.md`](../design/contracts.md) §9.2 (`ToolServerHost`)
 
 ## Bối cảnh
 Spike A dựng một MCP server Streamable HTTP ở chế độ stateless bằng `fastmcp` 4.1.4, kiểm JWT thật của Keycloak (`aud=docs-mcp`). Spike **đạt** đủ các ca:
@@ -13,7 +13,7 @@ Spike A dựng một MCP server Streamable HTTP ở chế độ stateless bằng
 - Token hết hạn, payload bị sửa, ký bằng khoá giả cùng `kid`, `alg=none`: 401.
 
 Phát hiện:
-1. Lỗi 401 của SDK là một câu chung, không phân biệt `expired|audience|signature` và không có `resource_metadata`, trong khi thiết kế 02 §1.4.3 yêu cầu cả hai.
+1. Lỗi 401 của SDK là một câu chung, không phân biệt `expired|audience|signature` và không có `resource_metadata`, trong khi yêu cầu thiết kế là có cả hai.
 2. `get_access_token()` gắn chặt với từng SDK. `mcp` 2.3 và `fastmcp` có API khác nhau, và trong `mcp` 2.x `FastMCP` đã đổi tên thành `MCPServer`.
 3. Issuer trong token luôn là `http://keycloak.acme.local:8080/realms/acme`, kể cả khi lấy JWKS qua `localhost`.
 4. Realm thiếu mapper `sub`, vì `realm-acme.json` định nghĩa lại `clientScopes` nên mất scope built-in `basic`. **Đã sửa** bằng cách thêm `oidc-sub-mapper` vào scope `acme-claims`, và đã xác minh trên token thật.
@@ -30,10 +30,10 @@ Phát hiện:
 3. Cấu hình tách hai biến:
    - `KEYCLOAK_ISSUER`: chuỗi so khớp với claim `iss`.
    - `KEYCLOAK_JWKS_URI`: URL lấy khoá, mặc định suy ra từ issuer. Cần tách vì ở dev, host và container có thể thấy Keycloak qua hai tên khác nhau.
-4. Claim phòng ban là `dept` (mảng) và `clearance` (số), đúng contracts §4. Không dùng `department`.
+4. Claim phòng ban là `dept` (mảng) và `clearance` (số), đúng `design/contracts.md` mục 2. Không dùng `department`.
 
 ## Hệ quả
-- (+) Đổi SDK MCP không ảnh hưởng xác thực hay business logic. Thông báo lỗi 401 đúng thiết kế 02.
-- (+) Cùng một `TokenVerifier` dùng chung cho gateway, agent, bff và MCP (D16).
+- (+) Đổi SDK MCP không ảnh hưởng xác thực hay business logic. Thông báo lỗi 401 đủ chi tiết.
+- (+) Cùng một `TokenVerifier` dùng chung cho gateway, agent, bff và MCP .
 - (−) Tự viết và tự test middleware khoảng 100 dòng, với các ca âm giống Spike A.
 - (−) Còn phụ thuộc kết quả kiểm `mcp` 2.3 ở đầu M1.

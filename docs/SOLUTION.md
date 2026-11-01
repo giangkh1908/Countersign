@@ -1,167 +1,132 @@
-# Giải pháp: Trợ lý AI nội bộ có trích dẫn kiểm chứng được và hành động qua MCP
+# Giải pháp: trợ lý AI nội bộ có trích dẫn kiểm chứng được và hành động qua MCP
 
-> Phiên bản 2.1, 2026-11-01. Phạm vi theo [ADR-006](adr/ADR-006-scope-rag-citations.md) và [ADR-007](adr/ADR-007-actions-cache-observability.md), lộ trình ở [`ROADMAP.md`](ROADMAP.md) v2.1.
-> **ADR-007 mở lại ticket, cache, quan sát và thêm báo cáo nhóm chat:** khi tài liệu này mâu thuẫn với ADR-007 thì theo ADR-007. Các mục dưới mô tả phần hỏi đáp (đang làm); phần hành động, cache, quan sát sẽ viết chi tiết ở A1 và Q1.
-> Bản v1.3 (gateway đầy đủ, analytics, policy-sidecar, hardening) xem lịch sử git; phần còn đóng băng ở mục 8.
-> Hợp đồng dùng chung và quy tắc Ports & Adapters: [`design/00-contracts.md`](design/00-contracts.md) (§9 là nguồn chân lý). Quyết định D0–D15: [`design/DECISIONS-v1.2.md`](design/DECISIONS-v1.2.md).
+Phạm vi: [ADR-006](adr/ADR-006-scope-rag-citations.md), sửa bởi [ADR-007](adr/ADR-007-actions-cache-observability.md). Lộ trình: [`ROADMAP.md`](ROADMAP.md). Hợp đồng dùng chung và quy tắc code: [`design/contracts.md`](design/contracts.md).
 
 ## 1. Bài toán
 
-Nhân viên cần tra cứu quy định và tài liệu của công ty. Hệ thống phải thoả hai yêu cầu:
+Nhân viên cần tra cứu quy định và tài liệu của công ty. Hệ thống phải:
 
-1. **Mọi câu trả lời dẫn nguồn kiểm chứng được:** mỗi câu gắn mã `[n]` trỏ tới một đoạn cụ thể (văn bản, Điều, khoản, vị trí ký tự) mà người dùng mở ra đối chiếu. Không đủ nguồn thì từ chối, không bịa.
-2. **Không bao giờ lộ tài liệu người dùng không được xem:** phân quyền thực thi ở tầng cơ sở dữ liệu, không dựa vào prompt. Tài liệu độc (prompt injection gián tiếp) không được điều khiển agent.
-3. **Thực hiện được việc qua MCP một cách an toàn** (ADR-007): tạo và xử lý ticket, gửi báo cáo vào nhóm chat. Quyền theo vai trò thực thi ở server, thao tác ghi hoặc gửi ra ngoài phải được người dùng duyệt.
+1. **Dẫn nguồn kiểm chứng được.** Mỗi câu trả lời gắn mã `[n]` trỏ tới một đoạn cụ thể (văn bản, Điều, khoản, vị trí ký tự). Không đủ nguồn thì từ chối, không bịa.
+2. **Không lộ tài liệu người dùng không được xem.** Phân quyền thực thi ở cơ sở dữ liệu, không dựa vào prompt. Tài liệu độc (prompt injection gián tiếp) không được điều khiển agent.
+3. **Làm được việc qua MCP một cách an toàn.** Tạo và xử lý ticket, gửi báo cáo vào nhóm chat. Quyền theo vai trò thực thi ở server; thao tác ghi hoặc gửi ra ngoài phải được người dùng duyệt.
 
 ## 2. Câu hỏi nghiên cứu
 
-| RQ | Câu hỏi | Chỉ số chính | Milestone |
+| RQ | Câu hỏi | Chỉ số | Milestone |
 |---|---|---|---|
-| RQ1 Truy xuất | Hybrid (vector + từ khoá) và rerank cải thiện recall@k bao nhiêu trên tài liệu tiếng Việt so với chỉ vector hoặc chỉ BM25? | recall@5/@10, MRR, nDCG theo loại câu; so 4 cấu hình (vector, BM25, hybrid, hybrid+rerank) | R1 |
-| RQ2 Trích dẫn | Bước kiểm chứng sau sinh (mỗi câu ↔ đoạn nguồn) nâng citation precision và faithfulness bao nhiêu, đổi lại chi phí và độ trễ bao nhiêu? | citation precision/recall, faithfulness, tỉ lệ từ chối đúng; chi phí/câu, độ trễ p50/p95; có và không có bộ kiểm chứng | R2 |
-| RQ3 An toàn | Với ACL ở tầng DB (RLS) và spotlighting, tỉ lệ rò tài liệu trái quyền và tỉ lệ tấn công thành công của tài liệu độc là bao nhiêu? | leak rate (đích: 0), ASR theo kỹ thuật injection, có/không từng lớp phòng thủ | R3 |
+| RQ1 Truy xuất | Hybrid (vector và từ khoá) cùng rerank cải thiện recall@k bao nhiêu trên tài liệu tiếng Việt so với chỉ vector hoặc chỉ BM25? | recall@5/@10, MRR, nDCG; 4 cấu hình | R1 |
+| RQ2 Trích dẫn | Bước kiểm chứng sau sinh nâng citation precision và faithfulness bao nhiêu, đổi lại chi phí và độ trễ bao nhiêu? | citation precision/recall, faithfulness, tỉ lệ từ chối đúng, chi phí/câu, độ trễ p50/p95 | R2 |
+| RQ3 An toàn | Với ACL ở tầng DB và spotlighting, tỉ lệ rò tài liệu trái quyền và tỉ lệ tấn công thành công của tài liệu độc là bao nhiêu, kể cả khi tấn công nhằm tạo ticket hoặc gửi dữ liệu mật vào nhóm chat? | leak rate (đích 0), ASR theo kỹ thuật injection, có và không từng lớp phòng thủ | R3 |
+| RQ4 Cache | Cache tiết kiệm bao nhiêu chi phí và độ trễ, có làm giảm chất lượng hay rò dữ liệu giữa các phạm vi quyền không? | hit rate, chi phí, độ trễ, chất lượng, số lần rò | Q1 |
 
-| RQ4 Cache (ADR-007) | Cache tiết kiệm bao nhiêu chi phí và độ trễ, có làm giảm chất lượng hay rò dữ liệu giữa các phạm vi quyền không? | hit rate, chi phí, độ trễ, chất lượng có/không cache, số lần rò | Q1 |
+Chưa có số đo nào cho RQ1 đến RQ4; các bảng kết quả là sản phẩm của R1 đến R3 và Q1.
 
-RQ3 mở rộng theo ADR-007: đo cả việc tài liệu độc lừa agent tạo ticket hoặc gửi dữ liệu mật vào nhóm chat.
+## 3. Kiến trúc hiện tại
 
-Chưa có số đo nào cho RQ1–RQ4 tại thời điểm viết; các bảng kết quả là sản phẩm của R1–R3 và Q1.
-
-## 3. Kiến trúc
-
-### 3.1 Thành phần giữ lại
-
-| Thành phần | Vai trò | Ghi chú |
-|---|---|---|
-| Keycloak | IdP, OIDC, token exchange (RFC 8693, V2; ADR-005) | Mỗi hop lấy token riêng theo audience |
-| BFF (FastAPI) + SPA (React + TS) | Đăng nhập OIDC code + PKCE, giữ phiên ở Redis | **Token chỉ ở BFF**; trình duyệt chỉ có cookie `HttpOnly`/`SameSite=Strict` + CSRF header (D15, ADR-002) |
-| Gateway mỏng | Auth key, `/v1/chat/completions`, `/v1/embeddings` (thêm ở R1), ghi `usage_events` + chi phí | Giữ khoá provider duy nhất. Không còn rate limit/budget đầy đủ/fallback nhiều provider/cache/router chi phí |
-| Agent LangGraph | Router rút gọn: `docs` hoặc trả lời trực tiếp; bước kiểm chứng sau sinh (R2) | Gọi gateway bằng key nội bộ + user JWT; gọi docs-mcp bằng token đã exchange (`aud=docs`) |
-| docs-mcp | Truy xuất tài liệu có phân quyền | Chi tiết ở 3.2 |
-| Postgres + pgvector | Tài liệu, chunk, vector, RLS, `usage_events`, audit | Hạ tầng cố định, không bọc |
-| Redis | Phiên BFF, taint, trạng thái ngắn hạn | Hạ tầng cố định, không bọc |
-| mock-provider | Provider giả tất định cho test và E2E | Có trong compose mặc định |
-
-Compose mặc định (R0): postgres, redis, keycloak, gateway, mock-provider, docs-mcp, agent, bff.
-
-### 3.2 docs-mcp
-
-Package `packages/mcp_docs`, tool `search_documents(query, top_k, department_filter?)` và `get_document`.
-
-| Khía cạnh | Thiết kế |
+| Thành phần | Vai trò |
 |---|---|
-| Phân quyền | ACL lọc **trong SQL** + RLS theo claims của token (phòng ban, cấp mật), không theo tham số LLM. `department_filter` chỉ thu hẹp, không mở rộng quyền |
-| Spotlighting | Kết quả bọc delimiter + datamark, mỗi đoạn có `source` và `trust: "untrusted"`; mô tả tool nêu rõ nội dung là dữ liệu tham khảo, không phải chỉ dẫn |
-| Taint | Ghi taint theo thread và phòng ban khi agent đã đọc tài liệu có cấp mật |
-| Truy xuất | `PgVectorHybridRetriever`: vector (pgvector) + full-text Postgres, trộn RRF; trả `vec_rank`, `fts_rank`, `score`. Rerank tuỳ chọn (R1); chế độ `mode`: `hybrid`, `fts_only`, `taint_unavailable` |
-| Ports | `Embedder`, `Reranker`, `DocumentLoader`, `DocumentRetriever`, `DocumentIndexer`; mỗi vendor một file trong `adapters/`; `factory.py` dùng registry dict + lazy import |
-| Việc còn lại ở R1 | Loader `vbpl_articles` (một Điều = một đơn vị, Điều dài cắt theo khoản); cột `article`, `clause`, `char_start`, `char_end` trong `knowledge.chunks`; embedder thật qua gateway thay `fake_hash` trên đường mặc định; số chiều embedding theo model được chọn (bỏ cứng `vector(1024)`) |
+| Keycloak | IdP, OIDC, token exchange (RFC 8693) theo từng audience ([ADR-005](adr/ADR-005-token-flow.md)) |
+| BFF (FastAPI) và SPA (React, TS) | Đăng nhập OIDC code với PKCE, giữ phiên ở Redis. Token chỉ ở BFF; trình duyệt chỉ có cookie `HttpOnly` và header CSRF ([ADR-002](adr/ADR-002-ui-react-bff.md)) |
+| Gateway | Xác thực khoá API, proxy `/v1/chat/completions` tới provider, ghi `usage_events` và chi phí. Giữ khoá provider duy nhất. Không có PII, guard, router, breaker hay cache |
+| Agent (LangGraph) | Router `docs`, `tickets` hoặc trả lời trực tiếp; checkpoint mã hoá ([ADR-004](adr/ADR-004-checkpoint-encryption.md)); gọi MCP bằng token đã exchange |
+| docs-mcp | Truy xuất tài liệu có phân quyền (mục 3.1) |
+| tickets-mcp và approval-signer (profile `tickets`) | Đọc ticket và đóng ticket qua luồng phê duyệt ký số ([`design/approval.md`](design/approval.md)) |
+| Postgres và pgvector | Tài liệu, chunk, vector, RLS, usage, audit. Hạ tầng cố định, không bọc |
+| Redis | Phiên BFF, taint, intent. Hạ tầng cố định, không bọc |
+| mock-provider | Provider giả tất định cho test và E2E |
+| Prometheus và Grafana (profile `obs`) | Metric và dashboard |
 
-Hiện đã có adapter embedder `fake_hash` và `gateway_http`, reranker `none`, loader Markdown.
+Chưa làm: `notify-mcp` (profile `notify`, A1), tạo ticket (A1), cache (Q1), trace OpenTelemetry (Q1). Compose mặc định gồm postgres, redis-state, redis-cache, keycloak, gateway, mock-provider, docs-mcp, agent, bff.
 
-### 3.3 Luồng một câu hỏi
+### 3.1 docs-mcp
+
+Tool `search_documents(query, top_k, department_filter?)`, scope `docs:read`.
+
+- **Phân quyền** ở SQL và RLS theo claims của token (phòng ban, cấp mật, vai trò), không theo tham số do LLM đưa. `department_filter` chỉ thu hẹp, không mở rộng quyền.
+- **Spotlighting.** Kết quả bọc delimiter, mỗi đoạn có `source` và đánh dấu không đáng tin; mô tả tool nói rõ nội dung là dữ liệu tham khảo, không phải chỉ dẫn.
+- **Taint.** Khi trả tài liệu có cấp mật, ghi taint theo thread vào Redis để bước ghi sau đó cảnh báo nguy cơ hạ cấp mật.
+- **Truy xuất.** `pgvector_hybrid`: vector trộn full-text Postgres bằng RRF; rerank là tuỳ chọn (hiện adapter `none`). Embedder đang có `fake_hash` và `gateway_http`.
+- **Còn lại ở R1.** Loader `vbpl_articles` (một Điều là một đơn vị), cột `article`, `clause`, `char_start`, `char_end`, embedder thật qua gateway, số chiều embedding theo model chọn (hiện cứng `vector(1024)`). Chi tiết: [`design/rag-citations.md`](design/rag-citations.md).
+
+### 3.2 Luồng một câu hỏi
 
 ```mermaid
 flowchart LR
-  U[Nhân viên] --> SPA[SPA] --> BFF[BFF<br/>giữ token]
-  BFF -->|aud=agent-service| AG[Agent LangGraph<br/>router: docs / direct]
-  AG -->|aud=docs| MCP[docs-mcp<br/>RLS + hybrid + spotlighting]
-  MCP --> PG[(Postgres + pgvector)]
-  AG -->|chat, embeddings| GW[Gateway mỏng<br/>usage_events]
-  AG --> ANS[Câu trả lời có mã trích dẫn n]
-  ANS --> VER[Bộ kiểm chứng sau sinh<br/>mỗi câu có đoạn hỗ trợ không?]
-  VER -->|đạt| UI[UI: bấm n mở đúng đoạn nguồn]
-  VER -->|không đạt| FLAG[Gắn cờ chưa kiểm chứng<br/>hoặc từ chối: không tìm thấy]
+  U[Nhân viên] --> SPA[SPA] --> BFF[BFF giữ token]
+  BFF -->|aud=agent-service| AG[Agent LangGraph]
+  AG -->|aud=docs-mcp| MCP[docs-mcp: RLS, hybrid, spotlighting]
+  MCP --> PG[(Postgres, pgvector)]
+  AG -->|chat| GW[Gateway: usage_events]
+  AG --> ANS[Trả lời có mã trích dẫn n]
+  ANS --> VER[Bộ kiểm chứng sau sinh]
+  VER -->|đạt| UI[UI: bấm n mở đoạn nguồn]
+  VER -->|không đạt| FLAG[Gắn cờ chưa kiểm chứng hoặc từ chối]
 ```
 
-Từng bước:
-
-1. Router phân loại câu hỏi; nhánh `docs` gọi `search_documents` với token đã exchange.
+1. Router phân loại; nhánh `docs` gọi `search_documents` với token đã exchange.
 2. docs-mcp lọc theo quyền trong SQL, trả các đoạn đã spotlighting kèm vị trí trích dẫn.
-3. Agent sinh câu trả lời, mỗi câu có `[n]`; chỉ được trích đoạn đã truy xuất (trích ngoài danh sách bị loại).
-4. Bộ kiểm chứng (LLM-judge `acme-judge`, đầu ra JSON có cấu trúc) kiểm từng câu có được đoạn trích hỗ trợ; câu không được hỗ trợ bị gắn cờ hoặc bỏ.
-5. UI hiển thị `[n]`; bấm mở đoạn nguồn, tô đúng câu được trích.
+3. Agent sinh câu trả lời, mỗi câu có `[n]`; chỉ được trích đoạn đã truy xuất.
+4. Bộ kiểm chứng (LLM-judge, đầu ra JSON) kiểm từng câu có được đoạn trích hỗ trợ; câu không được hỗ trợ bị gắn cờ hoặc bỏ.
+5. UI hiển thị `[n]`; bấm mở đoạn nguồn và tô đúng câu được trích.
 
-Trạng thái: bước 1–2 đã chạy trong M1 (với embedder giả); bước 3–5 thuộc R2.
+Đã chạy: bước 1 và 2 (với embedder giả). Bước 3 đến 5 thuộc R2.
 
 ## 4. Dữ liệu
 
-Chi tiết nguồn, giấy phép, checksum: [`data/SOURCES.md`](../data/SOURCES.md).
+Nguồn, giấy phép, checksum: [`data/SOURCES.md`](../data/SOURCES.md).
 
 | Dữ liệu | Nội dung | Vai trò |
 |---|---|---|
-| Corpus luật | 19 luật/bộ luật Việt Nam từ vbpl.vn (Bộ Tư pháp), 1.557 Điều, khoảng 1,82 triệu ký tự; văn bản quy phạm pháp luật không thuộc đối tượng bảo hộ quyền tác giả | Corpus chính cho RQ1, RQ2. Đơn vị trích dẫn là Điều (+ khoản) |
-| Ánh xạ ACL | Gán tất định theo nhóm chủ đề, **giả lập**: `hr` → `HR` (c1), `it` → `IT` (c1), `finance` và `legal` → `ALL` (c0) | Tạo ranh giới quyền trên dữ liệu vốn công khai |
-| Tài liệu mật ACME | 30 tài liệu tổng hợp (c2/c3) có canary, do `data/generator` sinh | Đo rò rỉ trái quyền (RQ3) |
-| Corpus độc | `data/corpus/` (**chưa xây**, dự kiến R3), 8 kỹ thuật injection | Đo ASR (RQ3) |
-| Bộ câu hỏi | Tự xây, khoảng 150 câu: LLM sinh nháp từ từng Điều, người kiểm 100% nhãn; nhãn vàng là (văn bản, Điều, khoản); loại câu: tra cứu, tổng hợp nhiều Điều, không có đáp án | Đo RQ1, RQ2 |
-| Zalo AI Legal Retrieval | 61.425 Điều, 3.298 câu hỏi có nhãn | Benchmark truy xuất ngoài trên corpus riêng của nó; chỉ 27/3.298 cặp nhãn rơi vào corpus đã chọn nên không dùng làm bộ câu hỏi chính |
+| Corpus luật | 19 luật và bộ luật Việt Nam từ vbpl.vn, 1.557 Điều, khoảng 1,82 triệu ký tự; văn bản quy phạm pháp luật không thuộc đối tượng bảo hộ quyền tác giả | Corpus chính cho RQ1, RQ2. Đơn vị trích dẫn là Điều (và khoản) |
+| Ánh xạ ACL | Gán tất định theo nhóm chủ đề, giả lập: `hr` thành `HR` (c1), `it` thành `IT` (c1), `finance` và `legal` thành `ALL` (c0) | Tạo ranh giới quyền trên dữ liệu vốn công khai |
+| Tài liệu mật ACME | 30 tài liệu tổng hợp (c2, c3) có canary, do `data/generator` sinh | Đo rò rỉ trái quyền |
+| Corpus độc | `data/corpus/`, chưa xây (R3); 8 kỹ thuật injection | Đo ASR |
+| Bộ câu hỏi | Chưa xây (R1); khoảng 150 câu, LLM sinh nháp từ từng Điều, người kiểm 100% nhãn; nhãn vàng là (văn bản, Điều, khoản) | RQ1, RQ2 |
+| Zalo AI Legal Retrieval | 61.425 Điều, 3.298 câu hỏi có nhãn; chỉ 27 cặp nhãn rơi vào corpus đã chọn | Chỉ làm benchmark truy xuất ngoài |
 
-UTS_VLC đã bị loại làm corpus (158/318 dòng split 2026_01 có số hiệu đầu văn bản không khớp thân văn bản); lý do ở `data/SOURCES.md` §2. Bộ câu hỏi chưa được xây (R1).
+UTS_VLC bị loại làm corpus vì nửa số dòng có số hiệu đầu văn bản không khớp thân văn bản (`data/SOURCES.md` §2).
 
 ## 5. Mô hình bảo mật
 
-| Cơ chế | Nội dung | Tham chiếu |
-|---|---|---|
-| Danh tính xuyên suốt | Người dùng đăng nhập Keycloak; token chỉ ở BFF; mỗi hop (agent, docs-mcp, gateway) lấy token riêng theo audience bằng token exchange, không chuyển tiếp nguyên token | ADR-005, D13, D15 |
-| Phân quyền ở server | RLS và ACL trong SQL theo claims; LLM bị injection cũng chỉ làm được điều người dùng vốn được phép | `design/02` |
-| Spotlighting + taint | Nội dung truy xuất luôn gắn nhãn không đáng tin; taint theo thread/phòng ban | `design/02`, `design/00` |
-| Audit hash-chain | Bảng append-only, chuỗi HMAC-SHA256 với khoá ngoài DB; không lưu plaintext prompt | `design/01` §audit |
-| Ports & Adapters | Thêm vendor = thêm file; leak-grep (§9.1 mục 8) rỗng | `design/00` §9 |
-| Giả định đe doạ | Agent có thể bị lừa; do đó quyền không đặt ở prompt. Giới hạn đã biết: không chống kẻ nắm cả quyền DBA lẫn khoá HMAC | |
+| Cơ chế | Nội dung |
+|---|---|
+| Danh tính xuyên suốt | Token chỉ ở BFF; mỗi hop lấy token riêng theo audience, không chuyển tiếp nguyên token |
+| Phân quyền ở server | RLS và ACL trong SQL theo claims. LLM bị injection cũng chỉ làm được điều người dùng vốn được phép |
+| Spotlighting và taint | Nội dung truy xuất luôn gắn nhãn không đáng tin; taint theo thread |
+| Phê duyệt ký số | Thao tác ghi cần intent do MCP ký và approval do signer ký sau khi người dùng xem thẻ ([`design/approval.md`](design/approval.md)) |
+| Audit | Bảng append-only, chuỗi hash HMAC với khoá ngoài DB; không lưu plaintext prompt |
+| Giả định đe doạ | Agent có thể bị lừa nên quyền không đặt ở prompt. Không chống kẻ nắm cả quyền DBA lẫn khoá HMAC |
 
-Các lớp bảo mật bị đóng băng (PII/guard trong sidecar, phê duyệt ký số) không còn là phần của đề tài; ảnh hưởng của từng lớp còn lại được đo trong ablation R4.
+Phần lọc PII và guard prompt injection bằng mô hình (policy-sidecar) đã bị xoá khỏi đề tài; ảnh hưởng của từng lớp còn lại được đo trong ablation R4.
 
 ## 6. Đánh giá
 
 | Nhóm | Chỉ số | RQ |
 |---|---|---|
-| Truy xuất | recall@k, MRR, nDCG theo loại câu và theo nhóm văn bản | RQ1 |
-| Trích dẫn | citation precision, citation recall (khung ALCE) | RQ2 |
+| Truy xuất | recall@k, MRR, nDCG theo loại câu | RQ1 |
+| Trích dẫn | citation precision và recall (khung ALCE) | RQ2 |
 | Câu trả lời | faithfulness; tỉ lệ từ chối đúng với câu không có đáp án | RQ2 |
-| An toàn | leak rate (mỗi user trong 16 user hỏi bộ câu chạm tài liệu trái quyền; kiểm câu trả lời, trích dẫn, cache, log, usage); ASR theo kỹ thuật injection, có/không spotlighting và có/không bộ kiểm chứng | RQ3 |
-| Chi phí, độ trễ | chi phí/câu (từ `usage_events`), độ trễ p50/p95, phần thêm do bộ kiểm chứng | RQ2 |
+| An toàn | leak rate (mỗi user trong 16 user hỏi bộ câu chạm tài liệu trái quyền; kiểm câu trả lời, trích dẫn, cache, log); ASR theo kỹ thuật injection | RQ3 |
+| Hành động | chọn đúng tool và tham số, từ chối đúng khi thiếu quyền, không hành động khi chỉ hỏi | RQ3 |
+| Chi phí, độ trễ | chi phí/câu từ `usage_events`, độ trễ p50/p95 | RQ2, RQ4 |
 
-Phương pháp:
-- Judge hiệu chuẩn bằng 30–50 câu chấm tay, báo Cohen's κ người–judge; judge khác họ với agent.
-- Báo cáo kèm khoảng tin cậy; công bố seed, prompt, phiên bản; mọi số liệu chạy lại được bằng script trong repo.
-- Ablation (R4): bỏ từng thành phần (hybrid, rerank, kiểm chứng, spotlighting); chạy với ít nhất hai model thật trong ngân sách cố định.
-- Security regression chạy trong CI (R3): CI fail khi hồi quy.
+Phương pháp: judge hiệu chuẩn bằng 30 đến 50 câu chấm tay, báo Cohen's κ; judge khác họ với agent; báo cáo kèm khoảng tin cậy; công bố seed, prompt, phiên bản; mọi số liệu chạy lại được bằng script trong repo. Ablation ở R4 chạy với ít nhất hai model thật trong ngân sách cố định.
 
 ## 7. Tài nguyên
 
-| Mục | Giá trị | Trạng thái |
-|---|---|---|
-| 11 service lõi lúc rảnh (stack M1) | khoảng 1,3 GB RAM, đo 2026-10-30 | Đã đo |
-| Bản v1.3 đầy đủ | khoảng 14–16 GB RAM (theo ADR-006) | Ước tính |
-| Stack mới (compose mặc định, 8 service) trên VPS 2–4 vCPU, 4 GB RAM | dưới 2,5 GB lúc rảnh | **Mục tiêu**, chưa đo cho stack mới; R0 đo và ghi bảng vào README |
+Mục tiêu: compose mặc định dưới 2,5 GB RAM lúc rảnh trên VPS 2 đến 4 vCPU, 4 GB RAM. Chưa đo cho stack hiện tại; R0 đo và ghi bảng vào README. Bật `tickets`, `notify`, `obs` sẽ vượt mức này, A1 và Q1 phải đo thật. Embedding gọi qua gateway tới API provider, không chạy model nặng tại chỗ.
 
-Embedding gọi qua gateway (`acme-embed`) tới API provider, không chạy model nặng tại chỗ.
+## 8. Ngoài phạm vi
 
-## 8. Ngoài phạm vi / đóng băng
+Đã xoá: analytics-mcp, policy-sidecar (guard, NER), benchmark gateway, spikes. Bản cũ ở git tag `backup/pre-prune-20261101`. Bỏ: gateway đầy đủ (rate limit, budget, fallback nhiều provider, router chi phí), trang admin, i18n, HA, mTLS, Helm, secret manager.
 
-Code và test được giữ, tắt khỏi compose mặc định qua profile; bật lại bằng profile. Thiết kế liên quan là tài liệu tham chiếu.
-
-| Hạng mục | Profile | Thiết kế tham chiếu |
-|---|---|---|
-| analytics-mcp | `analytics` | [`design/02-mcp-servers.md`](design/02-mcp-servers.md) |
-| policy-sidecar (guard, NER) | `sidecar` | [`design/06-policy-sidecar.md`](design/06-policy-sidecar.md) |
-| Gateway đầy đủ (rate limit, budget, fallback, router chi phí) | không có (bỏ, chỉ giữ ghi usage + chi phí; cache mở lại theo ADR-007) | [`design/01-gateway.md`](design/01-gateway.md) |
-| Trang admin, i18n, HA, mTLS, Helm, secret manager | bỏ | |
-
-## 9. Tài liệu thiết kế
+## 9. Tài liệu
 
 | Tài liệu | Nội dung |
 |---|---|
-| [`design/00-contracts.md`](design/00-contracts.md) | Cổng, Redis keyspace, schema Postgres + RLS, JWT/Keycloak, mã lỗi, env, §9 Ports & Adapters |
-| [`design/DECISIONS-v1.2.md`](design/DECISIONS-v1.2.md) | Quyết định D0–D15 |
-| [`design/01-gateway.md`](design/01-gateway.md) | Gateway (bản đầy đủ, tham chiếu; nay chỉ dùng phần auth, chat, usage) |
-| [`design/02-mcp-servers.md`](design/02-mcp-servers.md) | MCP auth middleware, RAG hybrid search (áp dụng cho docs-mcp) |
-| [`design/03-agent-ui.md`](design/03-agent-ui.md) | State, graph, prompt, token exchange |
-| [`design/04-infra-data-eval.md`](design/04-infra-data-eval.md) | Compose, cấu hình hạ tầng, dữ liệu giả lập, bộ đánh giá |
-| [`design/05-approval-flow.md`](design/05-approval-flow.md) | Luồng phê duyệt (đóng băng) |
-| [`design/06-policy-sidecar.md`](design/06-policy-sidecar.md) | Policy-sidecar (đóng băng) |
-| [`design/07-web-bff.md`](design/07-web-bff.md) | SPA React + TS và BFF |
-| [`ROADMAP.md`](ROADMAP.md) | Milestone M0–M1, R0–R4 |
-| [`adr/`](adr/), [`reviews/`](reviews/), [`research/`](research/) | ADR, review, kết quả research |
+| [`design/contracts.md`](design/contracts.md) | Service, cổng, luồng token, scope, lỗi, schema DB, tool MCP, quy tắc Ports & Adapters |
+| [`design/approval.md`](design/approval.md) | Luồng phê duyệt thao tác ghi |
+| [`design/rag-citations.md`](design/rag-citations.md) | Thiết kế RAG và trích dẫn kiểm chứng được |
+| [`adr/`](adr/) | Quyết định kiến trúc (ADR-002 đến ADR-007) |
+| [`research/`](research/) | Xác minh M0, khảo sát GitHub |
 | [`../data/SOURCES.md`](../data/SOURCES.md) | Nguồn dữ liệu, giấy phép, checksum |

@@ -1,7 +1,7 @@
 # 08 — RAG có trích dẫn kiểm chứng được: loader, truy xuất, trích dẫn, an toàn, đánh giá
 
 > Phiên bản 1.0 (2026-10-30). Phạm vi: [ADR-006](../adr/ADR-006-scope-rag-citations.md); lộ trình R1–R3 ở [ROADMAP](../ROADMAP.md) v2.0; nguồn dữ liệu ở [`data/SOURCES.md`](../../data/SOURCES.md).
-> Đối tượng đọc: worker sẽ cài đặt. Hợp đồng dùng chung vẫn là [`00-contracts.md`](00-contracts.md) (§9 Ports & Adapters bắt buộc). Tài liệu này **bổ sung** cho `02 §5` (docs-mcp), `03` (agent), `07` (BFF/UI); khi mâu thuẫn về RAG thì tài liệu này thắng, ACL/RLS/spotlighting/taint vẫn theo `02 §5.2, 5.5, 5.7`.
+> Đối tượng đọc: worker sẽ cài đặt. Hợp đồng dùng chung: [`contracts.md`](contracts.md) (§9 Ports & Adapters bắt buộc). Các ký hiệu `01` đến `07` và `contracts` trong tài liệu này chỉ các thiết kế cũ đã xoá khi dọn docs (2026-11-01); đọc lại ở git tag `backup/pre-prune-20261101`. Khi mâu thuẫn về RAG thì tài liệu này thắng.
 > Quy ước: **[CÓ]** = đã có trong repo (đã đối chiếu mã); **[MỚI]** = chưa có, phải làm; **[SỬA]** = có rồi, phải đổi. Không có con số đo nào trong tài liệu này ngoài số đếm từ dữ liệu; mọi ngưỡng chưa đo đều ghi là mặc định đề xuất, chốt bằng số đo ở R1/R2 (mục 10 liệt kê các quyết định còn mở).
 
 ## 0. Hiện trạng và phần phải làm
@@ -102,7 +102,7 @@ class ArticleUnit:             # đính vào Section khi Document.kind == "artic
   - `source_path = "<slug>.json"`; `id = uuid5(NAMESPACE_VBPL, source_path)` (hằng namespace cố định trong mã; cùng cách với `data/generator`, id tất định);
   - `sha256` = sha256 byte của file `<slug>.json`;
   - `allowed_roles = []`; `owner_sub = null`.
-- Ánh xạ nhóm → ACL (theo `data/SOURCES.md` §1, **giả lập có chủ đích**): `hr` → (`HR`, 1); `it` → (`IT`, 1); `finance` → (`ALL`, 0); `legal` → (`ALL`, 0). Bảng nằm một chỗ trong `metadata.py`; thiếu nhóm lạ => lỗi. Phân loại ở đây dùng thang `classification` 0–3 của `00-contracts §3.2`; không có ngoại lệ.
+- Ánh xạ nhóm → ACL (theo `data/SOURCES.md` §1, **giả lập có chủ đích**): `hr` → (`HR`, 1); `it` → (`IT`, 1); `finance` → (`ALL`, 0); `legal` → (`ALL`, 0). Bảng nằm một chỗ trong `metadata.py`; thiếu nhóm lạ => lỗi. Phân loại ở đây dùng thang `classification` 0–3 của `contracts §3.2`; không có ngoại lệ.
 - `parse_meta` nhận thêm khoá tuỳ chọn `doc_num` (bắt buộc khi `kind == "van_ban_phap_luat"`).
 - Chạy ingest: `python -m mcp_docs.ingest --corpus-dir data/raw/vbpl` rồi `--corpus-dir data/generated` (30 tài liệu ACME tổng hợp, có canary). Hai lần chạy độc lập vì `run_ingest` nhận một thư mục có một `documents.jsonl`.
 
@@ -174,15 +174,15 @@ Luồng: `GatewayHttpEmbedder` **[CÓ]** → `POST {DOCS_GATEWAY_URL}/embeddings
 
 ### 3.1 Phía gateway **[MỚI]**
 
-- Route `POST /v1/embeddings` (OpenAI-compatible: `input` là chuỗi hoặc mảng chuỗi, tối đa 32 phần tử/request để khớp `BATCH`; trả `{object:"list", data:[{object:"embedding", index, embedding}], model, usage:{prompt_tokens,total_tokens}}`). Lỗi theo format của `00-contracts §6.1` (`invalid_request`, `invalid_api_key`, `model_not_allowed`, `request_too_large`, `provider_circuit_open`, `all_providers_failed`...).
-- Port `EmbeddingProvider` (abc) trong `gateway/ports/` — **thay** file giữ chỗ `embedder.py` hiện có. Tên: ADR-006 dùng `EmbeddingProvider`; `00-contracts §9.2` dùng `Embedder`. Đề xuất theo ADR (và tránh trùng tên với port `Embedder` của docs-mcp); cần orchestrator xác nhận và sửa bảng §9.2 (mục 10).
+- Route `POST /v1/embeddings` (OpenAI-compatible: `input` là chuỗi hoặc mảng chuỗi, tối đa 32 phần tử/request để khớp `BATCH`; trả `{object:"list", data:[{object:"embedding", index, embedding}], model, usage:{prompt_tokens,total_tokens}}`). Lỗi theo format của `contracts §6.1` (`invalid_request`, `invalid_api_key`, `model_not_allowed`, `request_too_large`, `provider_circuit_open`, `all_providers_failed`...).
+- Port `EmbeddingProvider` (abc) trong `gateway/ports/` — **thay** file giữ chỗ `embedder.py` hiện có. Tên: ADR-006 dùng `EmbeddingProvider`; `contracts §9.2` dùng `Embedder`. Đề xuất theo ADR (và tránh trùng tên với port `Embedder` của docs-mcp); cần orchestrator xác nhận và sửa bảng §9.2 (mục 10).
   ```python
   class EmbeddingProvider(abc.ABC):
       @abc.abstractmethod
       async def embed(self, model: str, texts: list[str]) -> EmbeddingResult: ...   # vectors + usage(tokens)
   ```
 - Adapter (mỗi vendor một file trong `gateway/adapters/`): `mock_hash` (tất định, **không** gọi mạng, dùng cho test và `mock-provider`; cùng ý tưởng `fake_hash` của docs-mcp), và adapter vendor được chọn ở mục 10 (ứng viên cần xác minh: API embedding của Gemini, OpenAI, Voyage, hoặc model đa ngữ như BGE-M3 qua dịch vụ host sẵn). Chọn theo `models.yaml`; factory `gateway/factory.py` thêm `build_embedding_provider` bằng registry dict + lazy import. Decorator `RetryingEmbeddingProvider`/`MeteredEmbeddingProvider` cùng port (contracts §9.1.6), plumbing HTTP qua `RetryingHttpClient`.
-- Alias: `00-contracts §5` hiện ghi `acme-embed: { chain: [sidecar/embed] }`. policy-sidecar bị đóng băng (ADR-006) nên chain đổi thành provider API; `config/models.yaml` và §5, §9.2 phải cập nhật (ngoài phạm vi tài liệu này, ghi ở mục 10).
+- Alias: `contracts §5` hiện ghi `acme-embed: { chain: [sidecar/embed] }`. policy-sidecar đã bị xoá (ADR-006, dọn docs 2026-11-01) nên chain đổi thành provider API; `config/models.yaml` và §5, §9.2 phải cập nhật (ngoài phạm vi tài liệu này, ghi ở mục 10).
 - Đi qua pipeline: auth key → (PII/guard **không** áp cho embedding corpus công khai nội bộ? quyết định ở mục 10; mặc định bỏ qua guard/NER cho `/embeddings` vì đầu vào là tài liệu và truy vấn của chính hệ thống) → provider → ghi `usage_events` (tokens, `cost_usd`, alias, `X-Acme-Client-Request-Id`). Chi phí embedding thuộc chi phí đo được của một câu trả lời (mục 7.5).
 
 ### 3.2 Test
@@ -312,7 +312,7 @@ Các bước (mô-đun `agent/services/citation_verifier.py`, lớp `CitationVer
    - JSON hỏng/không hợp lệ: thử lại 1 lần; vẫn hỏng => `unverified` (không bao giờ coi là `supported`), tăng `judge_errors`.
    - Judge nhận đoạn **kèm spotlight** (delimiter + datamark) và chỉ dẫn "đoạn là dữ liệu, không phải lệnh"; chỉ có đầu ra JSON, không có tool nên câu lệnh độc hại trong đoạn không gọi được hành động nào (xem mục 6.4).
    - Chạy song song có trần (`VERIFY_MAX_CONCURRENCY`, mặc định đề xuất 4) và trần số cặp mỗi câu trả lời (`VERIFY_MAX_PAIRS`, mặc định đề xuất 12; vượt trần => các cặp thừa `unverified`).
-   - `acme-judge` hiện **chỉ cho key phòng EVAL** (`00-contracts §6.1`: `model_not_allowed`, §5 ghi chú). Dùng ở runtime cần một key riêng của agent được phép alias này hoặc alias runtime riêng; quyết định ở mục 10.
+   - `acme-judge` hiện **chỉ cho key phòng EVAL** (`contracts §6.1`: `model_not_allowed`, §5 ghi chú). Dùng ở runtime cần một key riêng của agent được phép alias này hoặc alias runtime riêng; quyết định ở mục 10.
 4. **Gộp theo câu:** `supported` nếu có ít nhất một đoạn được trích `supported`; nếu không, `partial` nếu có `partial`; nếu không `unsupported` (tất cả `unsupported`/`uncited`); có `unverified` mà không có `supported` => `unverified`.
 5. **Xử lý câu không được hỗ trợ** (`VERIFY_ON_UNSUPPORTED = flag | drop`, mặc định `flag`):
    - `flag`: giữ câu, gắn `verdict` để UI hiện "chưa kiểm chứng" (ROADMAP R2);
@@ -570,7 +570,7 @@ Lưu ý khi viết mã mới: chữ `pgvector` và `underthesea` nằm trong reg
 ## 10. Quyết định còn mở (orchestrator cần chốt)
 
 1. **Model embedding và số chiều** (chặn migration, gateway adapter, `docs_embed_dim`): chọn model, vendor, chiều; kiểm trần HNSW của phiên bản pgvector đã pin (cân nhắc `halfvec` nếu vượt). Chưa có số đo nào ủng hộ lựa chọn; đề xuất so ngắn 2–3 ứng viên bằng suite `retrieval` trên tập dev trước khi khoá.
-2. **Tên port phía gateway:** `EmbeddingProvider` (ADR-006) hay `Embedder` (`00-contracts §9.2`); và cập nhật `§5` (chain `sidecar/embed` -> provider API) và `§9.2`.
+2. **Tên port phía gateway:** `EmbeddingProvider` (ADR-006) hay `Embedder` (`contracts §9.2`); và cập nhật `§5` (chain `sidecar/embed` -> provider API) và `§9.2`.
 3. **Ngưỡng chia chunk** `DOCS_ARTICLE_MAX_TOKENS` (mặc định đề xuất 600 theo `count_tokens`) và việc gộp khoản nhỏ; chốt bằng recall@k ở dev.
 4. **RRF `k`** (mặc định 60 có sẵn; quét {10,30,60,100} trên dev) và `n_cand`.
 5. **"BM25":** chấp nhận gọi nhánh này là Postgres FTS (`ts_rank_cd`), hay đầu tư nhánh BM25 thật (thêm adapter) để khớp nhãn RQ1.
@@ -579,8 +579,8 @@ Lưu ý khi viết mã mới: chữ `pgvector` và `underthesea` nằm trong reg
 8. **Alias judge ở runtime:** `acme-judge` hiện chỉ cho key EVAL (`§6.1`). Cho key của agent dùng alias này, hay tạo alias runtime riêng; và chọn `eval.judge_alias` khác verifier để tránh vòng luẩn quẩn (7.3).
 9. **Chế độ phát khi kiểm chứng bật:** chấp nhận "sinh trọn rồi mới phát" (đề xuất, không đổi SSE) so với phương án stream-rồi-sửa cần thêm sự kiện vào BFF.
 10. **Mặc định xử lý câu không được hỗ trợ** (`flag` đề xuất) và `VERIFY_MIN_SUPPORTED_RATIO` (0,5 đề xuất).
-11. **Guard/NER cho `/v1/embeddings`:** bỏ qua (đề xuất, dữ liệu là tài liệu và truy vấn nội bộ) hay áp cùng pipeline với chat; ảnh hưởng độ trễ và phụ thuộc sidecar đóng băng.
+11. **Guard/NER cho `/v1/embeddings`:** bỏ qua (đề xuất, dữ liệu là tài liệu và truy vấn nội bộ) hay áp cùng pipeline với chat; ảnh hưởng độ trễ và không còn sidecar.
 12. **Khoá loader `.json`:** dùng chung đuôi `.json` hay đổi sang `.vbpl.json`.
 13. **Tên văn bản (`title`) trong `selection.json`:** worker điền tay 19 tên; cần người xác nhận (hiện không có dữ liệu tiêu đề trong `manifest.json` hay JSON Điều).
 14. **Mục tiêu tấn công của corpus độc** khi luồng ticket đóng băng (5 mục tiêu đề xuất ở 6.5) và nơi đặt manifest (`data/corpus/manifest.json`); corpus độc hiện chưa được sinh (`data/corpus/` rỗng) — giao riêng.
-15. **Thiết kế liên quan phải cập nhật theo:** `03 §Citation`, `07` (zod/UI), `02 §5.0` (bảng port và mô tả `Reranking` decorator khác với mã), `00-contracts §5, §9.2`, `ROADMAP`/`data/README` (đường dẫn). Tài liệu này không sửa các file đó.
+15. **Thiết kế liên quan phải cập nhật theo:** `03 §Citation`, `07` (zod/UI), `02 §5.0` (bảng port và mô tả `Reranking` decorator khác với mã), `contracts §5, §9.2`, `ROADMAP`/`data/README` (đường dẫn). Tài liệu này không sửa các file đó.
