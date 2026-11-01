@@ -10,7 +10,6 @@ Mục 9 (Ports & Adapters) là quy tắc bắt buộc, `CLAUDE.md` dẫn tới �
 |---|---|---|---|---|---|
 | `postgres` | pgvector/pgvector:pg17 | 5432 | core | mặc định | Một cluster, nhiều database (mục 5) |
 | `redis-state` | redis:8 | 6379 | core | mặc định | Phiên BFF, taint, intent; ACL theo user |
-| `redis-cache` | redis:8 | 6379 | core | mặc định | Dành cho cache, chưa có code dùng (Q1) |
 | `keycloak` | Keycloak 26.8.1 | 8080 | edge, core | mặc định | Realm `acme`, alias `keycloak.acme.local` |
 | `gateway` | `packages/gateway` | 8000 | core, egress | mặc định | Service duy nhất ra Internet, giữ khoá provider |
 | `mock-provider` | `packages/mock_provider` | 8900 | core | mặc định | Provider giả tất định cho test và E2E |
@@ -94,6 +93,7 @@ Một cluster, mỗi service một database và role riêng. Mọi role `NOSUPER
 | `keycloak` | `kc_app` | của Keycloak |
 
 - `api_keys`: khoá lưu dạng HMAC-SHA256 với pepper (`secret_hmac`), không lưu khoá thô.
+- `departments`, `api_keys`: không có budget hay chính sách PII.
 - `usage_events`: mỗi request chat một dòng (alias, model, token, chi phí micro USD, độ trễ, mã trạng thái, `end_user_sub`).
 - `audit_log`, `tool_audit`: append-only (trigger chặn UPDATE, DELETE, TRUNCATE), chuỗi hash HMAC với khoá ngoài DB (`AUDIT_HMAC_KEY_FILE`), không lưu plaintext prompt. Role `mcp_audit_w` ghi audit của MCP.
 - `chunks`: `department`, `classification` (0 public, 1 internal, 2 confidential, 3 secret), `allowed_roles`, `embedding vector(1024)`, `tsv` (FTS không dấu), chỉ mục HNSW và GIN. Chính sách `chunk_acl` và `doc_acl` cho `kn_app`: phòng ban khớp (hoặc `ALL`), `classification <= app.clearance`, và `allowed_roles` rỗng hoặc giao với `app.roles`. GUC thiếu thì không thấy dòng nào. Cột trích dẫn và số chiều embedding thay đổi ở R1 ([rag-citations.md](rag-citations.md)).
@@ -102,15 +102,13 @@ Một cluster, mỗi service một database và role riêng. Mọi role `NOSUPER
 
 ## 6. Redis
 
-Hai instance, cả hai bắt buộc mật khẩu, ACL theo user (`infra/redis/users-state.acl.tmpl`).
+Một instance (`redis-state`), bắt buộc mật khẩu, ACL theo user (`infra/redis/users-state.acl.tmpl`). Cache thật (Q1) sẽ thêm instance riêng.
 
-| Khoá (`redis-state`) | Người dùng | Nội dung |
+| Khoá | Người dùng | Nội dung |
 |---|---|---|
 | `bff:sess:*` | `bff` | Phiên, token mã hoá, tập thẻ bị từ chối, bộ đếm thẻ |
 | `mcp:taint:{sub}:{thread_id}`, `mcp:taint:{sub}:recent` | `docs`, `tickets` | Taint theo thread và gần đây |
 | `mcp:tickets:intent:{id}`, `mcp:tickets:jti:{jti}` | chỉ `tickets` | Intent đang chờ và `jti` đã dùng |
-| `mcp:rl:*` | MCP | Rate limit tool |
-| `gw:*` | `gateway` | Cache khoá API ngắn hạn |
 
 `redis-state` dùng `noeviction` và AOF. Khi Redis lỗi, thao tác ghi và đọc taint đóng an toàn (từ chối hoặc cờ `taint_unknown`).
 
@@ -147,7 +145,7 @@ Biến môi trường chính; mọi secret có dạng `<TÊN>_FILE`.
 | `INTENT_TTL_S` (300), `APPROVAL_TTL_S` (120) | Hạn intent và approval |
 | `BFF_MAX_CARDS_PER_THREAD_HOUR` (10), `BFF_REJECTED_TTL_S` (600) | Giới hạn thẻ duyệt |
 
-Alias model nằm ở `packages/gateway/config/models.yaml` (`acme-fast`, `acme-smart`); id model lấy từ đó, không hardcode. Provider có `anthropic` và `mock`.
+Alias model nằm ở `packages/gateway/config/models.yaml` (hiện `acme-fast`, `acme-smart`); id model lấy từ đó, không hardcode. `acme-embed` thêm ở R1, `acme-judge` ở R2. Provider có `anthropic` và `mock`.
 
 ## 9. Ports & Adapters (bắt buộc)
 
@@ -192,8 +190,8 @@ Mục tiêu: thêm vendor hoặc biến thể mới là thêm một file adapter
 | common | `TokenVerifier` | `oidc_jwks` |
 | common | `TokenBroker` | `oauth_token_exchange` (decorator caching theo `(sub, sid, audience, scopes)`) |
 | common | `EventSink` (usage và audit, hash-chain) | `postgres`, `json_log` |
-| common | `AnchorStore`, `Clock`, `RateLimiter`, `ToolServerHost` | `file_append_only`; `system`; `redis_token_bucket`, `in_memory`; `mcp_sdk` |
-| gateway | `ChatProvider`, `KeyStore` | `anthropic`, `mock`; `pg_redis_cached` |
+| common | `Clock`, `RateLimiter`, `ToolServerHost` | `system`; `in_memory`; `mcp_sdk` |
+| gateway | `ChatProvider`, `KeyStore` | `anthropic`, `mock`; `postgres` |
 | docs-mcp | `Embedder`, `Reranker`, `DocumentLoader`, `DocumentRetriever`, `DocumentIndexer` | `fake_hash`, `gateway_http`; `none`; `markdown`; `pgvector_hybrid`; `pgvector_indexer` |
 | agent | `ToolProvider`, `ConversationRepository`, `ServiceProbe` | `mcp_http`; `postgres`, `memory`; `http_probe` |
 | tickets-mcp | `TicketRepository`, `IntentIssuer`, `ApprovalVerifier`, `ReplayGuard` | `postgres`; `es256_jws`; `es256_jwt`; `redis`, `in_memory` |
@@ -207,12 +205,13 @@ Muốn chuyển ticket sang Jira thì thêm `adapters/jira.py`, một dòng regi
 packages/<svc>/src/<svc>/
 ├─ ports/          # ABC, kiểu trung lập, lỗi (không import vendor)
 ├─ adapters/       # <vendor>.py: nơi duy nhất import SDK của vendor
-├─ decorators.py   # retry, fallback, metrics (cùng port)
 ├─ factory.py      # registry dict và lazy loader
 ├─ services/       # business logic, chỉ phụ thuộc port
-├─ api/            # FastAPI route hoặc MCP tool handler
+├─ api/            # FastAPI route (hoặc api.py khi chỉ có một file)
 └─ settings.py     # pydantic-settings, block theo vendor
 ```
+
+Thư mục chỉ có một file thì là module (`api.py`, `tools.py`, `services.py`...); không giữ thư mục một file. `decorators.py` (retry, fallback, metrics cùng port) chỉ tạo khi có decorator thật; hiện chưa package nào có. Không tạo thư mục hay file rỗng cho thứ chưa làm. Layout thực tế khác nhau theo package: `agent` có `adapters/ agents/ graph/ ports/` cùng `api.py`, `run_service.py`; `approval_signer` có `adapters/ ports/` cùng `api.py`, `approval.py`, `rendering.py`; `mcp_tickets` có `adapters/ ports/ services/` cùng `tools.py`; `mcp_docs` có `adapters/ api/ ingest/ ports/ services/`; `bff` có `adapters/ api/ services/`.
 
 `packages/common` (`acme_common`) giữ phần dùng chung và chỉ dùng thuật ngữ trung lập (OIDC, JWKS); tên vendor chỉ xuất hiện ở adapter và settings.
 

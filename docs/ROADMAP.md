@@ -45,7 +45,7 @@ Còn lại:
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Gateway `/v1/embeddings` (OpenAI-compatible), alias `acme-embed`, port `EmbeddingProvider`, adapter provider thật + mock tất định; ghi `usage_events` | W | Test hợp đồng bằng SDK `openai`; leak-grep rỗng |
+| Gateway `/v1/embeddings` (OpenAI-compatible), thêm alias `acme-embed` vào `models.yaml` (hiện chỉ có `acme-fast`, `acme-smart`), port `EmbeddingProvider`, adapter provider thật + mock tất định; ghi `usage_events` | W | Test hợp đồng bằng SDK `openai`; leak-grep rỗng |
 | Chọn model embedding; migration `chunks` theo đúng số chiều (bỏ cứng `vector(1024)`), thêm cột `article`, `clause`, `char_start`, `char_end` | W | Migration lên/xuống được; kiểm số chiều khi khởi động |
 | docs-mcp: loader `vbpl_articles` (JSON Điều từ `data/vbpl`, cắt Điều dài theo khoản), gán `department`/`classification` theo nhóm như `data/SOURCES.md` | W | 19 văn bản / 1.557 Điều nạp đủ; nạp lại ra cùng số chunk |
 | docs-mcp: embedder thật qua gateway (bỏ `fake_hash` khỏi đường mặc định); ingest corpus luật + 30 tài liệu ACME tổng hợp | W | Ingest lặp lại được; số chunk khớp |
@@ -61,7 +61,7 @@ Còn lại:
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
 | Định dạng trả lời: mỗi câu có mã trích `[n]` trỏ tới đoạn cụ thể (văn bản, Điều, khoản, vị trí ký tự); agent chỉ được trích đoạn đã truy xuất | W | Test: trích nguồn ngoài danh sách bị loại |
-| Bộ kiểm chứng sau sinh: tách câu → kiểm từng câu có được đoạn trích hỗ trợ (LLM-judge `acme-judge`, JSON có cấu trúc); câu không được hỗ trợ bị gắn cờ hoặc bỏ; không đủ nguồn thì trả lời "không tìm thấy trong tài liệu" | W | Bật/tắt bằng config; đo được chi phí và độ trễ thêm |
+| Bộ kiểm chứng sau sinh: tách câu → kiểm từng câu có được đoạn trích hỗ trợ (LLM-judge, JSON có cấu trúc; thêm alias `acme-judge` vào `models.yaml`); câu không được hỗ trợ bị gắn cờ hoặc bỏ; không đủ nguồn thì trả lời "không tìm thấy trong tài liệu" | W | Bật/tắt bằng config; đo được chi phí và độ trễ thêm |
 | UI: bấm `[n]` mở đoạn nguồn, tô đúng câu được trích; hiển thị câu bị gắn cờ "chưa kiểm chứng" | W | Vitest + Playwright |
 | Hiệu chuẩn judge: 30–50 câu chấm tay, Cohen's κ người–judge | O + R | Báo cáo κ |
 | Đánh giá: citation precision/recall, faithfulness, tỉ lệ từ chối đúng với câu không có đáp án; có và không có bộ kiểm chứng | W | Bảng so sánh kèm chi phí/câu và độ trễ p50/p95 |
@@ -84,7 +84,7 @@ Còn lại:
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Exact cache: khoá gồm model, prompt, phạm vi quyền; không cache thao tác ghi; giữ nguyên trích dẫn đã kiểm chứng | W | Test: khác phạm vi quyền thì không trúng cache |
+| Exact cache (thêm lại service `redis-cache`, hiện chưa có): khoá gồm model, prompt, phạm vi quyền; không cache thao tác ghi; giữ nguyên trích dẫn đã kiểm chứng | W | Test: khác phạm vi quyền thì không trúng cache |
 | Đánh giá RQ4: hit rate, chi phí, độ trễ, chất lượng khi có/không cache; semantic cache ở dạng thử nghiệm, kèm đo rò rỉ | W | Bảng so sánh; semantic cache mặc định vẫn tắt |
 | OpenTelemetry xuyên BFF → agent → gateway → MCP; chọn backend trace nhẹ ở profile `obs` | W | Một câu hỏi cho ra một trace đủ các hop |
 | Log JSON có `trace_id`; dashboard Grafana: truy xuất, chi phí, cache, hành động | W | Dashboard chạy trên số thật |

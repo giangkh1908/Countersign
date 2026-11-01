@@ -32,11 +32,11 @@ Chưa có số đo nào cho RQ1 đến RQ4; các bảng kết quả là sản ph
 | docs-mcp | Truy xuất tài liệu có phân quyền (mục 3.1) |
 | tickets-mcp và approval-signer (profile `tickets`) | Đọc ticket và đóng ticket qua luồng phê duyệt ký số ([`design/approval.md`](design/approval.md)) |
 | Postgres và pgvector | Tài liệu, chunk, vector, RLS, usage, audit. Hạ tầng cố định, không bọc |
-| Redis | Phiên BFF, taint, intent. Hạ tầng cố định, không bọc |
+| Redis (`redis-state`) | Phiên BFF, taint, intent. Hạ tầng cố định, không bọc. Gateway không dùng Redis |
 | mock-provider | Provider giả tất định cho test và E2E |
 | Prometheus và Grafana (profile `obs`) | Metric và dashboard |
 
-Chưa làm: `notify-mcp` (profile `notify`, A1), tạo ticket (A1), cache (Q1), trace OpenTelemetry (Q1). Compose mặc định gồm postgres, redis-state, redis-cache, keycloak, gateway, mock-provider, docs-mcp, agent, bff.
+Chưa làm: `notify-mcp` (profile `notify`, A1), tạo ticket (A1), cache (Q1), trace OpenTelemetry (Q1). Compose mặc định gồm postgres, redis-state, keycloak, gateway, mock-provider, docs-mcp, agent, bff.
 
 ### 3.1 docs-mcp
 
@@ -118,7 +118,7 @@ Mục tiêu: compose mặc định dưới 2,5 GB RAM lúc rảnh trên VPS 2 đ
 
 ## 8. Ngoài phạm vi
 
-Đã xoá: analytics-mcp, policy-sidecar (guard, NER), benchmark gateway, spikes. Bản cũ ở git tag `backup/pre-prune-20261101`. Bỏ: gateway đầy đủ (rate limit, budget, fallback nhiều provider, router chi phí), trang admin, i18n, HA, mTLS, Helm, secret manager.
+Đã xoá: analytics-mcp, policy-sidecar (guard, NER), benchmark gateway, spikes, `redis-cache` (thêm lại cùng cache ở Q1). Bản cũ ở git tag `backup/pre-prune-20261101`. Bỏ: gateway đầy đủ (rate limit, budget, fallback nhiều provider, router chi phí), trang admin, i18n, HA, mTLS, Helm, secret manager.
 
 ## 9. Tài liệu
 

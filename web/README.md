@@ -1,6 +1,6 @@
 # web — SPA trợ lý AI nội bộ
 
-Vite + React 18 + TypeScript strict, pnpm. Thiết kế: `docs/design/07-web-bff.md` §3.
+Vite + React 18 + TypeScript strict, pnpm. Quy tắc frontend: [`contracts.md`](../docs/design/contracts.md) §9.4.
 
 ```
 pnpm install
