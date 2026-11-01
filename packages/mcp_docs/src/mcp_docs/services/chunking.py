@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import re
 
-from .ports.types import Chunk, Document, Section
+from ..ports.types import Chunk, Document, Section
 
 TOKEN_RATIO = 1.3
 MIN_SECTION = 120  # section nhỏ hơn thì gộp với section anh em kế tiếp

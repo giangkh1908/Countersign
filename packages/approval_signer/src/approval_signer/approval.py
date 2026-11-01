@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from acme_common.ports import Clock, Principal, RateLimiter
 
-from ..ports import ApprovalSigner, ApprovalToken, IntentVerifier, RenderModel, SignerError
+from .ports import ApprovalSigner, ApprovalToken, IntentVerifier, RenderModel, SignerError
 
 # ADR-005 mục 5: token signer không được mang audience của agent/gateway.
 _FORBIDDEN_AUDIENCES = frozenset({"agent-service", "llm-gateway"})

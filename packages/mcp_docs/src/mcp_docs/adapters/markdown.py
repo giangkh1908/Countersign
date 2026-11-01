@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ..normalize import normalize_text
 from ..ports.document_loader import DocumentLoader
 from ..ports.types import Document, Section
+from ..services.normalize import normalize_text
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 

@@ -12,10 +12,10 @@ from __future__ import annotations
 import psycopg
 from acme_common.ports import Principal
 
-from ..normalize import normalize_query
 from ..ports.document_retriever import DocumentRetriever
 from ..ports.embedder import Embedder
 from ..ports.types import EmbeddingUnavailable, RetrievalUnavailable, RetrievedChunk, SearchResult
+from ..services.normalize import normalize_query
 from ._pg import connect, vec_literal
 
 _SQL = """

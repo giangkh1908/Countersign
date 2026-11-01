@@ -5,7 +5,7 @@ import inspect
 import json
 from pathlib import Path
 
-from bff.services.oidc import OidcClient
+from bff.adapters.oidc import OidcClient
 
 REALM = Path(__file__).resolve().parents[4] / "infra/keycloak/realm-acme.json"
 

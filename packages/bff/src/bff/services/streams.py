@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from ..clients.agent_client import AgentClient
+from ..adapters.agent_client import AgentClient
 from .approval_flow import ApprovalFlow, CardBlocked
 from .rate_limit import RateLimits
 from .session import SessionData

@@ -13,7 +13,6 @@ from typing import Any
 from acme_common.mcp import CallerContext, ToolError
 from acme_common.services.taint import raise_taint
 
-from ..normalize import normalize_query
 from ..ports import (
     DocumentRetriever,
     Reranker,
@@ -22,6 +21,7 @@ from ..ports import (
 )
 from . import spotlight
 from .acl import AclPolicy
+from .normalize import normalize_query
 
 log = logging.getLogger("acme.docs")
 

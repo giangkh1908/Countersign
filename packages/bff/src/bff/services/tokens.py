@@ -12,8 +12,8 @@ from typing import TypeVar
 
 from acme_common.ports import Clock, TokenBroker, TokenVerifier
 
+from ..adapters.oidc import OidcClient, OidcInvalidGrant, OidcUnavailable
 from .errors import ApiError, UpstreamStatus
-from .oidc import OidcClient, OidcInvalidGrant, OidcUnavailable
 from .session import TOKEN_SLOTS, SessionData, SessionStore
 
 log = logging.getLogger("bff.tokens")

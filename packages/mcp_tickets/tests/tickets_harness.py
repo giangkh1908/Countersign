@@ -18,9 +18,9 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from mcp_tickets.adapters.es256_jws import Es256JwsIntentIssuer
 from mcp_tickets.adapters.es256_jwt import Es256JwtApprovalVerifier
 from mcp_tickets.adapters.in_memory_replay import InMemoryReplayGuard
-from mcp_tickets.api.tools import register_tools
 from mcp_tickets.services.ticket_service import TicketService
 from mcp_tickets.testing import FakeTicketRepository, make_ticket
+from mcp_tickets.tools import register_tools
 
 START = datetime(2026, 1, 1, 9, 0, 0, tzinfo=UTC)
 ASSIGNEE = "u-agent"
