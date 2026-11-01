@@ -14,7 +14,7 @@ dependencies = [
     "acme-common",
     "httpx",
     "pyyaml",
-    "asyncpg",  # adapter KeyStore pg_redis_cached (chỉ trong adapters/)
+    "asyncpg",  # adapter KeyStore postgres (chỉ trong adapters/)
     "anthropic",  # SDK chính thức, chỉ import trong adapters/anthropic.py
     "prometheus-client",
     # CẤM (D2): onnxruntime, torch, tokenizers, transformers, sentence-transformers, huggingface_hub.

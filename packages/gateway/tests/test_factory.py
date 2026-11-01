@@ -26,13 +26,13 @@ def test_unknown_provider_lists_known_names() -> None:
 
 def test_key_store_known_and_unknown() -> None:
     ks = build_key_store(
-        "pg_redis_cached", make_settings(gw_database_url="postgresql://u:p@h/db"), clock=FakeClock()
+        "postgres", make_settings(gw_database_url="postgresql://u:p@h/db"), clock=FakeClock()
     )
     assert isinstance(ks, KeyStore)
-    with pytest.raises(KeyStoreNotConfigured, match="pg_redis_cached"):
+    with pytest.raises(KeyStoreNotConfigured, match="postgres"):
         build_key_store("nope", make_settings(), clock=FakeClock())
     with pytest.raises(KeyStoreNotConfigured, match="GW_DATABASE_URL"):
-        build_key_store("pg_redis_cached", make_settings(), clock=FakeClock())
+        build_key_store("postgres", make_settings(), clock=FakeClock())
 
 
 async def test_provider_pool_caches_instances() -> None:

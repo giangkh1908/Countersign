@@ -47,7 +47,6 @@ secrets:                                   # sinh bởi scripts/gen-secrets.sh (
   mcp_audit_password:      { file: ./secrets/mcp_audit_password }
   kc_app_password:         { file: ./secrets/kc_app_password }
   gw_report_password:      { file: ./secrets/gw_report_password }       # role đọc usage cho Grafana
-  redis_gateway_password:  { file: ./secrets/redis_gateway_password }
   redis_tickets_password:  { file: ./secrets/redis_tickets_password }
   redis_docs_password:     { file: ./secrets/redis_docs_password }
   docs_gateway_key:        { file: ./secrets/docs_gateway_key }         # API key service cho docs-mcp -> gateway
@@ -118,7 +117,7 @@ services:
     user: "999:999"                         # cap_drop ALL => root không có DAC_OVERRIDE; chạy thẳng user redis
     entrypoint: ["/bin/sh", "/etc/redis/entrypoint.sh"]       # render users.acl từ secret (mục 2.3)
     command: ["redis-server", "/etc/redis/redis-state.conf"]
-    secrets: [redis_gateway_password, redis_tickets_password, redis_docs_password, redis_bff_password, redis_ops_password, redis_health_password]
+    secrets: [redis_tickets_password, redis_docs_password, redis_bff_password, redis_ops_password, redis_health_password]
     volumes:
       - redis_state_data:/data
       - ./infra/redis/redis-state.conf:/etc/redis/redis-state.conf:ro
@@ -131,25 +130,6 @@ services:
       timeout: 3s
       retries: 10
     deploy: { resources: { limits: { cpus: "0.5", memory: 384m } } }
-
-  redis-cache:
-    image: redis:8
-    <<: *hardened
-    user: "999:999"
-    entrypoint: ["/bin/sh", "/etc/redis/entrypoint.sh"]
-    command: ["redis-server", "/etc/redis/redis-cache.conf"]
-    secrets: [redis_gateway_password, redis_health_password]
-    volumes:
-      - ./infra/redis/redis-cache.conf:/etc/redis/redis-cache.conf:ro
-      - ./infra/redis/users-cache.acl.tmpl:/etc/redis/users.acl.tmpl:ro
-      - ./infra/redis/entrypoint.sh:/etc/redis/entrypoint.sh:ro
-    networks: [core]
-    healthcheck:
-      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_health_password) redis-cli --user health ping | grep -q PONG"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    deploy: { resources: { limits: { cpus: "1", memory: 768m } } }
 
   # ───────────── danh tính ─────────────
   keycloak:
@@ -227,7 +207,6 @@ services:
     depends_on:
       postgres:    { condition: service_healthy }
       redis-state: { condition: service_healthy }
-      redis-cache: { condition: service_healthy }
       migrate:     { condition: service_completed_successfully }
       keycloak:    { condition: service_healthy }
       mock-provider: { condition: service_healthy }

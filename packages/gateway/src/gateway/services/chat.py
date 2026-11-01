@@ -184,8 +184,6 @@ class ChatService:
             "ttft_ms": ttft_ms,
             "gateway_overhead_ms": overhead_ms,
             "cache": "miss",
-            "fallback_count": 0,
-            "route_reason": resolved.route_reason if resolved else None,
             "status_code": status,
             "error_code": error_code,
         }
@@ -208,7 +206,6 @@ class ChatService:
         h = {
             "x-acme-provider": provider,
             "x-acme-model": model,
-            "x-acme-fallbacks": "0",
         }
         if parsed.ignored:
             h["x-acme-ignored-params"] = ",".join(parsed.ignored)

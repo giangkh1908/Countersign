@@ -10,12 +10,12 @@ Không có adapter `permissive` cho IntentIssuer/ApprovalVerifier: chỉ thêm k
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from acme_common.factory import lookup
 from acme_common.ports import Clock
-from acme_common.ports.errors import NotConfigured
 from acme_common.services.audit_chain import AuditKeyring
 
 from .ports import (
@@ -29,13 +29,6 @@ from .ports import (
     TicketRepositoryNotConfigured,
 )
 from .settings import Settings
-
-
-def _lookup(registry: Mapping[str, Callable[..., Any]], name: str, err: type[NotConfigured]) -> Any:
-    try:
-        return registry[name]
-    except KeyError:
-        raise err(f"unknown adapter {name!r}; known: {sorted(registry)}") from None
 
 
 # --- TicketRepository ---
@@ -56,7 +49,7 @@ _REPOSITORIES: dict[str, Callable[[Settings], TicketRepository]] = {
 
 
 def build_ticket_repository(name: str, settings: Settings) -> TicketRepository:
-    return _lookup(_REPOSITORIES, name, TicketRepositoryNotConfigured)(settings)
+    return lookup(_REPOSITORIES, name, TicketRepositoryNotConfigured)(settings)
 
 
 # --- IntentIssuer ---
@@ -81,7 +74,7 @@ _ISSUERS: dict[str, Callable[[Settings, Any, Clock], IntentIssuer]] = {
 
 
 def build_intent_issuer(name: str, settings: Settings, *, redis: Any, clock: Clock) -> IntentIssuer:
-    return _lookup(_ISSUERS, name, IntentIssuerNotConfigured)(settings, redis, clock)
+    return lookup(_ISSUERS, name, IntentIssuerNotConfigured)(settings, redis, clock)
 
 
 # --- ApprovalVerifier ---
@@ -104,7 +97,7 @@ _VERIFIERS: dict[str, Callable[[Settings, Clock], ApprovalVerifier]] = {
 
 
 def build_approval_verifier(name: str, settings: Settings, *, clock: Clock) -> ApprovalVerifier:
-    return _lookup(_VERIFIERS, name, ApprovalVerifierNotConfigured)(settings, clock)
+    return lookup(_VERIFIERS, name, ApprovalVerifierNotConfigured)(settings, clock)
 
 
 # --- ReplayGuard ---
@@ -127,4 +120,4 @@ _REPLAY_GUARDS: dict[str, Callable[[Settings, Any, Clock], ReplayGuard]] = {
 
 
 def build_replay_guard(name: str, settings: Settings, *, redis: Any, clock: Clock) -> ReplayGuard:
-    return _lookup(_REPLAY_GUARDS, name, ReplayGuardNotConfigured)(settings, redis, clock)
+    return lookup(_REPLAY_GUARDS, name, ReplayGuardNotConfigured)(settings, redis, clock)

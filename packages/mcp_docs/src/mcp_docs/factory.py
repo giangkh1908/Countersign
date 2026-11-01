@@ -7,11 +7,10 @@ Tên lạ -> raise XxxNotConfigured kèm danh sách tên hợp lệ. ToolServerH
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
-from acme_common.factory import build_http_client
+from acme_common.factory import build_http_client, lookup
 
 from .ports import (
     DocumentIndexer,
@@ -25,15 +24,7 @@ from .ports import (
     RerankerNotConfigured,
     RetrieverNotConfigured,
 )
-from .ports.errors import NotConfigured
 from .settings import Settings
-
-
-def _lookup(registry: Mapping[str, Callable[..., Any]], name: str, err: type[NotConfigured]) -> Any:
-    try:
-        return registry[name]
-    except KeyError:
-        raise err(f"unknown adapter {name!r}; known: {sorted(registry)}") from None
 
 
 # --- Embedder ---
@@ -62,7 +53,7 @@ _EMBEDDERS: dict[str, Callable[[Settings], Embedder]] = {
 
 
 def build_embedder(name: str, settings: Settings) -> Embedder:
-    return _lookup(_EMBEDDERS, name, EmbedderNotConfigured)(settings)
+    return lookup(_EMBEDDERS, name, EmbedderNotConfigured)(settings)
 
 
 # --- Reranker ---
@@ -76,7 +67,7 @@ _RERANKERS: dict[str, Callable[[Settings], Reranker]] = {"none": _load_none_rera
 
 
 def build_reranker(name: str, settings: Settings) -> Reranker:
-    return _lookup(_RERANKERS, name, RerankerNotConfigured)(settings)
+    return lookup(_RERANKERS, name, RerankerNotConfigured)(settings)
 
 
 # --- DocumentLoader (registry theo đuôi file) ---
@@ -98,7 +89,7 @@ def build_loader(path: str | Path, settings: Settings) -> DocumentLoader:
     ext = (
         text if text.startswith(".") and "/" not in text and "\\" not in text else Path(text).suffix
     ).lower()
-    return _lookup(_LOADERS, ext, DocumentLoaderNotConfigured)(settings)
+    return lookup(_LOADERS, ext, DocumentLoaderNotConfigured)(settings)
 
 
 # --- DocumentRetriever / DocumentIndexer ---
@@ -118,7 +109,7 @@ _RETRIEVERS: dict[str, Callable[[Settings, Embedder], DocumentRetriever]] = {
 
 
 def build_retriever(name: str, settings: Settings, *, embedder: Embedder) -> DocumentRetriever:
-    return _lookup(_RETRIEVERS, name, RetrieverNotConfigured)(settings, embedder)
+    return lookup(_RETRIEVERS, name, RetrieverNotConfigured)(settings, embedder)
 
 
 def _load_pg_indexer(s: Settings) -> DocumentIndexer:
@@ -135,4 +126,4 @@ _INDEXERS: dict[str, Callable[[Settings], DocumentIndexer]] = {
 
 
 def build_indexer(name: str, settings: Settings) -> DocumentIndexer:
-    return _lookup(_INDEXERS, name, DocumentIndexerNotConfigured)(settings)
+    return lookup(_INDEXERS, name, DocumentIndexerNotConfigured)(settings)

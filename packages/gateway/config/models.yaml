@@ -1,9 +1,8 @@
 # Alias model của gateway (contracts §5). Model id lấy từ đây, không hardcode trong code.
 # Đối chiếu id chính xác với docs của provider trước khi chạy thật (contracts §5 ghi chú).
-# Chỉ dùng phần tử đầu của `chain` (chưa có fallback); `acme-auto` tạm resolve sang `simple`.
+# Chỉ dùng phần tử đầu của `chain` (chưa có fallback).
 # Chỉ giữ alias có provider thật; `acme-embed` sẽ thêm lại khi làm embedding qua gateway (R1).
 default_max_output: 4096          # Anthropic bắt buộc max_tokens; dùng khi client không gửi
 aliases:
   acme-fast:  { chain: [anthropic/claude-haiku-5-5], timeout_s: 30 }
   acme-smart: { chain: [anthropic/claude-sonnet-5-5], timeout_s: 90 }
-  acme-auto:  { router: complexity_v1, simple: acme-fast, complex: acme-smart }

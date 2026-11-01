@@ -34,7 +34,6 @@ class FakeKeyStore(KeyStore):
             rpm=new.rpm,
             tpm=new.tpm,
             max_concurrency=new.max_concurrency,
-            budget_micro=new.budget_micro,
             trust_end_user_token=new.trust_end_user_token,
             expose_debug=new.expose_debug,
             status="active",

@@ -29,7 +29,7 @@ log = logging.getLogger("acme.postgres_event_sink")
 _USAGE_COLUMNS = (
     "ts", "request_id", "key_id", "department", "end_user_sub", "alias", "provider", "model",
     "input_tokens", "output_tokens", "cached_input_tokens", "cost_micro_usd", "latency_ms",
-    "ttft_ms", "gateway_overhead_ms", "cache", "fallback_count", "route_reason",
+    "ttft_ms", "gateway_overhead_ms", "cache",
     "status_code", "error_code",
 )  # fmt: skip
 _USAGE_REQUIRED = ("request_id", "key_id", "department", "alias", "status_code")

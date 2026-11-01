@@ -29,7 +29,6 @@ docs
 *.md
 !packages/**/README.md
 data/generated
-data/.llm_cache
 eval/results
 backups
 

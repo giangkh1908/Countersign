@@ -1,4 +1,4 @@
-"""Adapter `pg_redis_cached` cho port `KeyStore`.
+"""Adapter `postgres` cho port `KeyStore`.
 
 L1 (dict TTL trong process: 10s, negative cache 5s) + L3 (Postgres, truy vấn tham số hoá).
 Chưa có L2 Redis và thu hồi qua pub/sub: một key bị thu hồi có hiệu lực trong tối đa 10s (TTL L1)
@@ -27,17 +27,16 @@ L1_MAXSIZE = 10_000
 KEY_SQL = """
 SELECT k.id::text AS key_id, k.prefix, k.secret_hmac, k.name, k.department AS dept, k.allowed_models,
        k.rpm_limit AS rpm, k.tpm_limit AS tpm, k.max_concurrency,
-       k.monthly_budget_micro_usd AS budget_micro, k.trust_end_user_token, k.expose_debug,
-       k.status, k.expires_at, d.pii_policy, d.monthly_budget_micro_usd AS dept_budget_micro
-FROM api_keys k JOIN departments d ON d.code = k.department
+       k.trust_end_user_token, k.expose_debug, k.status, k.expires_at
+FROM api_keys k
 WHERE k.prefix = $1
 """
 
 INSERT_SQL = """
 INSERT INTO api_keys (prefix, secret_hmac, name, owner_type, owner_ref, department, allowed_models,
-                      rpm_limit, tpm_limit, max_concurrency, monthly_budget_micro_usd,
+                      rpm_limit, tpm_limit, max_concurrency,
                       trust_end_user_token, expose_debug, created_by, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 """
 
 REVOKE_SQL = """
@@ -63,17 +62,14 @@ def _record(row: asyncpg.Record) -> KeyRecord:
         rpm=row["rpm"],
         tpm=row["tpm"],
         max_concurrency=row["max_concurrency"],
-        budget_micro=row["budget_micro"],
         trust_end_user_token=row["trust_end_user_token"],
         expose_debug=row["expose_debug"],
         status=row["status"],
         expires_at=row["expires_at"],
-        pii_policy=row["pii_policy"],
-        dept_budget_micro=row["dept_budget_micro"],
     )
 
 
-class PgRedisCachedKeyStore(KeyStore):
+class PostgresKeyStore(KeyStore):
     def __init__(self, dsn: str, clock: Clock, *, pool: Any | None = None) -> None:
         self._dsn = normalize_dsn(dsn)
         self._clock = clock
@@ -124,7 +120,6 @@ class PgRedisCachedKeyStore(KeyStore):
                 new.rpm,
                 new.tpm,
                 new.max_concurrency,
-                new.budget_micro,
                 new.trust_end_user_token,
                 new.expose_debug,
                 actor,

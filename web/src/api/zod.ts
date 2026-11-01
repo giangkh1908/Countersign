@@ -17,7 +17,6 @@ export const MeSchema = z.object({
   roles: z.array(z.string()).default([]),
   server_time: z.string().optional(),
   link_allowlist: z.array(z.string()).default([]),
-  features: z.object({ admin: z.boolean().default(false) }).default({ admin: false }),
 });
 
 export const LogoutSchema = z.object({ redirect_url: z.string() });

@@ -1,7 +1,7 @@
 """CLI admin của gateway: tạo/thu hồi API key (seed không tạo key).
 
     python -m gateway.cli create-key --name agent --dept IT --owner-type service --owner-ref agent-service \\
-        --allowed-models acme-fast,acme-smart,acme-auto --rpm 120 --tpm 200000 --trust-end-user-token
+        --allowed-models acme-fast,acme-smart --rpm 120 --tpm 200000 --trust-end-user-token
     python -m gateway.cli revoke-key --key-id <uuid> --reason "leaked"
 
 Cần `GW_DATABASE_URL`(_FILE) và `GW_KEY_PEPPER`(_FILE). Plaintext chỉ in ra stdout đúng một lần.
@@ -57,7 +57,6 @@ async def create_key(
         rpm=args.rpm,
         tpm=args.tpm,
         max_concurrency=args.max_concurrency,
-        budget_micro=args.budget_micro_usd,
         trust_end_user_token=args.trust_end_user_token,
         expose_debug=args.expose_debug,
         expires_at=datetime.fromisoformat(args.expires_at) if args.expires_at else None,
@@ -97,11 +96,10 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--dept", required=True, help="mã phòng ban (departments.code)")
     c.add_argument("--owner-type", choices=["service", "department", "user"], default="service")
     c.add_argument("--owner-ref", default=None)
-    c.add_argument("--allowed-models", required=True, help="vd acme-fast,acme-smart,acme-auto")
+    c.add_argument("--allowed-models", required=True, help="vd acme-fast,acme-smart")
     c.add_argument("--rpm", type=int, default=60)
     c.add_argument("--tpm", type=int, default=100_000)
     c.add_argument("--max-concurrency", type=int, default=8)
-    c.add_argument("--budget-micro-usd", type=int, default=None)
     c.add_argument("--trust-end-user-token", action="store_true")
     c.add_argument("--expose-debug", action="store_true")
     c.add_argument("--expires-at", default=None, help="ISO 8601, vd 2027-01-01T00:00:00+00:00")

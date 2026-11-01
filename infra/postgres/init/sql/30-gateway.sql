@@ -7,9 +7,7 @@ SET ROLE gw_owner;
 
 CREATE TABLE IF NOT EXISTS departments (
   code        text PRIMARY KEY,                 -- 'SALES','ENG','HR','CS','IT','EVAL'
-  name        text NOT NULL,
-  monthly_budget_micro_usd bigint NOT NULL,
-  pii_policy  text NOT NULL DEFAULT 'mask' CHECK (pii_policy IN ('mask','block','allow'))
+  name        text NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS api_keys (
@@ -20,9 +18,8 @@ CREATE TABLE IF NOT EXISTS api_keys (
   owner_type    text NOT NULL CHECK (owner_type IN ('service','department','user')),
   owner_ref     text NOT NULL,                  -- client_id / dept code / keycloak sub
   department    text NOT NULL REFERENCES departments(code),
-  allowed_models text[] NOT NULL,               -- acme-fast, acme-smart, acme-auto
+  allowed_models text[] NOT NULL,               -- acme-fast, acme-smart
   rpm_limit     int NOT NULL, tpm_limit int NOT NULL, max_concurrency int NOT NULL DEFAULT 8,
-  monthly_budget_micro_usd bigint,              -- NULL = dùng budget phòng ban
   trust_end_user_token boolean NOT NULL DEFAULT false,
   expose_debug  boolean NOT NULL DEFAULT false,
   status        text NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked','expired')),
@@ -40,7 +37,6 @@ CREATE TABLE IF NOT EXISTS usage_events (        -- PARTITION BY RANGE (ts), m�
   cost_micro_usd bigint NOT NULL DEFAULT 0,
   latency_ms int, ttft_ms int, gateway_overhead_ms int,
   cache text NOT NULL DEFAULT 'miss' CHECK (cache IN ('miss','exact','semantic')),
-  fallback_count smallint NOT NULL DEFAULT 0, route_reason text,
   status_code smallint NOT NULL, error_code text,
   PRIMARY KEY (id, ts)
 ) PARTITION BY RANGE (ts);

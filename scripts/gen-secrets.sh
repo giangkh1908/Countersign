@@ -4,7 +4,7 @@
 #
 # Dùng:
 #   bash scripts/gen-secrets.sh                  # chỉ tạo file CHƯA có (idempotent)
-#   bash scripts/gen-secrets.sh --rotate NAME    # sinh lại 1 secret (vd redis_gateway_password)
+#   bash scripts/gen-secrets.sh --rotate NAME    # sinh lại 1 secret (vd redis_tickets_password)
 #   bash scripts/gen-secrets.sh --ci             # không tương tác, GHI ĐÈ tất cả, đủ cho `docker compose config`
 #
 # Biến môi trường: SECRETS_MODE (mặc định 644: container chạy uid 10001/999 không phải chủ
@@ -60,7 +60,7 @@ put_empty() {
 for n in pg_superuser_password gw_owner_password gw_app_password kn_owner_password kn_app_password \
          kn_ingest_password tk_owner_password tk_app_password \
          ag_app_password ag_owner_password mcp_audit_password kc_app_password \
-         gw_report_password redis_gateway_password redis_tickets_password redis_docs_password \
+         gw_report_password redis_tickets_password redis_docs_password \
          redis_bff_password redis_ops_password redis_health_password \
          kc_admin_password grafana_admin_password; do
   put "$n" rand_pw

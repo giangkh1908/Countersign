@@ -20,11 +20,10 @@ class ModelRef:
 @dataclass(frozen=True, slots=True)
 class Resolved:
     requested: str  # alias client gửi
-    alias: str  # alias thật sau khi qua router tĩnh (acme-auto -> simple)
+    alias: str
     chain: tuple[ModelRef, ...]
     timeout_s: float
     default_max_output: int
-    route_reason: str | None = None
 
 
 class ModelCatalog:
@@ -42,15 +41,10 @@ class ModelCatalog:
         return sorted(self._aliases)
 
     def resolve(self, requested: str) -> Resolved:
-        alias, reason = requested, None
+        alias = requested
         spec = self._aliases.get(alias)
         if spec is None:
             raise GatewayError("invalid_request", f"Unknown model alias '{requested}'.")
-        if "router" in spec:  # router tĩnh, luôn chọn nhánh `simple`
-            alias, reason = str(spec["simple"]), "static_simple"
-            spec = self._aliases.get(alias)
-            if spec is None:
-                raise GatewayError("internal_error")
         chain: list[ModelRef] = []
         for item in spec.get("chain") or []:
             provider, _, model = str(item).partition("/")
@@ -63,5 +57,4 @@ class ModelCatalog:
             chain=tuple(chain),
             timeout_s=float(spec.get("timeout_s", 60)),
             default_max_output=int(spec.get("default_max_output", self._default_max_output)),
-            route_reason=reason,
         )

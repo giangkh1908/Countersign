@@ -61,7 +61,7 @@ CREATE TABLE usage_events (
   department text NOT NULL, end_user_sub text, alias text NOT NULL, provider text, model text,
   input_tokens int, output_tokens int, cached_input_tokens int, cost_micro_usd bigint NOT NULL DEFAULT 0,
   latency_ms int, ttft_ms int, gateway_overhead_ms int,
-  cache text NOT NULL DEFAULT 'miss', fallback_count smallint NOT NULL DEFAULT 0, route_reason text,
+  cache text NOT NULL DEFAULT 'miss',
   status_code smallint NOT NULL, error_code text,
   PRIMARY KEY (id, ts));
 CREATE TABLE tickets (id int PRIMARY KEY, status text NOT NULL);

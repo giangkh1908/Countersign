@@ -28,9 +28,8 @@ from .ports.tool_server_host import ToolServerHost
 from .settings import CommonSettings
 
 
-def _lookup[T](
-    registry: Mapping[str, Callable[..., T]], name: str, err: type[NotConfigured]
-) -> Any:
+def lookup[T](registry: Mapping[str, Callable[..., T]], name: str, err: type[NotConfigured]) -> Any:
+    """Tra registry adapter theo tên; tên lạ thì raise `err` kèm danh sách tên hợp lệ."""
     try:
         return registry[name]
     except KeyError:
@@ -63,7 +62,7 @@ _CLOCKS: dict[str, Callable[[CommonSettings], Clock]] = {
 
 
 def build_clock(name: str, settings: CommonSettings) -> Clock:
-    return _lookup(_CLOCKS, name, ClockNotConfigured)(settings)
+    return lookup(_CLOCKS, name, ClockNotConfigured)(settings)
 
 
 # --- TokenVerifier ---
@@ -99,7 +98,7 @@ def build_token_verifier(
     clock: Clock,
     http: RetryingHttpClient | None = None,
 ) -> TokenVerifier:
-    loader = _lookup(_VERIFIERS, name, TokenVerifierNotConfigured)
+    loader = lookup(_VERIFIERS, name, TokenVerifierNotConfigured)
     return loader(settings, clock, http or build_http_client(settings))
 
 
@@ -145,7 +144,7 @@ def build_token_broker(
     cache: bool = True,
 ) -> TokenBroker:
     """`client_id`/`client_secret` là của service gọi (vd `AGENT_KC_CLIENT_ID`), nên do caller truyền."""
-    loader = _lookup(_BROKERS, name, TokenBrokerNotConfigured)
+    loader = lookup(_BROKERS, name, TokenBrokerNotConfigured)
     broker = loader(settings, clock, http or build_http_client(settings), client_id, client_secret)
     if cache:
         broker = CachingTokenBroker(broker, clock, skew_s=settings.token_cache_skew_s)
@@ -183,7 +182,7 @@ _SINKS: dict[str, Callable[[CommonSettings], EventSink]] = {
 
 
 def build_event_sink(name: str, settings: CommonSettings) -> EventSink:
-    return _lookup(_SINKS, name, EventSinkNotConfigured)(settings)
+    return lookup(_SINKS, name, EventSinkNotConfigured)(settings)
 
 
 # --- RateLimiter ---
@@ -193,20 +192,13 @@ def _load_in_memory_limiter(settings: CommonSettings, clock: Clock) -> RateLimit
     return InMemoryRateLimiter(clock)
 
 
-def _load_redis_limiter(settings: CommonSettings, clock: Clock) -> RateLimiter:
-    from .adapters.redis_token_bucket import RedisTokenBucketRateLimiter
-
-    return RedisTokenBucketRateLimiter()
-
-
 _LIMITERS: dict[str, Callable[[CommonSettings, Clock], RateLimiter]] = {
     "in_memory": _load_in_memory_limiter,
-    "redis_token_bucket": _load_redis_limiter,
 }
 
 
 def build_rate_limiter(name: str, settings: CommonSettings, *, clock: Clock) -> RateLimiter:
-    return _lookup(_LIMITERS, name, RateLimiterNotConfigured)(settings, clock)
+    return lookup(_LIMITERS, name, RateLimiterNotConfigured)(settings, clock)
 
 
 # --- ToolServerHost ---
@@ -236,4 +228,4 @@ def build_tool_server_host(
     name: str, settings: CommonSettings, *, server_name: str
 ) -> ToolServerHost:
     """`name` thường là `settings.mcp_host`; `server_name` vd `docs-mcp`."""
-    return _lookup(_TOOL_HOSTS, name, ToolServerHostNotConfigured)(settings, server_name)
+    return lookup(_TOOL_HOSTS, name, ToolServerHostNotConfigured)(settings, server_name)

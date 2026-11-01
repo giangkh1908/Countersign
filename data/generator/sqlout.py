@@ -52,13 +52,13 @@ def _setval(table: str) -> str:
     )
 
 
-def gateway_sql(departments: list[tuple[str, str, int]]) -> str:
-    rows = [[lit(c), lit(n), lit(b), lit("mask")] for c, n, b in departments]
+def gateway_sql(departments: list[tuple[str, str]]) -> str:
+    rows = [[lit(c), lit(n)] for c, n in departments]
     return (
         "BEGIN;\n"
         + upsert(
             "departments",
-            ["code", "name", "monthly_budget_micro_usd", "pii_policy"],
+            ["code", "name"],
             rows,
             key="code",
         )

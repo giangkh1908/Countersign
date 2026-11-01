@@ -15,7 +15,7 @@ from pydantic import BaseModel
 USAGE_COLUMNS = {
     "request_id", "key_id", "department", "end_user_sub", "alias", "provider", "model",
     "input_tokens", "output_tokens", "cached_input_tokens", "cost_micro_usd", "latency_ms",
-    "ttft_ms", "gateway_overhead_ms", "cache", "fallback_count", "route_reason",
+    "ttft_ms", "gateway_overhead_ms", "cache",
     "status_code", "error_code",
 }  # fmt: skip
 
@@ -51,7 +51,7 @@ async def test_non_stream(env: Env, api_key: str) -> None:
     assert r.usage and r.usage.completion_tokens == 8
     h = raw.headers
     assert h["x-acme-provider"] == "mock" and h["x-acme-model"] == "claude-haiku-5-5"
-    assert h["x-acme-request-id"] and h["x-acme-fallbacks"] == "0"
+    assert h["x-acme-request-id"]
     assert r.id == f"chatcmpl-{h['x-acme-request-id']}"
 
 
@@ -149,16 +149,6 @@ async def test_max_tokens_truncates(env: Env, api_key: str) -> None:
     assert r.choices[0].finish_reason == "length" and r.usage.completion_tokens == 3
 
 
-async def test_acme_auto_resolves_to_simple_alias(env: Env, api_key: str) -> None:
-    client = sdk(env, api_key)
-    raw = await client.chat.completions.with_raw_response.create(
-        model="acme-auto", messages=[{"role": "user", "content": "hi"}]
-    )
-    assert raw.headers["x-acme-model"] == "claude-haiku-5-5"
-    ev = usage_events(env)[0]
-    assert ev["alias"] == "acme-fast" and ev["route_reason"] == "static_simple"
-
-
 async def test_usage_event_fields_and_tokens(env: Env, api_key: str) -> None:
     client = sdk(env, api_key)
     secret_prompt = "SUPER-SECRET-PROMPT-TEXT"
@@ -172,7 +162,7 @@ async def test_usage_event_fields_and_tokens(env: Env, api_key: str) -> None:
     assert ev["status_code"] == 200 and ev["error_code"] is None
     assert ev["department"] == "IT" and ev["end_user_sub"] is None
     assert ev["provider"] == "mock" and ev["alias"] == "acme-fast"
-    assert ev["cache"] == "miss" and ev["fallback_count"] == 0
+    assert ev["cache"] == "miss"
     assert ev["request_id"] == r.id.removeprefix("chatcmpl-")
     assert secret_prompt not in json.dumps(env.sink.events, default=str)
 
