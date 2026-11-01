@@ -10,7 +10,7 @@ Compose mặc định: postgres, redis-state, keycloak, migrate, mock-provider, 
 
 ## Yêu cầu
 
-uv, Python 3.12, Node 22, pnpm, Docker (compose v2). Windows: dùng Git Bash hoặc WSL cho `make` và script `.sh`.
+uv, Python 3.12, Node 22, pnpm, Docker (compose v2). Windows: dùng Git Bash hoặc WSL cho script `.sh`. Git Bash không kèm `make`; không có `make` thì chạy lệnh tương ứng trong `Makefile`, ví dụ `make up` là `docker compose up -d --build --wait`.
 
 ## Quickstart
 
@@ -25,6 +25,18 @@ uv, Python 3.12, Node 22, pnpm, Docker (compose v2). Windows: dùng Git Bash ho�
 8. Mở http://localhost:8300 (đăng nhập qua Keycloak). Gateway mặc định dùng `mock-provider`; muốn LLM thật, điền `secrets/anthropic_api_key` rồi đổi `GW_PROVIDER_OVERRIDE` trong `.env` (compose mặc định `mock`; tên hợp lệ ở `packages/gateway/src/gateway/factory.py`).
 
 Bật ticket: `docker compose --profile tickets up -d`. Dừng: `make down`. Log: `make logs`.
+
+### Tài nguyên
+
+Đo 2026-11-02 trên Docker Desktop (WSL2), tổng `docker stats` các container, dùng `mock-provider`, chưa có dữ liệu RAG thật:
+
+| Trạng thái | RAM |
+|---|---|
+| Stack mặc định, rảnh | 1,2 GiB |
+| Thêm profile `tickets`, rảnh | 1,3 GiB |
+| Đỉnh khi chạy E2E đóng ticket | 1,4 GiB |
+
+Keycloak chiếm khoảng 630 MiB. Số trên chưa tính Docker engine và cache của hệ điều hành.
 
 ### Ingest cho docs-mcp
 

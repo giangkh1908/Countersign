@@ -9,7 +9,7 @@
 | Milestone | Chủ đề | Trạng thái |
 |---|---|---|
 | M0 | Spikes (identity, token exchange, checkpoint) | Xong |
-| M1 | Walking skeleton trên compose | Gần xong (còn README) |
+| M1 | Walking skeleton trên compose | Xong |
 | R0 | Thu gọn stack | |
 | R1 | Truy xuất thật + bộ đánh giá truy xuất | |
 | R2 | Câu trả lời có trích dẫn kiểm chứng được | |
@@ -26,8 +26,7 @@
 - E2E đóng ticket 56/56 trên stack thật (profile `tickets`);
 - Playwright: đăng nhập thật qua BFF, chat mock, khẳng định không có token trong trình duyệt.
 
-Còn lại:
-- README chạy từ máy sạch ≤ 15 phút.
+README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke đạt ngay lần đầu, E2E 50/50. Lần đo có cache Docker và uv; chưa thử trên máy hoàn toàn mới, và chưa thử đăng nhập trình duyệt theo bước sửa file hosts.
 
 ## R0 — Thu gọn stack
 
@@ -35,7 +34,7 @@ Còn lại:
 |---|---|---|
 | ✅ (345f304) Đưa tickets-mcp + approval-signer vào profile `tickets`; agent chạy được khi không có ticket (router chỉ docs/direct) | W | `docker compose up` mặc định không có 2 service này; smoke xanh; `--profile tickets` + E2E đóng ticket vẫn xanh |
 | ✅ Gỡ `depends_on` của agent → tickets-mcp và bff → approval-signer; xoá analytics-mcp, policy-sidecar, `GW_FEATURES`, `GW_SIDECAR_URL`, spikes, bench (dọn dẹp 2026-11-01) | W | Stack mặc định khoẻ khi không có tickets |
-| Đo RAM/CPU lúc rảnh và khi chạy 20 câu hỏi; ghi bảng vào README | W | Bảng số đo thật; mục tiêu < 2,5 GB lúc rảnh |
+| Đo RAM/CPU lúc rảnh ✅ 1,2 GiB (bảng trong README); còn đo khi chạy 20 câu hỏi, làm cùng R1 khi có truy xuất thật | W | Bảng số đo thật; mục tiêu < 2,5 GB lúc rảnh |
 | Tắt `directAccessGrants` của client `admin-cli` trong realm `acme` | W | Test realm: không client nào cho password grant |
 | Cập nhật CLAUDE.md, SOLUTION theo ADR-006 | O | Xong (2026-10-30) |
 
