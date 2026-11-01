@@ -24,11 +24,10 @@ def test_bff_user_stays_without_transactions() -> None:
 def test_default_user_has_no_nopass_flag() -> None:
     # protected-mode yes + default user `nopass` => Redis từ chối MỌI client ngoài loopback,
     # kể cả đã AUTH. `resetpass` (không có mật khẩu nào) giữ default không đăng nhập được.
-    for name in ("users-state.acl.tmpl", "users-cache.acl.tmpl"):
-        for line in (ACL.parent / name).read_text(encoding="utf-8").splitlines():
-            parts = line.split()
-            if parts[:2] == ["user", "default"]:
-                assert "off" in parts and "resetpass" in parts and "nopass" not in parts, name
-                break
-        else:
-            raise AssertionError(f"user default not in {name}")
+    for line in ACL.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if parts[:2] == ["user", "default"]:
+            assert "off" in parts and "resetpass" in parts and "nopass" not in parts
+            break
+    else:
+        raise AssertionError("user default not in ACL template")

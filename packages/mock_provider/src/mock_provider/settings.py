@@ -1,4 +1,4 @@
-"""Cấu hình mock_provider (pydantic-settings), biến môi trường theo contracts §7 và docker-compose.
+"""Cấu hình mock_provider (pydantic-settings), biến môi trường theo contracts §8 và docker-compose.
 
 Mọi giá trị hành vi (`MOCK_*`) là mặc định; header `x-mock-*` theo từng request và API
 `/__control` ghi đè được (header > /__control theo scope > /__control `*` > env).

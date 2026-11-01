@@ -1,4 +1,4 @@
-"""Port `TicketRepository` (02 §6.0, contracts §9.2).
+"""Port `TicketRepository` (contracts §9.2).
 
 Nguồn ticket: adapter `postgres` (RLS là lớp phòng thủ thêm); mở rộng: jira, zendesk, glpi.
 `TicketService` + `services/policy.py` phải đủ an toàn kể cả khi adapter KHÔNG có RLS.

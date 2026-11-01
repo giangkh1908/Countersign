@@ -1,4 +1,4 @@
-"""Router thông tin người dùng. Mỏng, gọi services. Docs: 07 §2.6."""
+"""Router thông tin người dùng. Mỏng, gọi services."""
 
 from __future__ import annotations
 
@@ -36,6 +36,5 @@ async def me(
         "idle_expires_at": _iso(min(now + c.settings.bff_session_idle_s, absolute)),
         "absolute_expires_at": _iso(absolute),
         "server_time": _iso(now),
-        "features": {"admin": False},  # trang admin là việc của M6
         "link_allowlist": list(c.settings.link_allowlist),
     }

@@ -1,6 +1,6 @@
 """Điểm vào ASGI của agent: `uvicorn agent.main:app`.
 
-Không có APPROVAL_SIGNER_URL: agent không được gọi approval-signer (D13).
+Không có APPROVAL_SIGNER_URL: agent không được gọi approval-signer.
 """
 
 from __future__ import annotations

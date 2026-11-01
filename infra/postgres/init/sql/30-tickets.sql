@@ -1,4 +1,4 @@
--- tickets (contracts §3.3, §3.6). Chạy bằng `postgres` trên DB tickets; idempotent.
+-- tickets (contracts §5). Chạy bằng `postgres` trên DB tickets; idempotent.
 CREATE SCHEMA IF NOT EXISTS acme AUTHORIZATION tk_owner;
 GRANT CONNECT ON DATABASE tickets TO tk_owner, tk_app, mcp_audit_w;
 GRANT USAGE ON SCHEMA public TO tk_app, mcp_audit_w;
@@ -47,12 +47,12 @@ CREATE TABLE IF NOT EXISTS ticket_events (
   id bigserial PRIMARY KEY, ticket_id bigint NOT NULL REFERENCES tickets,
   actor_sub text NOT NULL, on_behalf_of text,
   action text NOT NULL CHECK (action IN ('create','comment','status','close')),
-  approval_jti uuid, intent_id uuid UNIQUE, intent_sha256 char(64),   -- UNIQUE: mỗi intent tối đa một sự kiện (D17)
+  approval_jti uuid, intent_id uuid UNIQUE, intent_sha256 char(64),   -- UNIQUE: mỗi intent tối đa một sự kiện
   before jsonb, after jsonb, ts timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ticket_events_ticket_idx ON ticket_events (ticket_id, ts);
 
--- tool_audit (§3.6): ghi cùng transaction với UPDATE/INSERT ticket_events bằng tk_app
+-- tool_audit (contracts §5): ghi cùng transaction với UPDATE/INSERT ticket_events bằng tk_app
 CREATE SEQUENCE IF NOT EXISTS tool_audit_id_seq;
 CREATE TABLE IF NOT EXISTS tool_audit (
   id bigint PRIMARY KEY DEFAULT nextval('tool_audit_id_seq'),
@@ -130,7 +130,7 @@ CREATE POLICY te_insert ON ticket_events FOR INSERT TO tk_app WITH CHECK (
   EXISTS (SELECT 1 FROM tickets t WHERE t.id = ticket_events.ticket_id)
 );
 
--- Hàm audience (D17, N12): suy từ điều kiện tk_select. RLS tickets không dùng clearance nên
+-- Hàm audience: suy từ điều kiện tk_select. RLS tickets không dùng clearance nên
 -- min_clearance = classification của bản nháp (mặc định 1). dept_set = nơi thấy được ticket qua
 -- điều kiện phòng ban: assignee_dept (role employee) và requester_dept (nơi người yêu cầu thuộc về).
 -- 'admin' thấy tất cả không phụ thuộc phòng nên không đưa vào dept_set. Sửa tk_select => sửa hàm này.

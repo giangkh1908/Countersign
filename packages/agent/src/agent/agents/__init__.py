@@ -1,4 +1,4 @@
-"""Registry agent chuyên trách (03 §3.7): mỗi agent là một file khai báo một `AgentSpec`.
+"""Registry agent chuyên trách: mỗi agent là một file khai báo một `AgentSpec`.
 
 Router, graph và allowlist đều đọc từ registry; thêm agent = thêm file + một dòng ở
 `factory._AGENTS`, không sửa builder hay node.

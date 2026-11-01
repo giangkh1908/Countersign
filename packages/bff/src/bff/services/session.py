@@ -1,4 +1,4 @@
-"""SessionStore (Redis HASH `bff:sess:{sid}`) và SessionData (contracts §2.1, 07 §2.3).
+"""SessionStore (Redis HASH `bff:sess:{sid}`) và SessionData (contracts §6).
 
 User Redis `bff` chỉ có lệnh đơn (không MULTI/WATCH/EVAL): chỉ dùng GET/SET NX EX/HSET/HGETALL/
 HDEL/EXPIRE/INCR/DECR/SADD/SISMEMBER/DEL/SCAN. Mọi trường `*_enc` là AES-GCM (AAD = sid + tên trường).
@@ -148,7 +148,7 @@ class SessionStore:
         enc, exp_field = TOKEN_SLOTS[slot]
         return {enc: self.crypto.seal(value, sid=sid, field=enc), exp_field: str(int(exp))}
 
-    # --- single flight (07 §2.10) ---
+    # --- single flight ---
     @contextlib.asynccontextmanager
     async def single_flight(self, sid: str, *, wait_s: float = 3.0) -> AsyncIterator[None]:
         local = self._locks.setdefault(sid, asyncio.Lock())
@@ -192,7 +192,7 @@ class SessionStore:
     async def pend_delete(self, sid: str, interrupt_id: str) -> None:
         await self.redis.hdel(f"{sess_key(sid)}:pend", interrupt_id)
 
-    # --- danh sách từ chối (D17/N13) ---
+    # --- danh sách từ chối ---
     async def rej_add(self, sid: str, ttl_s: int, *values: str) -> None:
         key = f"{sess_key(sid)}:rej"
         await self.redis.sadd(key, *[v for v in values if v])

@@ -1,4 +1,4 @@
-"""`DocumentService`: nơi duy nhất chứa nghiệp vụ search (02 §5.0). Chỉ phụ thuộc port.
+"""`DocumentService`: nơi duy nhất chứa nghiệp vụ search. Chỉ phụ thuộc port.
 
 Chuỗi: NFC query -> retriever -> reranker -> kiểm lại ACL từng chunk -> max_per_doc -> taint
 (fail-closed với class >= 1) -> spotlighting -> output theo schema.

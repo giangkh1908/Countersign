@@ -1,4 +1,4 @@
-"""Sinh và băm API key (01 §3.1). Format: `sk-acme-<prefix12>.<secret43>`; chỉ lưu HMAC của secret."""
+"""Sinh và băm API key. Format: `sk-acme-<prefix12>.<secret43>`; chỉ lưu HMAC của secret."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ MIN_PEPPER_BYTES = 32
 
 
 def hmac_secret(secret: bytes, pepper: bytes) -> bytes:
-    """HMAC-SHA256(key=pepper, msg=secret) (contracts §3.1)."""
+    """HMAC-SHA256(key=pepper, msg=secret) (contracts §5)."""
     return hmac.new(pepper, secret, hashlib.sha256).digest()
 
 
@@ -47,7 +47,6 @@ def issue_key(
     rpm: int,
     tpm: int,
     max_concurrency: int = 8,
-    budget_micro: int | None = None,
     trust_end_user_token: bool = False,
     expose_debug: bool = False,
     expires_at: datetime | None = None,
@@ -69,7 +68,6 @@ def issue_key(
             rpm=rpm,
             tpm=tpm,
             max_concurrency=max_concurrency,
-            budget_micro=budget_micro,
             trust_end_user_token=trust_end_user_token,
             expose_debug=expose_debug,
             expires_at=expires_at,

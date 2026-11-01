@@ -1,6 +1,6 @@
-"""Adapter `postgres` của `ConversationRepository` (bảng `conversations`, contracts §3.5).
+"""Adapter `postgres` của `ConversationRepository` (bảng `conversations`, contracts §5).
 
-Chưa có test với Postgres thật trong M1 (không chạy DB ở bước này); logic SQL tối thiểu.
+Chưa có test với Postgres thật; logic SQL tối thiểu.
 """
 
 from __future__ import annotations

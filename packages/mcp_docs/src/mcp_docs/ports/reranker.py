@@ -1,4 +1,4 @@
-"""Port `Reranker`: sắp xếp lại ứng viên. Adapter M1: `none`."""
+"""Port `Reranker`: sắp xếp lại ứng viên. Adapter hiện có: `none`."""
 
 from __future__ import annotations
 

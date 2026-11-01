@@ -1,4 +1,4 @@
-"""Khai báo `ToolSpec` của docs-mcp và handler mỏng gọi `DocumentService` (02 §5.4)."""
+"""Khai báo `ToolSpec` của docs-mcp và handler mỏng gọi `DocumentService`."""
 
 from __future__ import annotations
 

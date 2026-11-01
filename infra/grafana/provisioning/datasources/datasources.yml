@@ -1,4 +1,4 @@
-# docs/design/04 §6.3 — hai datasource: prometheus và gw-postgres (db gateway, role gw_report)
+# Hai datasource: prometheus và gw-postgres (db gateway, role gw_report)
 apiVersion: 1
 datasources:
   - name: prometheus

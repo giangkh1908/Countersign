@@ -1,4 +1,4 @@
-"""Port `ToolProvider` (contracts §9.2, 03 §1.1): nạp tool theo agent và commit intent đã được duyệt.
+"""Port `ToolProvider` (contracts §9.2): nạp tool theo agent và commit intent đã được duyệt.
 
 Adapter v1: `mcp_http` (adapters/). Test: `FakeToolProvider` (agent.testing).
 `commit_intent` KHÔNG nằm trong danh sách tool trả cho LLM; chỉ node `execute_write` gọi.
@@ -21,7 +21,7 @@ class ServerAccess:
     audience: str
     tools: frozenset[str]
     scopes: tuple[str, ...]
-    cache_token: bool = True  # token tickets:write không cache (03 §6.2)
+    cache_token: bool = True  # token tickets:write không cache
 
 
 @dataclass(frozen=True, slots=True)

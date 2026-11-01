@@ -1,6 +1,6 @@
 """Port `ApprovalSigner`: `sign(intent, principal) -> ApprovalToken`.
 
-Adapter v1: `es256_jwt`. Tài liệu: docs/design/00-contracts.md §4.1, 05 §4.3.
+Adapter v1: `es256_jwt`. Tài liệu: docs/design/approval.md §2.1.
 """
 
 from __future__ import annotations

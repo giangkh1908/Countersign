@@ -1,6 +1,6 @@
 """Adapter `es256_jwt` cho port `ApprovalSigner`. Khoá riêng ES256 từ file PEM mount (không log, không repr).
 
-Claims theo contracts §4.1: `aud` suy từ `iss` của intent (approval chỉ dùng được ở MCP đã phát intent).
+Claims theo docs/design/approval.md §2.1: `aud` suy từ `iss` của intent (approval chỉ dùng được ở MCP đã phát intent).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from ..ports import ApprovalSigner, ApprovalToken, SignerError, VerifiedIntent
 
 APPROVAL_ISSUER = "acme-approval"
 APPROVAL_TYP = "acme-approval+jwt"
-# iss của intent -> aud của approval (hằng trong mã, 05 §5.5)
+# iss của intent -> aud của approval (hằng trong mã)
 _AUD_BY_INTENT_ISS: dict[str, str] = {"tickets-mcp": "tickets-mcp"}
 
 

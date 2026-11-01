@@ -62,19 +62,13 @@ def test_build_event_sink_unknown() -> None:
         factory.build_event_sink("nope", S)
 
 
-@pytest.mark.parametrize("name", ["in_memory", "redis_token_bucket"])
-def test_build_rate_limiter(name: str) -> None:
-    assert isinstance(factory.build_rate_limiter(name, S, clock=CLOCK), RateLimiter)
+def test_build_rate_limiter() -> None:
+    assert isinstance(factory.build_rate_limiter("in_memory", S, clock=CLOCK), RateLimiter)
 
 
 def test_build_rate_limiter_unknown() -> None:
     with pytest.raises(RateLimiterNotConfigured, match="in_memory"):
         factory.build_rate_limiter("nope", S, clock=CLOCK)
-
-
-async def test_m2_stubs_fail_loudly() -> None:
-    with pytest.raises(NotImplementedError):
-        await factory.build_rate_limiter("redis_token_bucket", S, clock=CLOCK).release_slot("k")
 
 
 def test_build_tool_server_host() -> None:

@@ -1,4 +1,4 @@
-"""Luồng prepare -> approval -> commit và 5 ca bảo mật của DoD M1 (fake repo, fakeredis, FakeClock)."""
+"""Luồng prepare -> approval -> commit và 5 ca bảo mật (fake repo, fakeredis, FakeClock)."""
 
 from __future__ import annotations
 
@@ -193,7 +193,7 @@ async def test_commit_without_args_uses_signed_args(env: Env) -> None:
     assert not err and res["ticket"]["status"] == "closed"
 
 
-# ---------------------------------------------------------------- 5 ca bảo mật DoD M1
+# ---------------------------------------------------------------- 5 ca bảo mật
 async def test_args_tampered_after_approval_is_intent_mismatch(env: Env) -> None:
     out = await prepare(env)
     token, _ = env.approval(out)

@@ -1,4 +1,4 @@
-"""OidcClient: authorize URL, đổi code, refresh, revoke, end_session (07 §2.3).
+"""OidcClient: authorize URL, đổi code, refresh, revoke, end_session.
 
 Chỉ nói chuyện qua endpoint OIDC chuẩn (discovery lấy từ settings); không tên vendor trong mã.
 Client `chat-ui` là confidential, `client_secret_basic`, PKCE S256.
@@ -143,7 +143,7 @@ class OidcClient:
 
     async def end_session_url(self) -> str | None:
         """URL đăng xuất phía IdP. KHÔNG kèm `id_token_hint`: id_token không được xuống trình
-        duyệt (DoD M1 5a); dùng `client_id` + `post_logout_redirect_uri` (RP-initiated logout)."""
+        duyệt; dùng `client_id` + `post_logout_redirect_uri` (RP-initiated logout)."""
         endpoint = (await self.discovery()).get("end_session_endpoint")
         if not endpoint:
             return None

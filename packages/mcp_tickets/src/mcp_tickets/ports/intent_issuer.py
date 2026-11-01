@@ -1,7 +1,7 @@
-"""Port `IntentIssuer` (02 §6.0, contracts §9.2, §4.2): ký, lưu và chuyển trạng thái intent.
+"""Port `IntentIssuer` (contracts §9.2): ký, lưu và chuyển trạng thái intent.
 
 Chuyển trạng thái phải NGUYÊN TỬ (Lua/WATCH); không có `set_status` tự do.
-Máy trạng thái duy nhất: `pending -> committing -> committed | failed` (contracts §4.2).
+Máy trạng thái duy nhất: `pending -> committing -> committed | failed` (docs/design/approval.md §2.3).
 """
 
 from __future__ import annotations

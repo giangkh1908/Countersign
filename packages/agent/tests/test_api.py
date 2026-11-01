@@ -132,7 +132,7 @@ async def test_auth_rejections(make_env):
     assert r.status_code == 401 and r.json()["error"]["code"] == "unauthorized"
     r = await env.client.post("/v1/threads", json={}, headers={"Authorization": "Bearer nope"})
     assert r.status_code == 401
-    # token hợp lệ nhưng sai aud (không có agent-service): từ chối (403 theo contracts §4)
+    # token hợp lệ nhưng sai aud (không có agent-service): từ chối (403 theo contracts §2)
     from dataclasses import replace
 
     from agent.testing import make_principal

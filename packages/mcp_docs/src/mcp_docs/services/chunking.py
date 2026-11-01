@@ -1,8 +1,8 @@
-"""Chunking theo heading + cửa sổ token + overlap (module thường, không phải port; 02 §5.1 [3]).
+"""Chunking theo heading + cửa sổ token + overlap (module thường, không phải port).
 
 Đếm token: ước lượng `ceil(số_từ_tách_theo_khoảng_trắng * 1.3)`. Tiếng Việt tách theo âm tiết nên
 số từ khoảng trắng ~ số âm tiết; SentencePiece của bge-m3 cho ~1.2-1.4 token/âm tiết. Chưa kéo
-tokenizer thật vào M1 (D2: gateway không nạp model nặng; docs-mcp cũng không); ước lượng đủ cho
+tokenizer thật vào (gateway không nạp model nặng; docs-mcp cũng không); ước lượng đủ cho
 việc đặt ranh giới chunk. Thay bằng tokenizer thật khi có runtime embedding (ghi vào `TOKEN_RATIO`).
 """
 

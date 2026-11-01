@@ -15,14 +15,14 @@ from .users import DEFAULT_REALM, REPO_ROOT, load_users
 SEED = 20261028
 GENERATOR_VERSION = "1.0"
 DEFAULT_OUT = REPO_ROOT / "data" / "generated"
-# (code, tên, ngân sách tháng micro-USD) — contracts §3.1 / 04 §7.3
+# (code, tên)
 DEPARTMENTS = [
-    ("SALES", "Kinh doanh", 30_000_000),
-    ("ENG", "Kỹ thuật", 60_000_000),
-    ("HR", "Nhân sự", 10_000_000),
-    ("CS", "Chăm sóc khách hàng", 40_000_000),
-    ("IT", "Công nghệ thông tin", 20_000_000),
-    ("EVAL", "Đánh giá (kỹ thuật)", 160_000_000),
+    ("SALES", "Kinh doanh"),
+    ("ENG", "Kỹ thuật"),
+    ("HR", "Nhân sự"),
+    ("CS", "Chăm sóc khách hàng"),
+    ("IT", "Công nghệ thông tin"),
+    ("EVAL", "Đánh giá (kỹ thuật)"),
 ]
 
 

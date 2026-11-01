@@ -1,4 +1,4 @@
-"""Kiểu dữ liệu và lỗi trung lập ở biên các port của gateway (contracts §9.1 mục 3; 01 §1.2).
+"""Kiểu dữ liệu và lỗi trung lập ở biên các port của gateway (contracts §9.1 mục 3).
 
 Không mang tên vendor. Message của `ProviderError` không chứa URL, header, key hay nội dung người dùng.
 """
@@ -86,13 +86,10 @@ class KeyRecord:
     rpm: int
     tpm: int
     max_concurrency: int
-    budget_micro: int | None
     trust_end_user_token: bool
     expose_debug: bool
     status: str  # active | revoked | expired
     expires_at: datetime | None
-    pii_policy: str = "mask"
-    dept_budget_micro: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,7 +106,6 @@ class NewKey:
     rpm: int
     tpm: int
     max_concurrency: int = 8
-    budget_micro: int | None = None
     trust_end_user_token: bool = False
     expose_debug: bool = False
     expires_at: datetime | None = None

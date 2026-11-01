@@ -1,4 +1,4 @@
-"""Kiểm Origin cho request đổi trạng thái, và trần kích thước body (07 §2.5, §2.6)."""
+"""Kiểm Origin cho request đổi trạng thái, và trần kích thước body."""
 
 from __future__ import annotations
 

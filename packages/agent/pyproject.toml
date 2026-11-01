@@ -15,7 +15,7 @@ dependencies = [
     "psycopg[binary,pool]>=3.3.6",
     "mcp>=2.3,<2.4",
 ]
-# M1: langgraph + checkpointer postgres, client OpenAI-compatible, mcp client, sqlalchemy/psycopg
+# langgraph + checkpointer postgres, client OpenAI-compatible, mcp client, sqlalchemy/psycopg
 
 [tool.uv.sources]
 acme-common = { workspace = true }

@@ -1,4 +1,4 @@
-"""Xác thực: API key (tra theo prefix, HMAC + pepper, so sánh hằng thời gian) và user token (01 §3)."""
+"""Xác thực: API key (tra theo prefix, HMAC + pepper, so sánh hằng thời gian) và user token."""
 
 from __future__ import annotations
 

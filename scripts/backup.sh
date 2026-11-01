@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/backup.sh  (docs/design/04 §3.3) — `make backup`
+# scripts/backup.sh — `make backup`
 # Dump các DB nghiệp vụ ra ./backups trên host. Khôi phục:
 #   pg_restore -U postgres -d <db> --clean --if-exists <file>.dump
 set -euo pipefail

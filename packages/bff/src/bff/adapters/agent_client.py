@@ -1,4 +1,4 @@
-"""AgentClient: lớp HTTP thường (không port, D11/§9.2) gọi API nội bộ của agent (03 §1.3).
+"""AgentClient: lớp HTTP thường (không port, contracts §9.2) gọi API nội bộ của agent.
 
 Giao tiếp JSON qua `RetryingHttpClient` (composition); luồng SSE mở bằng `httpx.AsyncClient.stream`
 riêng, không retry tự động vì POST không idempotent.

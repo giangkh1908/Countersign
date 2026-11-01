@@ -1,4 +1,4 @@
-"""Chạy một lượt (run/resume) và dịch sự kiện đồ thị thành sự kiện SSE (03 §1.4).
+"""Chạy một lượt (run/resume) và dịch sự kiện đồ thị thành sự kiện SSE.
 
 Luôn kết thúc bằng đúng một `done` hoặc `error`. Không bao giờ log nội dung hội thoại hay token.
 """

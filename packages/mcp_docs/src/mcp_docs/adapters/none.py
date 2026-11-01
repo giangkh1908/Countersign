@@ -1,4 +1,4 @@
-"""Adapter `Reranker` không rerank: giữ thứ tự RRF (mặc định M1)."""
+"""Adapter `Reranker` không rerank: giữ thứ tự RRF (mặc định)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""AuthService: bắt đầu đăng nhập, xử lý callback, đăng xuất (07 §2.3, §2.10)."""
+"""AuthService: bắt đầu đăng nhập, xử lý callback, đăng xuất."""
 
 from __future__ import annotations
 

@@ -2,7 +2,7 @@
 
 Khoá công khai intent đọc từ `INTENT_PUBLIC_KEYS_DIR/<kid>.pem|.pub` (mỗi lần verify đọc lại,
 nên xoá file = thu hồi `kid` ngay, thêm file = xoay khoá không cần khởi động lại).
-Header `kid` lạ => từ chối, không fetch mạng. Tài liệu: contracts §4.1, 05 §5.2.
+Header `kid` lạ => từ chối, không fetch mạng. Tài liệu: docs/design/approval.md §2.1.
 """
 
 from __future__ import annotations

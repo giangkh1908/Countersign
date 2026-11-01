@@ -130,7 +130,7 @@ class Env:
         key: ec.EllipticCurvePrivateKey | None = None,
         aud: str = "tickets-mcp",
     ) -> tuple[str, str]:
-        """Ký approval đúng định dạng của approval-signer (05 §4.3). Trả `(token, jti)`."""
+        """Ký approval đúng định dạng của approval-signer. Trả `(token, jti)`."""
         now = int(self.clock.now().timestamp())
         jti = jti or str(uuid.uuid4())
         claims = {

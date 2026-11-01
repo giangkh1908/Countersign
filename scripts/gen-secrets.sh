@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# scripts/gen-secrets.sh  (docs/design/04 §5.1)
+# scripts/gen-secrets.sh
 # Sinh ./secrets/* (gitignore) và ./.env (từ .env.example nếu chưa có).
 #
 # Dùng:
 #   bash scripts/gen-secrets.sh                  # chỉ tạo file CHƯA có (idempotent)
-#   bash scripts/gen-secrets.sh --rotate NAME    # sinh lại 1 secret (vd redis_gateway_password)
+#   bash scripts/gen-secrets.sh --rotate NAME    # sinh lại 1 secret (vd redis_tickets_password)
 #   bash scripts/gen-secrets.sh --ci             # không tương tác, GHI ĐÈ tất cả, đủ cho `docker compose config`
 #
 # Biến môi trường: SECRETS_MODE (mặc định 644: container chạy uid 10001/999 không phải chủ
-# file bind-mount; chỉ dev. Prod dùng secret manager, M7).
+# file bind-mount; chỉ dev. Prod dùng secret manager).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -60,7 +60,7 @@ put_empty() {
 for n in pg_superuser_password gw_owner_password gw_app_password kn_owner_password kn_app_password \
          kn_ingest_password tk_owner_password tk_app_password \
          ag_app_password ag_owner_password mcp_audit_password kc_app_password \
-         gw_report_password redis_gateway_password redis_tickets_password redis_docs_password \
+         gw_report_password redis_tickets_password redis_docs_password \
          redis_bff_password redis_ops_password redis_health_password \
          kc_admin_password grafana_admin_password; do
   put "$n" rand_pw
@@ -80,7 +80,7 @@ put_empty docs_gateway_key      # key service docs-mcp -> gateway (Admin API POS
 put_empty agent_gateway_key     # key của agent-service (tạo sau khi gateway chạy)
 put_empty anthropic_api_key     # điền key thật nếu dùng provider thật
 
-# URL đầy đủ cho gateway (ghi chú 1 của §1.3); mật khẩu chỉ gồm [A-Za-z0-9] nên không cần url-encode
+# URL đầy đủ cho gateway; mật khẩu chỉ gồm [A-Za-z0-9] nên không cần url-encode
 if should_write gw_database_url || [ "$ROTATE" = "gw_app_password" ]; then
   printf 'postgresql://gw_app:%s@postgres:5432/gateway' "$(cat "$SEC/gw_app_password")" > "$SEC/gw_database_url"
   chmod "$MODE" "$SEC/gw_database_url"

@@ -1,4 +1,4 @@
-"""`GatewayError` và bảng mã lỗi (contracts §6.1). Format OpenAI: `{"error":{"message","type","code"}}`."""
+"""`GatewayError` và bảng mã lỗi (contracts §4). Format OpenAI: `{"error":{"message","type","code"}}`."""
 
 from __future__ import annotations
 

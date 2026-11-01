@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/bootstrap-gateway-keys.sh  (docs/design/01 §3, 04 §5.1)
+# scripts/bootstrap-gateway-keys.sh
 # Tạo API key gateway cho agent-service và docs-mcp bằng `gateway.cli create-key`,
 # ghi vào secrets/agent_gateway_key và secrets/docs_gateway_key (cùng file mode với gen-secrets.sh).
 #
@@ -56,12 +56,13 @@ provision() {
   created=1
 }
 
-# agent-service: gọi LLM thay mặt người dùng -> tin end-user token (design 01 §3.x); budget $5/tháng.
-provision agent_gateway_key agent agent-service acme-fast,acme-smart,acme-auto \
-  --rpm 120 --tpm 200000 --max-concurrency 8 --budget-micro-usd 5000000 --trust-end-user-token
-# docs-mcp: chỉ embedding (acme-embed); budget $1/tháng.
+# agent-service: gọi LLM thay mặt người dùng, nên tin end-user token.
+provision agent_gateway_key agent agent-service acme-fast,acme-smart \
+  --rpm 120 --tpm 200000 --max-concurrency 8 --trust-end-user-token
+# docs-mcp: chỉ embedding. `create-key` không kiểm alias với catalog, nên key cấp được dù gateway
+# chưa phục vụ `acme-embed`; khi R1 thêm alias vào models.yaml là dùng được ngay, không phải cấp lại key.
 provision docs_gateway_key docs-mcp docs-mcp acme-embed \
-  --rpm 120 --tpm 200000 --max-concurrency 4 --budget-micro-usd 1000000
+  --rpm 120 --tpm 200000 --max-concurrency 4
 
 if [ "$created" -eq 1 ] && [ "$RESTART" -eq 1 ]; then
   $COMPOSE restart agent docs-mcp

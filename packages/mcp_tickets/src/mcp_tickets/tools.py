@@ -1,4 +1,4 @@
-"""Khai báo `ToolSpec` và đăng ký tool (02 §6.3, §6.3b). Chỉ gọi `TicketService`, không có nghiệp vụ."""
+"""Khai báo `ToolSpec` và đăng ký tool. Chỉ gọi `TicketService`, không có nghiệp vụ."""
 
 from __future__ import annotations
 

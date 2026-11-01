@@ -1,4 +1,4 @@
-"""Port `ConversationRepository`: sổ cái thread của người dùng (bảng `conversations`, contracts §3.5).
+"""Port `ConversationRepository`: sổ cái thread của người dùng (bảng `conversations`, contracts §5).
 
 Thread của người khác hoặc đã xoá trả `None` (không lộ tồn tại).
 Adapter v1: `postgres`, `memory` (test/dev).

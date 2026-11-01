@@ -57,16 +57,16 @@ def build_provider(name: str, settings: Settings) -> ChatProvider:
 # --- KeyStore ---
 
 
-def _load_pg_redis_cached(settings: Settings, clock: Clock) -> KeyStore:
-    from .adapters.pg_redis_cached import PgRedisCachedKeyStore
+def _load_postgres(settings: Settings, clock: Clock) -> KeyStore:
+    from .adapters.postgres import PostgresKeyStore
 
     if not settings.gw_database_url:
-        raise KeyStoreNotConfigured("key store 'pg_redis_cached' requires GW_DATABASE_URL")
-    return PgRedisCachedKeyStore(settings.gw_database_url, clock)
+        raise KeyStoreNotConfigured("key store 'postgres' requires GW_DATABASE_URL")
+    return PostgresKeyStore(settings.gw_database_url, clock)
 
 
 _KEY_STORES: dict[str, Callable[[Settings, Clock], KeyStore]] = {
-    "pg_redis_cached": _load_pg_redis_cached,
+    "postgres": _load_postgres,
 }
 
 

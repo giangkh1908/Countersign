@@ -1,4 +1,4 @@
-"""Cấu hình mcp_docs (pydantic-settings). Biến môi trường theo contracts §7."""
+"""Cấu hình mcp_docs (pydantic-settings). Biến môi trường theo contracts §8."""
 
 from acme_common.settings import CommonSettings
 
@@ -22,7 +22,7 @@ class Settings(CommonSettings):
     docs_rerank: str = "none"
     docs_retriever: str = "pgvector_hybrid"
     docs_indexer: str = "pgvector_hybrid"
-    docs_embedder: str = "fake_hash"  # M1: gateway chưa có /v1/embeddings; "gateway_http" khi có
+    docs_embedder: str = "fake_hash"  # gateway chưa có /v1/embeddings (R1); "gateway_http" khi có
     docs_embed_model: str = "acme-embed"
     docs_embed_dim: int = 1024  # khớp chunks.embedding vector(1024)
     docs_rrf_k: int = 60

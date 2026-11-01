@@ -1,4 +1,4 @@
-"""Hash-chain HMAC cho `audit_log` / `tool_audit` (contracts §3.1, §3.6).
+"""Hash-chain HMAC cho `audit_log` / `tool_audit` (contracts §5).
 
 hash = HMAC-SHA256(key[hmac_kid], prev_hash || canonical(row)); `id` và `ts` do app gán TRƯỚC khi băm.
 `canonical(row)` = canonical JSON (khoá sắp xếp, NFC, không float) của các cột nghiệp vụ + `hmac_kid`.

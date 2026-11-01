@@ -1,4 +1,4 @@
-"""Rate limit theo phiên / IP (07 §2.10). Cửa sổ cố định 60s bằng INCR + EXPIRE trên `bff:sess:*`."""
+"""Rate limit theo phiên / IP. Cửa sổ cố định 60s bằng INCR + EXPIRE trên `bff:sess:*`."""
 
 from __future__ import annotations
 

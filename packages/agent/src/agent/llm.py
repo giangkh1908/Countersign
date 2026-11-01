@@ -1,6 +1,6 @@
-"""`make_chat_model(role)`: hàm thường (không phải port, D11) trả chat model trỏ tới gateway theo alias.
+"""`make_chat_model(role)`: hàm thường (không phải port) trả chat model trỏ tới gateway theo alias.
 
-Gateway nói giao thức OpenAI-compatible (chuẩn mở, không bọc, §9.1 mục 10). Header:
+Gateway nói giao thức OpenAI-compatible (chuẩn mở, không bọc, contracts §9.1 mục 10). Header:
 `Authorization: Bearer <API key agent>` (do ChatOpenAI đặt) + `X-Acme-User-Token: <token aud=llm-gateway>`.
 """
 
@@ -120,7 +120,7 @@ def _gw(code: str) -> GatewayError:
 
 
 def translate_llm_error(exc: BaseException) -> GatewayError | None:
-    """Dịch lỗi client OpenAI sang `GatewayError` (03 §5.3). Không in message thô của gateway."""
+    """Dịch lỗi client OpenAI sang `GatewayError`. Không in message thô của gateway."""
     if isinstance(exc, openai.APIStatusError):
         body = exc.body if isinstance(exc.body, dict) else {}
         err = body.get("error", body) if isinstance(body, dict) else {}

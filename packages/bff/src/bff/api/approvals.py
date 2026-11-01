@@ -1,4 +1,4 @@
-"""Router phê duyệt: verify thẻ + approve. Mỏng, gọi services. Docs: 07 §2.6, §2.7."""
+"""Router phê duyệt: verify thẻ + approve. Mỏng, gọi services."""
 
 from __future__ import annotations
 

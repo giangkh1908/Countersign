@@ -1,4 +1,4 @@
-"""Decorator `CachingTokenBroker` (cùng port `TokenBroker`), contracts §4 / §9.2, ADR-005.
+"""Decorator `CachingTokenBroker` (cùng port `TokenBroker`), contracts §2 và §9.2, ADR-005.
 
 Khoá `(sub, sid, audience, sorted scopes)`; TTL = `min(exp token đổi, exp subject) − skew`
 (token đổi ra không sống lâu hơn token người dùng). Cache trong tiến trình, single-flight theo khoá.

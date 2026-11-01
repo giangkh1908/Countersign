@@ -12,7 +12,6 @@ dependencies = [
     "pydantic-settings",
     "httpx",
     "pyjwt[crypto]",
-    # M2: thêm redis, sqlalchemy/psycopg khi triển khai adapter postgres_event_sink / redis_token_bucket.
     "mcp>=2.3,<2.4",  # adapter mcp_sdk dùng ToolManager nội bộ của SDK: nâng minor phải chạy lại test
     "jsonschema>=4.26.0",
     "redis>=8.1.0",

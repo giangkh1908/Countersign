@@ -1,4 +1,4 @@
-"""ApprovalFlow: register, verify, approve, decide (07 §2.7). Không có khoá ký trong BFF.
+"""ApprovalFlow: register, verify, approve, decide. Không có khoá ký trong BFF.
 
 Quy tắc chính: chỉ xử lý interrupt BFF đã nhận trong chính phiên này; trình duyệt chỉ gửi định
 danh; `approve` đòi `state == verified` và `intent_sha256` khớp thẻ đã verify; `approval_token`
@@ -28,7 +28,7 @@ MAX_APPROVALS_PER_HOUR = 30
 
 
 class CardBlocked(Exception):
-    """Interrupt bị chặn (D17/N13): `reason` ∈ intent_rejected_recently | cards_per_thread_hour."""
+    """Interrupt bị chặn: `reason` ∈ intent_rejected_recently | cards_per_thread_hour."""
 
     def __init__(self, reason: str) -> None:
         super().__init__(reason)

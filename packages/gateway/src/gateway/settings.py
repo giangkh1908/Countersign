@@ -1,4 +1,4 @@
-"""Cấu hình gateway (pydantic-settings), biến môi trường theo contracts §7.
+"""Cấu hình gateway (pydantic-settings), biến môi trường theo contracts §8.
 
 Hậu tố `<BIẾN>_FILE` cho mọi secret do `CommonSettings` lo (đọc nội dung file, `_FILE` thắng).
 """
@@ -17,7 +17,7 @@ class Settings(CommonSettings):
     audit_hmac_key: str | None = None
     audit_hmac_key_id: str | None = None
     gw_provider_override: str | None = None  # vd "mock"; factory thay mọi chain
-    gw_keystore_adapter: str = "pg_redis_cached"
+    gw_keystore_adapter: str = "postgres"
     gw_models_config: str | None = None  # mặc định ./config/models.yaml
     gw_mock_base_url: str = "http://mock-provider:8900"  # adapter `mock`
     gw_anthropic_base_url: str | None = None  # None = endpoint công khai của SDK

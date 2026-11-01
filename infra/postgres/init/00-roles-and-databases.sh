@@ -1,5 +1,5 @@
 #!/bin/bash
-# infra/postgres/init/00-roles-and-databases.sh  (docs/design/04 §3.1)
+# infra/postgres/init/00-roles-and-databases.sh
 # Chạy một lần khi pg_data còn trống (docker-entrypoint-initdb.d). Các file .sql nằm ở thư mục con
 # `sql/` để entrypoint KHÔNG tự chạy chúng (chúng cần biến psql -v).
 set -euo pipefail

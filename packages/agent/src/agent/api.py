@@ -1,4 +1,4 @@
-"""HTTP API nội bộ của agent cho BFF (03 §1.3). Lỗi: `{"error":{"code","message","retryable"}}`."""
+"""HTTP API nội bộ của agent cho BFF. Lỗi: `{"error":{"code","message","retryable"}}`."""
 
 from __future__ import annotations
 

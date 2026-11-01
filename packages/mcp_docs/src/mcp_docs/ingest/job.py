@@ -1,4 +1,4 @@
-"""Job ingest (02 §5.1): metadata ACL -> load -> chunk -> embed -> ghi (1 transaction/tài liệu).
+"""Job ingest: metadata ACL -> load -> chunk -> embed -> ghi (1 transaction/tài liệu).
 
 Idempotent: tài liệu đã có chunk với cùng sha256 + ACL thì bỏ qua (trừ `force`). Thiếu hoặc sai
 metadata ACL => `DocumentRejected` trước khi ghi bất cứ thứ gì (fail-closed). Embedding lỗi =>

@@ -12,7 +12,7 @@ import httpx
 import openai
 import pytest
 from acme_common.testing import FakeClock, FakeEventSink
-from gateway.adapters.pg_redis_cached import PgRedisCachedKeyStore, normalize_dsn
+from gateway.adapters.postgres import PostgresKeyStore, normalize_dsn
 from gateway.container import build_container
 from gateway.main import create_app
 from gateway.ports import KeyAlreadyExists, KeyNotFound
@@ -37,7 +37,7 @@ def issue(**kw: object):
 async def store():
     assert DSN
     clock = FakeClock()
-    s = PgRedisCachedKeyStore(DSN, clock)
+    s = PostgresKeyStore(DSN, clock)
     s.clock = clock  # type: ignore[attr-defined]
     yield s
     await s.aclose()
@@ -48,17 +48,16 @@ def test_normalize_dsn() -> None:
     assert normalize_dsn("postgresql://u:p@h/d") == "postgresql://u:p@h/d"
 
 
-async def test_create_lookup_revoke_roundtrip(store: PgRedisCachedKeyStore) -> None:
-    issued = issue(trust_end_user_token=True, budget_micro=5_000_000, max_concurrency=3)
+async def test_create_lookup_revoke_roundtrip(store: PostgresKeyStore) -> None:
+    issued = issue(trust_end_user_token=True, max_concurrency=3)
     rec = await store.create(issued.new, "pytest")
     try:
         got = await store.lookup(issued.new.prefix)
         assert got == rec
         assert got.secret_hmac == issued.new.secret_hmac and len(got.secret_hmac) == 32
         assert got.dept == DEPT and got.allowed_models == ALL_ALIASES
-        assert got.trust_end_user_token and got.budget_micro == 5_000_000
+        assert got.trust_end_user_token
         assert got.max_concurrency == 3 and got.status == "active"
-        assert got.pii_policy in {"mask", "block", "allow"} and got.dept_budget_micro
         with pytest.raises(KeyAlreadyExists):
             await store.create(issued.new, "pytest")
     finally:
@@ -71,7 +70,7 @@ async def test_create_lookup_revoke_roundtrip(store: PgRedisCachedKeyStore) -> N
         await store.revoke("not-a-uuid", "pytest", "x")
 
 
-async def test_unknown_prefix_and_negative_cache(store: PgRedisCachedKeyStore) -> None:
+async def test_unknown_prefix_and_negative_cache(store: PostgresKeyStore) -> None:
     assert await store.lookup("Q" * 12) is None
     # Create sau khi đã có negative cache: create phải xoá negative cache.
     issued = issue()
@@ -83,11 +82,11 @@ async def test_unknown_prefix_and_negative_cache(store: PgRedisCachedKeyStore) -
         await store.revoke(rec.key_id, "pytest", "cleanup")
 
 
-async def test_l1_ttl_expiry_sees_external_revoke(store: PgRedisCachedKeyStore) -> None:
+async def test_l1_ttl_expiry_sees_external_revoke(store: PostgresKeyStore) -> None:
     issued = issue()
     rec = await store.create(issued.new, "pytest")
     clock: FakeClock = store.clock  # type: ignore[attr-defined]
-    other = PgRedisCachedKeyStore(DSN, clock)  # type: ignore[arg-type]
+    other = PostgresKeyStore(DSN, clock)  # type: ignore[arg-type]
     try:
         assert (await store.lookup(issued.new.prefix)).status == "active"  # type: ignore[union-attr]
         await other.revoke(rec.key_id, "pytest", "other instance")
@@ -98,7 +97,7 @@ async def test_l1_ttl_expiry_sees_external_revoke(store: PgRedisCachedKeyStore) 
         await other.aclose()
 
 
-async def test_gateway_with_real_key_store(store: PgRedisCachedKeyStore) -> None:
+async def test_gateway_with_real_key_store(store: PostgresKeyStore) -> None:
     """Đầu-cuối: key tạo trong Postgres thật -> gateway (provider = mock_provider in-process)."""
     from gateway.adapters.mock import MockChatProvider
 

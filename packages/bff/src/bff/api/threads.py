@@ -1,4 +1,4 @@
-"""Router threads và chi phí request. Mỏng, gọi services. Docs: 07 §2.6."""
+"""Router threads và chi phí request. Mỏng, gọi services."""
 
 from __future__ import annotations
 

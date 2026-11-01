@@ -1,4 +1,4 @@
-"""Cấu hình agent (pydantic-settings). Biến môi trường theo contracts §7.
+"""Cấu hình agent (pydantic-settings). Biến môi trường theo contracts §8.
 
 Cơ chế `<BIẾN>_FILE` (đọc secret từ file, `_FILE` thắng) kế thừa từ `CommonSettings`.
 """
@@ -13,7 +13,7 @@ from pydantic import Field
 
 from .ports.errors import ConfigError
 
-# Vai trò LLM -> alias (contracts §5). Ghi đè bằng AGENT_ROLE_ALIASES='{"agent":"acme-auto"}'.
+# Vai trò LLM -> alias (contracts §8). Ghi đè bằng AGENT_ROLE_ALIASES='{"agent":"acme-fast"}'.
 DEFAULT_ROLE_ALIASES: dict[str, str] = {
     "router": "acme-fast",
     "agent": "acme-smart",
@@ -21,7 +21,6 @@ DEFAULT_ROLE_ALIASES: dict[str, str] = {
     "direct": "acme-fast",
     "summarize": "acme-fast",
     "judge": "acme-smart",
-    "auto": "acme-auto",
 }
 
 
@@ -44,7 +43,7 @@ class Settings(CommonSettings):
     mcp_docs_url: str = "http://docs-mcp:8101/mcp"
     mcp_tickets_url: str = "http://tickets-mcp:8102/mcp"  # rỗng = tắt agent ticket
 
-    # --- Giới hạn vòng lặp (03 §3.5) ---
+    # --- Giới hạn vòng lặp ---
     agent_max_tool_calls_turn: int = 8
     agent_max_react_iters: int = 6
     agent_max_turn_cost_usd: float = 0.5
@@ -70,12 +69,6 @@ class Settings(CommonSettings):
     service_probe_adapter: str = "http"
     optional_agents_recheck_s: float = 10.0  # 0 = không dò lại sau khi khởi động
     agents_enabled: str = "docs,ticket"
-
-    # --- Quan sát ---
-    langfuse_host: str = ""
-    langfuse_public_key: str | None = None
-    langfuse_secret_key: str | None = None
-    langfuse_capture_content: bool = False
 
     @property
     def mcp_servers(self) -> dict[str, str]:

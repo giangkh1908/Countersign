@@ -12,7 +12,7 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic-settings",
     "acme-common",
-    # M1: không thêm dependency nặng.
+    # Không thêm dependency nặng.
 ]
 
 [tool.uv.sources]

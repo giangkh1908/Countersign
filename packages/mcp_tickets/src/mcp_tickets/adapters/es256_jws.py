@@ -1,7 +1,7 @@
 """Adapter `es256_jws` cho port `IntentIssuer`: ký intent ES256 và lưu/chuyển trạng thái trong Redis.
 
 Khoá `mcp:tickets:intent:{intent_id}` là HASH `{jws, sha256, sub, status, owner_jti, updated_at}`,
-TTL = intent `exp` + 30s (contracts §2.1). Chuyển trạng thái bằng Lua CAS (contracts §4.2). `load`
+TTL = intent `exp` + 30s (contracts §6). Chuyển trạng thái bằng Lua CAS (docs/design/approval.md §2.3). `load`
 verify lại chữ ký JWS bằng khoá công khai của chính tickets-mcp rồi băm lại payload, nên sửa Redis
 không đổi được `args_canonical`.
 """

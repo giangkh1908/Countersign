@@ -1,4 +1,4 @@
-"""Adapter `es256_jwt` cho port `ApprovalVerifier` (05 §4.3-4.4 bước 1-5).
+"""Adapter `es256_jwt` cho port `ApprovalVerifier`.
 
 Khoá công khai approval nằm ở file riêng (`APPROVAL_PUBLIC_KEY_PATH`), tách khỏi JWKS Keycloak;
 `alg` cứng ES256, `kid` phải thuộc tập tin cậy. Hết hạn tính theo `Clock` (test dùng FakeClock).

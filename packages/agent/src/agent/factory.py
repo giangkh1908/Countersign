@@ -7,11 +7,11 @@ Tên lạ -> raise XxxNotConfigured kèm danh sách tên hợp lệ. Ports: Tool
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable
 from typing import Any
 
+from acme_common.factory import lookup
 from acme_common.ports import TokenBroker
-from acme_common.ports.errors import NotConfigured
 
 from .agents import AgentRegistry, AgentSpec
 from .ports.conversations import ConversationRepository
@@ -25,13 +25,6 @@ from .ports.errors import (
 from .ports.service_probe import ServiceProbe
 from .ports.tool_provider import ToolProvider
 from .settings import Settings
-
-
-def _lookup(registry: Mapping[str, Any], name: str, err: type[NotConfigured]) -> Any:
-    try:
-        return registry[name]
-    except KeyError:
-        raise err(f"unknown adapter {name!r}; known: {sorted(registry)}") from None
 
 
 # --- Agents ---
@@ -52,8 +45,7 @@ _AGENTS: dict[str, Callable[[Settings], AgentSpec]] = {"docs": _load_docs, "tick
 
 def build_agent_registry(settings: Settings, names: tuple[str, ...] | None = None) -> AgentRegistry:
     return AgentRegistry(
-        _lookup(_AGENTS, n, AgentNotConfigured)(settings)
-        for n in (names or settings.enabled_agents)
+        lookup(_AGENTS, n, AgentNotConfigured)(settings) for n in (names or settings.enabled_agents)
     )
 
 
@@ -68,7 +60,7 @@ _PROBES: dict[str, Callable[[Settings], ServiceProbe]] = {"http": _load_http_pro
 
 
 def build_service_probe(name: str, settings: Settings) -> ServiceProbe:
-    return _lookup(_PROBES, name, ServiceProbeNotConfigured)(settings)
+    return lookup(_PROBES, name, ServiceProbeNotConfigured)(settings)
 
 
 # --- ToolProvider ---
@@ -93,7 +85,7 @@ def build_tool_provider(
     broker: TokenBroker,
     write_broker: TokenBroker,
 ) -> ToolProvider:
-    return _lookup(_TOOL_PROVIDERS, name, ToolProviderNotConfigured)(
+    return lookup(_TOOL_PROVIDERS, name, ToolProviderNotConfigured)(
         settings, registry, broker, write_broker
     )
 
@@ -137,7 +129,7 @@ _REPOS: dict[
 async def build_conversation_repo(
     name: str, settings: Settings
 ) -> tuple[ConversationRepository, Callable[[], Awaitable[None]]]:
-    return await _lookup(_REPOS, name, ConversationRepoNotConfigured)(settings)
+    return await lookup(_REPOS, name, ConversationRepoNotConfigured)(settings)
 
 
 # --- Checkpointer (mã hoá serializer, ADR-004) ---
@@ -189,7 +181,7 @@ _CHECKPOINTERS: dict[
 async def build_checkpointer(
     name: str, settings: Settings
 ) -> tuple[Any, Callable[[], Awaitable[None]]]:
-    return await _lookup(_CHECKPOINTERS, name, CheckpointerNotConfigured)(settings)
+    return await lookup(_CHECKPOINTERS, name, CheckpointerNotConfigured)(settings)
 
 
 __all__ = [

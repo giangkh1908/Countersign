@@ -1,4 +1,4 @@
-"""Dựng response/chunk theo chuẩn OpenAI Chat Completions từ kiểu trung lập (01 §7.3-7.4)."""
+"""Dựng response/chunk theo chuẩn OpenAI Chat Completions từ kiểu trung lập."""
 
 from __future__ import annotations
 

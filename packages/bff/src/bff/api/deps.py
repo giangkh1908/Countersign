@@ -1,4 +1,4 @@
-"""Dependency FastAPI: container, phiên, CSRF, rate limit. Mỏng, gọi services (07 §2.1)."""
+"""Dependency FastAPI: container, phiên, CSRF, rate limit. Mỏng, gọi services."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ class CookieNames:
 
     @classmethod
     def for_settings(cls, settings: Settings) -> CookieNames:
-        # `__Host-` bắt buộc Secure; dev chạy http thì dùng tên không tiền tố (07 §2.2)
+        # `__Host-` bắt buộc Secure; dev chạy http thì dùng tên không tiền tố
         if settings.https:
             return cls("__Host-sid", "__Host-csrf", "__Host-login")
         return cls("sid", "csrf", "login")

@@ -38,7 +38,6 @@ export class FakeAuthApi implements AuthApi {
       email: "u@example.com",
       roles: [],
       link_allowlist: [],
-      features: { admin: false },
     },
   ) {}
   async me(): Promise<Me> {

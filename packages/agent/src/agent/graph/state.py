@@ -1,4 +1,4 @@
-"""State và RunContext của đồ thị (03 §2).
+"""State và RunContext của đồ thị.
 
 Quy tắc ADR-004: nội dung nhạy cảm chỉ nằm trong `messages` hoặc channel non-primitive (dict/list);
 channel `str`/`int`/`float` chỉ cho cờ/bộ đếm không nhạy cảm. Token KHÔNG vào state: truyền qua

@@ -1,7 +1,7 @@
-"""Port `Embedder`: văn bản -> vector đã L2-normalize (contracts §9.2, §5 alias `acme-embed`).
+"""Port `Embedder`: văn bản -> vector đã L2-normalize (contracts §9.2; alias `acme-embed` ở contracts §8).
 
 Adapter: `gateway_http` (gọi gateway `/v1/embeddings`), `fake_hash` (tất định, dev/test).
-Ingest và query phải dùng CÙNG một adapter (D2: một runtime embedding duy nhất).
+Ingest và query phải dùng CÙNG một adapter (một runtime embedding duy nhất).
 """
 
 from __future__ import annotations

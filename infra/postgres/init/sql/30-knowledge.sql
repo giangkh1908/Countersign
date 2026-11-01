@@ -1,6 +1,6 @@
--- knowledge (contracts §3.2). Chạy bằng `postgres` trên DB knowledge; idempotent.
+-- knowledge (contracts §5). Chạy bằng `postgres` trên DB knowledge; idempotent.
 -- Phần cần superuser (extension) trước, rồi SET ROLE kn_owner để mọi đối tượng thuộc kn_owner.
-CREATE EXTENSION IF NOT EXISTS vector;       -- TODO spike M0 [cần xác minh]: pgvector có "trusted" ở bản pin không
+CREATE EXTENSION IF NOT EXISTS vector;       -- Cần xác minh: pgvector có "trusted" ở bản pin không
 CREATE SCHEMA IF NOT EXISTS acme AUTHORIZATION kn_owner;
 CREATE EXTENSION IF NOT EXISTS unaccent SCHEMA acme;
 
@@ -64,7 +64,7 @@ CREATE POLICY chunk_ingest ON chunks FOR ALL TO kn_ingest USING (true) WITH CHEC
 DROP POLICY IF EXISTS doc_ingest ON documents;
 CREATE POLICY doc_ingest ON documents FOR ALL TO kn_ingest USING (true) WITH CHECK (true);
 
--- tool_audit (contracts §3.6): hash-chain HMAC, chỉ INSERT/SELECT, trigger chặn UPDATE/DELETE/TRUNCATE.
+-- tool_audit (contracts §5): hash-chain HMAC, chỉ INSERT/SELECT, trigger chặn UPDATE/DELETE/TRUNCATE.
 CREATE SEQUENCE IF NOT EXISTS tool_audit_id_seq;
 CREATE TABLE IF NOT EXISTS tool_audit (
   id bigint PRIMARY KEY DEFAULT nextval('tool_audit_id_seq'),   -- app lấy nextval TRƯỚC khi băm
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS tool_audit (
   request_id uuid, actor_type text NOT NULL, actor_id text NOT NULL, end_user_sub text,
   action text NOT NULL, resource text, decision text NOT NULL CHECK (decision IN ('allow','deny','error')),
   details jsonb NOT NULL DEFAULT '{}',
-  intent_id uuid NULL,                   -- NULL với tool đọc (D14)
+  intent_id uuid NULL,                   -- NULL với tool đọc
   hmac_kid smallint NOT NULL, prev_hash bytea NOT NULL, hash bytea NOT NULL
 );
 CREATE OR REPLACE FUNCTION acme.audit_immutable() RETURNS trigger LANGUAGE plpgsql AS

@@ -94,7 +94,7 @@ test("đăng nhập thật, chat một vòng có stream, và bảo mật phía t
   const cookies = (await context.cookies(ORIGIN)).filter((c) => /(^|-)sid$/.test(c.name));
   expect(cookies).toHaveLength(1);
   const sid = cookies[0]!;
-  // Dev chạy http: bff dùng tên `sid` (không tiền tố), không đặt Secure; `__Host-sid` + Secure khi https (07 §2.2).
+  // Dev chạy http: bff dùng tên `sid` (không tiền tố), không đặt Secure; `__Host-sid` + Secure khi https.
   expect(sid.name).toBe("sid");
   expect(sid.httpOnly).toBe(true);
   expect(sid.sameSite).toBe("Strict");

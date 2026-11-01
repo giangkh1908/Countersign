@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# scripts/smoke.sh — kiểm các service M1 core đã lên và khoẻ sau `docker compose up -d --build`.
+# scripts/smoke.sh — kiểm các service lõi đã lên và khoẻ sau `docker compose up -d --build`.
 # Thoát khác 0 nếu có service nào hỏng. Dùng: bash scripts/smoke.sh
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-SERVICES=(postgres redis-state redis-cache keycloak mock-provider gateway docs-mcp agent bff)
+SERVICES=(postgres redis-state keycloak mock-provider gateway docs-mcp agent bff)
 INTERNAL=(agent:8200 docs-mcp:8101 mock-provider:8900)
 # Profile `tickets` (R0): chỉ kiểm tickets-mcp / approval-signer khi chúng đang chạy.
 if [ -n "$(docker compose ps -a -q tickets-mcp 2>/dev/null | head -n1)" ]; then

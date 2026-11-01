@@ -11,7 +11,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "redis>=8.1.0",
 ]
-# M2: pdf/docx loader, bge_reranker
+# Chưa có: pdf/docx loader, bge_reranker
 
 [dependency-groups]
 dev = [

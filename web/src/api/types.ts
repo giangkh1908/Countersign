@@ -1,4 +1,4 @@
-// Kiểu dùng chung + interface (port) của tầng API. Component chỉ phụ thuộc file này (07 §3.4).
+// Kiểu dùng chung + interface (port) của tầng API. Component chỉ phụ thuộc file này.
 import type { z } from "zod";
 import type { ApiError } from "./errors";
 import type {

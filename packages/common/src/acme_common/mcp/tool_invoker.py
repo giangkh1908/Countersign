@@ -1,4 +1,4 @@
-"""`ToolInvoker`: lớp cụ thể (không phải port) bọc handler nghiệp vụ (02 §1.1, §3).
+"""`ToolInvoker`: lớp cụ thể (không phải port) bọc handler nghiệp vụ.
 
 Chuỗi: validate schema (jsonschema 2020-12) -> scope lần 2 -> rate limit theo user (`RateLimiter`)
 -> timeout -> cắt output -> audit ở `finally` (cả khi bị từ chối/lỗi). Không dùng validator của SDK

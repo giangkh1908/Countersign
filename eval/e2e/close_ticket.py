@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""E2E "đóng ticket" trên stack compose THẬT, không trình duyệt (ROADMAP M1 DoD).
+"""E2E "đóng ticket" trên stack compose THẬT, không trình duyệt.
 
 Luồng (lặp lại đúng các lời gọi của BFF): token người dùng (Keycloak, client dev-only `e2e-test`)
 -> exchange `aud=agent-service` / `aud=approval-signer` bằng client `chat-ui` (như BFF) -> agent

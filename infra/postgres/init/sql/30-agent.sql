@@ -1,4 +1,4 @@
--- agent (contracts §3.5). Chạy bằng `postgres` trên DB agent; idempotent.
+-- agent (contracts §5). Chạy bằng `postgres` trên DB agent; idempotent.
 GRANT CONNECT ON DATABASE agent TO ag_owner, ag_app;
 GRANT USAGE ON SCHEMA public TO ag_app;
 

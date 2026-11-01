@@ -1,4 +1,4 @@
-"""Adapter `Embedder` tất định: hashing trick trên từ + n-gram ký tự (dev và test, M1 mặc định).
+"""Adapter `Embedder` tất định: hashing trick trên từ + n-gram ký tự (dev và test, mặc định).
 
 Không phải embedding ngữ nghĩa: chỉ phản ánh trùng lặp từ/n-gram bề mặt (sau NFC, chữ thường, bỏ
 dấu). Cùng văn bản => cùng vector trên mọi máy (blake2b, không phụ thuộc PYTHONHASHSEED).

@@ -1,7 +1,7 @@
 #!/bin/sh
-# infra/redis/entrypoint.sh  (docs/design/04 §2.3)
+# infra/redis/entrypoint.sh
 # Render /tmp/users.acl từ template + SHA256 của các secret; thiếu secret -> hash "0" (không hợp lệ,
-# fail-closed). Placeholder không có trong template (vd redis-cache) bị sed bỏ qua.
+# fail-closed). Placeholder không có trong template không có trong template bị sed bỏ qua.
 set -eu
 h() {
   if [ -f "/run/secrets/$1" ]; then
@@ -10,7 +10,6 @@ h() {
     echo 0
   fi
 }
-sed -e "s/@@REDIS_GATEWAY@@/$(h redis_gateway_password)/" \
     -e "s/@@REDIS_TICKETS@@/$(h redis_tickets_password)/" \
     -e "s/@@REDIS_DOCS@@/$(h redis_docs_password)/" \
     -e "s/@@REDIS_BFF@@/$(h redis_bff_password)/" \

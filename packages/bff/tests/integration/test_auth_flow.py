@@ -116,7 +116,7 @@ async def test_me_returns_profile_and_csrf_token(logged_in: Env) -> None:
     assert body["sub"] == "user-1" and body["name"] == "Nguyễn A" and body["email"] == "a@acme.vn"
     assert body["roles"] == ["employee"] and body["depts"] == ["CS"] and body["clearance"] == 1
     assert body["csrf_token"] == logged_in.browser.client.cookies.get("__Host-csrf")
-    assert body["features"] == {"admin": False} and body["link_allowlist"] == []
+    assert body["link_allowlist"] == []
     assert {"idle_expires_at", "absolute_expires_at", "server_time"} <= body.keys()
 
 

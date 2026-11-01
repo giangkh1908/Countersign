@@ -6,11 +6,11 @@ kèm `sorted(registry)`.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
-from acme_common.ports import Clock, NotConfigured
+from acme_common.factory import lookup
+from acme_common.ports import Clock
 
 from .ports import (
     ApprovalSigner,
@@ -19,15 +19,6 @@ from .ports import (
     IntentVerifierNotConfigured,
 )
 from .settings import Settings
-
-
-def _lookup[T](
-    registry: Mapping[str, Callable[..., T]], name: str, err: type[NotConfigured]
-) -> Any:
-    try:
-        return registry[name]
-    except KeyError:
-        raise err(f"unknown adapter {name!r}; known: {sorted(registry)}") from None
 
 
 def _load_es256_jws(settings: Settings, clock: Clock) -> IntentVerifier:
@@ -47,7 +38,7 @@ _VERIFIERS: dict[str, Callable[[Settings, Clock], IntentVerifier]] = {"es256_jws
 
 
 def build_intent_verifier(name: str, settings: Settings, *, clock: Clock) -> IntentVerifier:
-    return _lookup(_VERIFIERS, name, IntentVerifierNotConfigured)(settings, clock)
+    return lookup(_VERIFIERS, name, IntentVerifierNotConfigured)(settings, clock)
 
 
 def _load_es256_jwt(settings: Settings, clock: Clock) -> ApprovalSigner:
@@ -68,4 +59,4 @@ _SIGNERS: dict[str, Callable[[Settings, Clock], ApprovalSigner]] = {"es256_jwt":
 
 
 def build_approval_signer(name: str, settings: Settings, *, clock: Clock) -> ApprovalSigner:
-    return _lookup(_SIGNERS, name, ApprovalSignerNotConfigured)(settings, clock)
+    return lookup(_SIGNERS, name, ApprovalSignerNotConfigured)(settings, clock)

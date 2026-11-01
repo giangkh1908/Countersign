@@ -1,4 +1,4 @@
-"""HTTP API của approval-signer (05 §5.3). Handler chỉ: Bearer -> TokenVerifier -> service -> map lỗi."""
+"""HTTP API của approval-signer. Handler chỉ: Bearer -> TokenVerifier -> service -> map lỗi."""
 
 from __future__ import annotations
 

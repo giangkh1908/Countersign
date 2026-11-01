@@ -1,7 +1,6 @@
-"""Spotlighting nội dung không tin cậy (02 §5.5): delimiter có nonce + datamarking + notice.
+"""Spotlighting nội dung không tin cậy: delimiter có nonce + datamarking + notice.
 
-Thiết kế nói module nằm ở `acme_common/services/spotlight.py` nhưng M1 chưa có ở common; bản này
-tạm đặt ở docs-mcp (cùng API: `new_spotlight`, `wrap`) để chuyển sang common khi tickets cần.
+Module này chưa có ở `acme_common/services/spotlight.py`, nên tạm đặt ở docs-mcp (cùng API: `new_spotlight`, `wrap`) để chuyển sang common khi tickets cần.
 """
 
 from __future__ import annotations

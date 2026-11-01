@@ -1,4 +1,4 @@
-/** Lệch giờ máy chủ - máy khách (ms), tính lúc nhận thẻ. Không tin đồng hồ máy (07 §3.6 mục 6). */
+/** Lệch giờ máy chủ - máy khách (ms), tính lúc nhận thẻ. Không tin đồng hồ máy. */
 export function clockSkew(serverTime: string, clientNow: number = Date.now()): number {
   const t = Date.parse(serverTime);
   return Number.isNaN(t) ? 0 : t - clientNow;

@@ -1,4 +1,4 @@
-"""Map lỗi sang JSON chuẩn (contracts §6.4): `{"error":{"code","message","retryable","request_id"}}`.
+"""Map lỗi sang JSON chuẩn (contracts §4): `{"error":{"code","message","retryable","request_id"}}`.
 
 Một hàm `to_http_error(exc)` duy nhất. Thông điệp tiếng Việt, chung chung; chi tiết chỉ vào log.
 """
