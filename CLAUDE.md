@@ -27,6 +27,8 @@ Chi tiết ở `docs/design/contracts.md` §9. Tóm tắt:
 - `docs/design/contracts.md` — hợp đồng dùng chung (nguồn chân lý); §9 là quy tắc Ports & Adapters
 - `docs/design/approval.md` — luồng phê duyệt thao tác ghi
 - `docs/design/rag-citations.md` — thiết kế RAG và trích dẫn
+- `docs/design/actions-roles.md` — thiết kế A1: ticket, notify-mcp, ma trận quyền
+- `docs/design/cache-observability.md` — thiết kế Q1: cache, trace, metric, canary
 - `docs/SOLUTION.md` — giải pháp và kiến trúc
 - `docs/ROADMAP.md` — milestone R0–R4, A1, Q1
 - `docs/adr/` — quyết định kiến trúc

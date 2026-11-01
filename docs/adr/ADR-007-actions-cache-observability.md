@@ -38,7 +38,7 @@ Câu hỏi nghiên cứu: giữ RQ1, RQ2. Sửa và thêm:
 
 Thực thi ở phía server: RLS cho dữ liệu, `AuthMiddleware` của MCP cho tool. Agent ẩn tool chỉ để tiện dùng, không phải lớp bảo vệ.
 
-Dự thảo ma trận, chốt ở milestone A1:
+Dự thảo ma trận, bản chốt và quy tắc chặn của `admin`/`auditor` ở [`design/actions-roles.md`](../design/actions-roles.md):
 
 | Vai trò | Tạo ticket | Đóng ticket | Gửi nhóm phòng | Gửi nhóm toàn công ty |
 |---|---|---|---|---|
@@ -62,7 +62,7 @@ Dự thảo ma trận, chốt ở milestone A1:
 
 - Trace bằng OpenTelemetry xuyên BFF → agent → gateway → MCP, truyền `traceparent`. OTel là chuẩn mở nên không bọc port.
 - Log JSON hiện có, thêm `trace_id`. Metric qua Prometheus + Grafana.
-- Backend trace chọn một loại nhẹ, chạy ở profile `obs`; chốt khi làm milestone Q1. Langfuse chỉ thêm nếu backend đó không đủ.
+- Backend trace là Tempo, chạy ở profile `obs` ([`design/cache-observability.md`](../design/cache-observability.md)). Langfuse chỉ thêm nếu backend đó không đủ.
 - Trace và log **không chứa nội dung** prompt, tài liệu, câu trả lời. Quét canary phải bao phủ cả trace.
 
 ### Eval
@@ -78,7 +78,7 @@ Bỏ: trang admin, i18n, HA, mTLS, Helm, secret manager, router chi phí, rate l
 
 Khảo sát GitHub ([`research/github-survey.md`](../research/github-survey.md)): không thấy dự án mở nào có đủ tổ hợp này, nên giữ hướng tự xây lõi.
 - `notify-mcp` tự viết, adapter Telegram dùng Bot API. MCP Telegram phổ biến nhất chạy bằng tài khoản người dùng, và các MCP nhắn tin có sẵn không có bí danh kênh, mức mật, phê duyệt.
-- Quan sát: thử OpenLLMetry (OTel) trước khi cân nhắc Langfuse.
+- Quan sát: OTel trực tiếp với span viết tay. OpenLLMetry mặc định ghi nội dung prompt vào span, trái với yêu cầu ở trên, nên không dùng.
 - Eval: metric tự viết là chính; DeepEval/Ragas chạy đối chứng.
 
 ## Hệ quả
