@@ -408,6 +408,21 @@
       "directAccessGrantsEnabled": false,
       "defaultClientScopes": [],
       "optionalClientScopes": []
+    },
+    {
+      "clientId": "admin-cli",
+      "name": "${client_admin-cli}",
+      "description": "Khai báo tường minh để tắt password grant (Keycloak tự tạo client này với directAccessGrantsEnabled=true)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [],
+      "webOrigins": []
     }
   ],
   "users": [
