@@ -14,7 +14,7 @@ from .settings import Settings
 log = logging.getLogger(__name__)
 
 # route -> tên trường Settings chứa URL MCP của nó
-OPTIONAL_AGENT_URLS: dict[str, str] = {"ticket": "mcp_tickets_url"}
+OPTIONAL_AGENT_URLS: dict[str, str] = {"ticket": "mcp_tickets_url", "report": "mcp_notify_url"}
 
 
 async def resolve_enabled_agents(settings: Settings, probe: ServiceProbe) -> Settings:

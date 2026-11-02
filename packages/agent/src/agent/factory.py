@@ -43,7 +43,17 @@ def _load_ticket(settings: Settings) -> AgentSpec:
     return load_ticket_spec(settings)
 
 
-_AGENTS: dict[str, Callable[[Settings], AgentSpec]] = {"docs": _load_docs, "ticket": _load_ticket}
+def _load_report(settings: Settings) -> AgentSpec:
+    from .agents.report import load_report_spec
+
+    return load_report_spec(settings)
+
+
+_AGENTS: dict[str, Callable[[Settings], AgentSpec]] = {
+    "docs": _load_docs,
+    "ticket": _load_ticket,
+    "report": _load_report,
+}
 
 
 def build_agent_registry(settings: Settings, names: tuple[str, ...] | None = None) -> AgentRegistry:

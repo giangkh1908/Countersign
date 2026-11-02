@@ -115,6 +115,9 @@ class FakeSupportJudge(SupportJudge):
         )
 
 
+_ANY_ARGS: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": True}
+
+
 class _AnyArgs(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -161,7 +164,7 @@ class FakeToolProvider(ToolProvider):
                 raise ToolException(str(r))
             return json.dumps(r)
 
-        return StructuredTool(name=name, description=name, args_schema=_AnyArgs, coroutine=run)
+        return StructuredTool(name=name, description=name, args_schema=_ANY_ARGS, coroutine=run)
 
     async def commit_intent(
         self,

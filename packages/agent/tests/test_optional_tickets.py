@@ -13,7 +13,7 @@ TICKETS = "http://tickets-mcp:8102/mcp"
 
 
 def _s(**kw: str) -> Settings:
-    return Settings(acme_env="test", **kw)
+    return Settings(acme_env="test", **{"agents_enabled": "docs,ticket", **kw})
 
 
 async def test_tickets_on_when_reachable():

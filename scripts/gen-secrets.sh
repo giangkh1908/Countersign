@@ -26,8 +26,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-mkdir -p "$SEC/intent-keys/tickets-mcp"
-chmod 755 "$SEC" "$SEC/intent-keys" "$SEC/intent-keys/tickets-mcp" 2>/dev/null || true
+mkdir -p "$SEC/intent-keys/tickets-mcp" "$SEC/intent-keys/notify-mcp"
+chmod 755 "$SEC" "$SEC/intent-keys" "$SEC/intent-keys/tickets-mcp" "$SEC/intent-keys/notify-mcp" 2>/dev/null || true
 
 # tr -d '\r': openssl trên Git Bash/Windows in CRLF; ký tự CR lọt vào secret làm hỏng env/JSON (vd import realm Keycloak).
 rand_pw()  { openssl rand -base64 33 | tr -d '=+/\r\n' | cut -c1-40; }
@@ -58,7 +58,8 @@ put_empty() {
 }
 
 for n in pg_superuser_password gw_owner_password gw_app_password kn_owner_password kn_app_password \
-         kn_ingest_password tk_owner_password tk_app_password \
+         kn_ingest_password tk_owner_password tk_app_password nt_owner_password nt_app_password \
+         redis_notify_password \
          ag_app_password ag_owner_password mcp_audit_password kc_app_password \
          gw_report_password redis_tickets_password redis_docs_password \
          redis_bff_password redis_ops_password redis_health_password \
@@ -79,6 +80,7 @@ put bff_oidc_client_secret rand_hex 24
 put_empty docs_gateway_key      # key service docs-mcp -> gateway (Admin API POST /admin/keys)
 put_empty agent_gateway_key     # key của agent-service (tạo sau khi gateway chạy)
 put_empty anthropic_api_key     # điền key thật nếu dùng provider thật
+put_empty telegram_bot_token    # token bot Telegram cho notify-mcp (chỉ cần khi kênh dùng adapter telegram)
 
 # URL đầy đủ cho gateway; mật khẩu chỉ gồm [A-Za-z0-9] nên không cần url-encode
 if should_write gw_database_url || [ "$ROTATE" = "gw_app_password" ]; then
@@ -101,7 +103,10 @@ put_url docs_redis_url             'redis://docs:@PW@@redis-state:6379/0'       
 put_url tickets_database_url       'postgresql://tk_app:@PW@@postgres:5432/tickets'          tk_app_password
 put_url tickets_audit_database_url 'postgresql://mcp_audit_w:@PW@@postgres:5432/tickets'     mcp_audit_password
 put_url tickets_redis_url          'redis://tickets:@PW@@redis-state:6379/0'                 redis_tickets_password
-put_url agent_database_url         'postgresql://ag_app:@PW@@postgres:5432/agent'            ag_app_password
+put_url notify_database_url        'postgresql://nt_app:@PW@@postgres:5432/notify'           nt_app_password
+put_url notify_audit_database_url  'postgresql://mcp_audit_w:@PW@@postgres:5432/notify'     mcp_audit_password
+put_url notify_redis_url           'redis://notify:@PW@@redis-state:6379/0'                  redis_notify_password
+put_url agent_database_url        'postgresql://ag_app:@PW@@postgres:5432/agent'            ag_app_password
 
 # Cặp khoá ES256: approval (private -> approval-signer, public -> tickets-mcp),
 # intent (private -> tickets-mcp, public -> approval-signer qua secrets/intent-keys/)
@@ -116,6 +121,10 @@ genkey approval
 genkey intent
 cp "$SEC/intent_es256_public.pem" "$SEC/intent-keys/tickets-mcp/tickets-mcp-1.pem"
 chmod "$MODE" "$SEC/intent-keys/tickets-mcp/tickets-mcp-1.pem"
+# notify-mcp dùng khoá intent RIÊNG (mạo danh tickets-mcp/notify-mcp lẫn nhau không được)
+genkey intent_notify
+cp "$SEC/intent_notify_es256_public.pem" "$SEC/intent-keys/notify-mcp/notify-mcp-1.pem"
+chmod "$MODE" "$SEC/intent-keys/notify-mcp/notify-mcp-1.pem"
 
 # .env: tham số KHÔNG bí mật (xem .env.example)
 if [ ! -f "$ROOT/.env" ] || [ "$CI" -eq 1 ]; then

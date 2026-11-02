@@ -1,0 +1,29 @@
+# Kênh báo cáo của notify-mcp (docs/design/actions-roles.md §3).
+# Agent chỉ thấy bí danh (khoá bên dưới), không bao giờ thấy chat ID.
+#   adapter:   fake | telegram
+#   chat_ref:  TÊN biến môi trường (hoặc <TÊN>_FILE) chứa chat ID thật; KHÔNG ghi chat ID vào file này
+#   scope:     dept (cần dept) | company
+#   max_class: mức mật tối đa của tài liệu thread được phép chạm trước khi gửi; kênh ngoài hạ tầng công ty
+#              bị chặn <= 1 lúc nạp (khai cao hơn thì notify-mcp không khởi động)
+#
+# Mặc định dùng adapter `fake`: KHÔNG gửi gì ra ngoài (chỉ để chạy luồng duyệt không cần bot).
+# Muốn gửi thật vào nhóm Telegram thử nghiệm: đổi adapter sang `telegram`, ghi token bot vào
+# secrets/telegram_bot_token và chat ID của nhóm vào biến tương ứng (vd TG_CHAT_ENG_FILE).
+channels:
+  dept-eng:
+    adapter: fake
+    chat_ref: TG_CHAT_ENG
+    scope: dept
+    dept: ENG
+    max_class: 1
+  dept-sales:
+    adapter: fake
+    chat_ref: TG_CHAT_SALES
+    scope: dept
+    dept: SALES
+    max_class: 1
+  company-all:
+    adapter: fake
+    chat_ref: TG_CHAT_ALL
+    scope: company
+    max_class: 0

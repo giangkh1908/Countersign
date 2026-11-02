@@ -20,6 +20,7 @@ WORKSPACE = {
     "gateway",
     "mcp_docs",
     "mcp_tickets",
+    "mcp_notify",
     "approval_signer",
     "mock_provider",
 }

@@ -79,7 +79,7 @@ def test_wrong_key_cannot_decrypt():
 
 def test_registry_known_and_unknown():
     s = Settings(acme_env="test")
-    assert build_agent_registry(s).routes() == ["docs", "ticket"]
+    assert build_agent_registry(s).routes() == ["docs", "ticket", "report"]
     with pytest.raises(AgentNotConfigured, match="known"):
         build_agent_registry(s, ("nope",))
 

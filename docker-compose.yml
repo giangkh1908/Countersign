@@ -23,7 +23,7 @@ x-pyapp-env: &pyapp-env
 networks:
   edge:   { driver: bridge }
   core:   { driver: bridge, internal: true }
-  egress: { driver: bridge }              # chỉ gateway tham gia
+  egress: { driver: bridge }              # chỉ gateway và notify-mcp (api.telegram.org) tham gia
 
 volumes:
   pg_data: {}
@@ -78,6 +78,15 @@ secrets:                                   # sinh bởi scripts/gen-secrets.sh (
   tickets_audit_database_url: { file: ./secrets/tickets_audit_database_url } # role mcp_audit_w @ tickets
   tickets_redis_url:          { file: ./secrets/tickets_redis_url }
   agent_database_url:         { file: ./secrets/agent_database_url }         # role ag_app
+  # notify-mcp (profile `notify`)
+  nt_owner_password:          { file: ./secrets/nt_owner_password }
+  nt_app_password:            { file: ./secrets/nt_app_password }
+  redis_notify_password:      { file: ./secrets/redis_notify_password }
+  notify_database_url:        { file: ./secrets/notify_database_url }        # role nt_app
+  notify_audit_database_url:  { file: ./secrets/notify_audit_database_url }  # role mcp_audit_w @ notify
+  notify_redis_url:           { file: ./secrets/notify_redis_url }
+  notify_intent_private_key:  { file: ./secrets/intent_notify_es256_private.pem }   # CHỈ mount vào notify-mcp
+  telegram_bot_token:         { file: ./secrets/telegram_bot_token }               # CHỈ mount vào notify-mcp; rỗng nếu chưa có bot
 
 services:
   # ───────────── dữ liệu ─────────────
@@ -96,7 +105,7 @@ services:
                -c shared_buffers=256MB -c max_connections=200
                -c log_connections=on -c log_min_duration_statement=500
     secrets: [pg_superuser_password, gw_owner_password, gw_app_password, kn_owner_password, kn_app_password,
-              kn_ingest_password, tk_owner_password, tk_app_password,
+              kn_ingest_password, tk_owner_password, tk_app_password, nt_owner_password, nt_app_password,
               ag_app_password, ag_owner_password, mcp_audit_password, kc_app_password, gw_report_password]
     volumes:
       - pg_data:/var/lib/postgresql/data
@@ -118,7 +127,7 @@ services:
     user: "999:999"                         # cap_drop ALL => root không có DAC_OVERRIDE; chạy thẳng user redis
     entrypoint: ["/bin/sh", "/etc/redis/entrypoint.sh"]       # render users.acl từ secret
     command: ["redis-server", "/etc/redis/redis-state.conf"]
-    secrets: [redis_tickets_password, redis_docs_password, redis_bff_password, redis_ops_password, redis_health_password]
+    secrets: [redis_tickets_password, redis_notify_password, redis_docs_password, redis_bff_password, redis_ops_password, redis_health_password]
     volumes:
       - redis_state_data:/data
       - ./infra/redis/redis-state.conf:/etc/redis/redis-state.conf:ro
@@ -245,7 +254,7 @@ services:
 
   # ───────────── approval signer ─────────────
   approval-signer:
-    profiles: ["tickets"]                       # R0: luồng ticket đóng băng, chỉ chạy với --profile tickets
+    profiles: ["tickets", "notify"]             # R0: luồng ghi đóng băng, chỉ chạy với --profile tickets hoặc notify
     build: { context: ., dockerfile: Dockerfile, target: approval_signer }
     image: acme/approval-signer:dev
     <<: *hardened
@@ -256,7 +265,8 @@ services:
       SIGNER_ALLOWED_AZP: chat-ui                 # BFF dùng client chat-ui; không có client bff
       APPROVAL_SIGNER_PRIVATE_KEY_PATH: /run/secrets/approval_signer_private_key
       APPROVAL_SIGNER_KEY_ID: ${APPROVAL_SIGNER_KEY_ID:-ap-1}
-      INTENT_PUBLIC_KEYS_DIR: /run/intent-keys    # public key intent của tickets-mcp, read-only
+      INTENT_PUBLIC_KEYS_DIR: /run/intent-keys    # public key intent của tickets-mcp và notify-mcp (mỗi MCP một thư mục), read-only
+      INTENT_ISSUER_NAMES: "tickets-mcp,notify-mcp"
       APPROVAL_TTL_S: "120"
     secrets:
       - metrics_token
@@ -367,6 +377,42 @@ services:
       retries: 10
     deploy: { resources: { limits: { cpus: "0.5", memory: 512m } } }
 
+  # notify-mcp: DUY NHẤT service ngoài gateway có đường ra Internet (api.telegram.org). Chỉ nhận
+  # `send_group_report` đã duyệt; bot token chỉ mount ở đây (không vào agent/gateway/signer).
+  notify-mcp:
+    profiles: ["notify"]
+    build: { context: ., dockerfile: Dockerfile, target: mcp_notify }
+    image: acme/mcp-notify:dev
+    <<: *hardened
+    environment:
+      <<: *pyapp-env
+      MCP_AUDIENCE: notify-mcp
+      MCP_PORT: "8103"
+      MCP_ALLOWED_HOSTS: "notify-mcp:8103,localhost:8103,127.0.0.1:8103"
+      MCP_DATABASE_URL_FILE: /run/secrets/notify_database_url
+      MCP_AUDIT_DATABASE_URL_FILE: /run/secrets/notify_audit_database_url
+      MCP_REDIS_URL_FILE: /run/secrets/notify_redis_url
+      APPROVAL_PUBLIC_KEY_PATH: /run/secrets/approval_public_key
+      INTENT_PRIVATE_KEY_PATH: /run/secrets/notify_intent_private_key
+      INTENT_KEY_ID: notify-mcp-1                                    # = secrets/intent-keys/notify-mcp/notify-mcp-1.pem
+      INTENT_TTL_S: "300"
+      NOTIFY_CHANNELS_FILE: /etc/notify/channels.yaml
+      TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram_bot_token
+      AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key
+    secrets: [notify_database_url, notify_audit_database_url, notify_redis_url, approval_public_key, notify_intent_private_key, telegram_bot_token, audit_hmac_key, metrics_token]
+    volumes:
+      - ./infra/notify/channels.yaml:/etc/notify/channels.yaml:ro
+    networks: [core, egress]
+    depends_on:
+      postgres:    { condition: service_healthy }
+      redis-state: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8103/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { cpus: "0.5", memory: 256m } } }
+
   # ───────────── agent + bff ─────────────
   agent:
     build: { context: ., dockerfile: Dockerfile, target: agent }
@@ -380,6 +426,7 @@ services:
       AGENT_DATABASE_URL_FILE: /run/secrets/agent_database_url
       MCP_DOCS_URL: http://docs-mcp:8101/mcp
       MCP_TICKETS_URL: http://tickets-mcp:8102/mcp
+      MCP_NOTIFY_URL: http://notify-mcp:8103/mcp
       AGENT_CHECKPOINT_ENCRYPTION_KEY_FILE: /run/secrets/agent_checkpoint_key   # checkpoint mã hoá mặc định
       AGENT_THREAD_RETENTION_DAYS: "30"
       AGENT_VERIFY_CITATIONS: ${AGENT_VERIFY_CITATIONS:-on}
@@ -391,6 +438,7 @@ services:
       keycloak:      { condition: service_healthy }
       docs-mcp:      { condition: service_healthy }
       tickets-mcp:   { condition: service_healthy, required: false }   # profile `tickets` tắt thì bỏ qua; bật thì agent chờ tickets-mcp khoẻ (agent cũng tự dò lại định kỳ)
+      notify-mcp:    { condition: service_healthy, required: false }   # profile `notify` tắt thì bỏ qua
       migrate:       { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8200/healthz', timeout=2)"]

@@ -282,6 +282,28 @@
           }
         }
       ]
+    },
+    {
+      "name": "notify:write",
+      "description": "",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "aud-notify-mcp",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "notify-mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "scopeMappings": [
@@ -350,7 +372,8 @@
         "llm:invoke",
         "docs:read",
         "tickets:read",
-        "tickets:write"
+        "tickets:write",
+        "notify:write"
       ]
     },
     {
@@ -385,6 +408,20 @@
       "clientId": "tickets-mcp",
       "name": "tickets-mcp",
       "description": "resource server: tickets MCP",
+      "enabled": true,
+      "bearerOnly": true,
+      "fullScopeAllowed": false,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "notify-mcp",
+      "name": "notify-mcp",
+      "description": "resource server: notify MCP",
       "enabled": true,
       "bearerOnly": true,
       "fullScopeAllowed": false,

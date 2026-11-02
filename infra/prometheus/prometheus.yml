@@ -16,6 +16,7 @@ scrape_configs:
     static_configs:
       - { targets: ["docs-mcp:8101"],      labels: { server: docs } }
       - { targets: ["tickets-mcp:8102"],   labels: { server: tickets } }
+      - { targets: ["notify-mcp:8103"],    labels: { server: notify } }
   - job_name: agent
     authorization: { credentials_file: /run/secrets/metrics_token }
     static_configs: [{ targets: ["agent:8200"] }]
