@@ -21,7 +21,7 @@ class Settings(CommonSettings):
     approval_signer_private_key: str | None = None  # nội dung PEM, đặt qua *_PRIVATE_KEY_FILE
     approval_signer_key_id: str | None = None
     intent_public_keys_dir: str | None = None
-    intent_issuer_name: str = "tickets-mcp"
+    intent_issuer_names: str = "tickets-mcp"  # danh sách iss tin cậy, cách nhau bởi dấu phẩy
     approval_ttl_s: int = 120
 
     # --- Chọn adapter (registry trong factory.py) ---

@@ -13,6 +13,19 @@ SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 _CODE = {"type": "string", "pattern": "^TCK-[0-9]{6,}$"}
 _STATUS = {"enum": ["open", "in_progress", "resolved", "closed"]}
 _PRIORITY = {"enum": ["low", "medium", "high", "urgent"]}
+_CATEGORY = {
+    "enum": [
+        "quote_support",
+        "refund_request",
+        "complaint",
+        "feature_request",
+        "leave_request",
+        "payroll_query",
+        "account_access",
+        "other",
+    ]
+}
+_DEPT = {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$"}
 _READ_HINTS = {
     "readOnlyHint": True,
     "destructiveHint": False,
@@ -112,6 +125,34 @@ SPECS: dict[str, ToolSpec] = {
         timeout_s=8,
         cost=5,
     ),
+    "prepare_create_ticket": ToolSpec(
+        name="prepare_create_ticket",
+        title="Chuẩn bị tạo ticket",
+        description=(
+            "Chuẩn bị tạo ticket mới và trả về intent. KHÔNG tạo ticket: ticket chỉ có sau khi "
+            "người dùng duyệt và `commit_intent` chạy."
+        ),
+        input_schema=_obj(
+            {
+                "title": {"type": "string", "minLength": 3, "maxLength": 200},
+                "body": {"type": "string", "minLength": 3, "maxLength": 4000},
+                "category": _CATEGORY,
+                "priority": {**_PRIORITY, "default": "medium"},
+                "assignee_dept": _DEPT,
+                "classification": {"type": "integer", "minimum": 0, "maximum": 3, "default": 1},
+            },
+            ["title", "body", "category", "assignee_dept"],
+        ),
+        annotations={
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+        required_scopes=("tickets:write",),
+        timeout_s=8,
+        cost=5,
+    ),
     "commit_intent": ToolSpec(
         name="commit_intent",
         title="Thực hiện thao tác đã được duyệt",
@@ -189,6 +230,18 @@ def register_tools(host: ToolServerHost, invoker: ToolInvoker, svc: TicketServic
             },
         )
 
+    async def prepare_create_ticket(ctx: CallerContext, a: dict[str, Any]) -> ToolOutput:
+        data = await svc.prepare_create_ticket(ctx.principal, ctx.thread_id, a)
+        return ToolOutput(
+            data,
+            {
+                "intent_id": data["intent_id"],
+                "tables_read": [],
+                "op": "create_ticket",
+                "risk_flags": data["risk_flags"],
+            },
+        )
+
     async def commit_intent(ctx: CallerContext, a: dict[str, Any]) -> ToolOutput:
         data = await svc.commit_intent(
             ctx.principal, a["intent_id"], a["approval_token"], a.get("args")
@@ -207,6 +260,7 @@ def register_tools(host: ToolServerHost, invoker: ToolInvoker, svc: TicketServic
         "get_ticket": get_ticket,
         "search_tickets": search_tickets,
         "prepare_close_ticket": prepare_close_ticket,
+        "prepare_create_ticket": prepare_create_ticket,
         "commit_intent": commit_intent,
     }
     for name, spec in SPECS.items():

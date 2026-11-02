@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import abc
 
-from acme_common.ports import Principal
-
-from .types import Approval
+from .intent_types import Approval
+from .types import Principal
 
 
 class ApprovalVerifier(abc.ABC):

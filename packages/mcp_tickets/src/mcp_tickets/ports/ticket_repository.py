@@ -10,9 +10,9 @@ import abc
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from acme_common.ports import Principal
+from acme_common.ports import Approval, Intent, Principal
 
-from .types import AppliedOp, Approval, Audience, Comment, Intent, Ticket
+from .types import AppliedOp, Audience, Comment, Ticket
 
 
 class TicketRepository(abc.ABC):

@@ -9,19 +9,20 @@ from typing import Any
 
 import fakeredis
 import jwt
+from acme_common.adapters.approval_es256_jwt import Es256JwtApprovalVerifier
+from acme_common.adapters.intent_es256_jws import Es256JwsIntentIssuer
+from acme_common.adapters.replay_memory import InMemoryReplayGuard
 from acme_common.mcp import ToolInvoker
 from acme_common.mcp.context import AuthContext, reset_auth, set_auth
 from acme_common.ports import Principal
 from acme_common.testing import FakeClock, FakeEventSink, FakeRateLimiter, FakeToolServerHost
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from mcp_tickets.adapters.es256_jws import Es256JwsIntentIssuer
-from mcp_tickets.adapters.es256_jwt import Es256JwtApprovalVerifier
-from mcp_tickets.adapters.in_memory_replay import InMemoryReplayGuard
 from mcp_tickets.services.ticket_service import TicketService
 from mcp_tickets.testing import FakeTicketRepository, make_ticket
 from mcp_tickets.tools import register_tools
 
+INTENT_PREFIX = "mcp:tickets:intent:"
 START = datetime(2026, 1, 1, 9, 0, 0, tzinfo=UTC)
 ASSIGNEE = "u-agent"
 REQUESTER = "u-req"
@@ -79,6 +80,8 @@ class Env:
             private_key_pem=pem_private(self.intent_key),
             key_id="tickets-mcp-1",
             clock=self.clock,
+            issuer="tickets-mcp",
+            redis_prefix=INTENT_PREFIX,
         )
         self.verifier = Es256JwtApprovalVerifier(
             {"ap-1": self.approval_key.public_key()}, self.clock

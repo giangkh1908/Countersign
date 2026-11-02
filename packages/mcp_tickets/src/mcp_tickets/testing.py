@@ -124,12 +124,14 @@ class FakeTicketRepository(TicketRepository):
     ) -> AppliedOp:
         if self.fail_commit_with is not None:
             raise self.fail_commit_with
-        if intent.op != "close_ticket":
+        if intent.op not in ("close_ticket", "create_ticket"):
             raise UnsupportedOperation(intent.op)
         if any(
             e.intent_id == intent.intent_id or e.approval_jti == approval.jti for e in self.events
         ):
             raise DuplicateIntent
+        if intent.op == "create_ticket":
+            return self._create(intent, approval, principal)
         t = self.tickets.get(intent.ticket_code or "")
         if t is None or intent.expected_updated_at is None:
             raise RepositoryRolledBack
@@ -153,13 +155,31 @@ class FakeTicketRepository(TicketRepository):
         self.audit.append({"intent_id": intent.intent_id, "ticket_code": t.code})
         return AppliedOp("close_ticket", t.code, ev.event_id, approval.jti, new)
 
+    def _create(self, intent: Intent, approval: Approval, principal: Principal) -> AppliedOp:
+        a, now = intent.args, self.clock.now()
+        code = f"TCK-{len(self.tickets) + 1000:06d}"  # cấp lúc commit
+        new = Ticket(
+            code=code, title=a["title"], description=a["body"], status="open",
+            priority=a["priority"], category=a["category"], requester_sub=principal.sub,
+            requester_dept=principal.dept[0], assignee_dept=a["assignee_dept"],
+            classification=a["classification"], created_at=now, updated_at=now,
+        )  # fmt: skip
+        self.tickets[code] = new
+        ev = FakeEvent(
+            len(self.events) + 1, code, principal.sub, "create", approval.jti,
+            intent.intent_id, intent.sha256, intent.before, intent.after,
+        )  # fmt: skip
+        self.events.append(ev)
+        self.audit.append({"intent_id": intent.intent_id, "ticket_code": code})
+        return AppliedOp("create_ticket", code, ev.event_id, approval.jti, new)
+
     async def find_applied(self, intent_id: str, principal: Principal) -> AppliedOp | None:
         for e in self.events:
             if e.intent_id == intent_id:
+                op = "create_ticket" if e.action == "create" else "close_ticket"
                 return AppliedOp(
-                    "close_ticket", e.ticket_code, e.event_id, e.approval_jti,
-                    self.tickets[e.ticket_code],
-                )  # fmt: skip
+                    op, e.ticket_code, e.event_id, e.approval_jti, self.tickets[e.ticket_code]
+                )
         return None
 
 

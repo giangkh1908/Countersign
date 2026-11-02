@@ -31,6 +31,11 @@ from .ports import (
 from .settings import Settings
 
 
+def _redis_ns(s: Settings) -> str:
+    """`mcp:<tên>:` theo ACL Redis (mỗi MCP một user, một tiền tố): `tickets-mcp` -> `mcp:tickets:`."""
+    return f"mcp:{s.mcp_audience.removesuffix('-mcp')}:"
+
+
 # --- TicketRepository ---
 def _load_postgres_repository(s: Settings) -> TicketRepository:
     from .adapters.postgres_tickets import PostgresTicketRepository
@@ -54,7 +59,7 @@ def build_ticket_repository(name: str, settings: Settings) -> TicketRepository:
 
 # --- IntentIssuer ---
 def _load_es256_jws(s: Settings, redis: Any, clock: Clock) -> IntentIssuer:
-    from .adapters.es256_jws import Es256JwsIntentIssuer
+    from acme_common.adapters.intent_es256_jws import Es256JwsIntentIssuer
 
     if not s.intent_private_key_path:
         raise IntentIssuerNotConfigured("es256_jws needs INTENT_PRIVATE_KEY_PATH")
@@ -63,6 +68,8 @@ def _load_es256_jws(s: Settings, redis: Any, clock: Clock) -> IntentIssuer:
         private_key_pem=Path(s.intent_private_key_path).read_bytes(),
         key_id=s.intent_key_id,
         clock=clock,
+        issuer=s.mcp_audience,
+        redis_prefix=_redis_ns(s) + "intent:",
         ttl_s=s.intent_ttl_s,
         audience=s.intent_audience,
     )
@@ -79,7 +86,7 @@ def build_intent_issuer(name: str, settings: Settings, *, redis: Any, clock: Clo
 
 # --- ApprovalVerifier ---
 def _load_es256_jwt(s: Settings, clock: Clock) -> ApprovalVerifier:
-    from .adapters.es256_jwt import Es256JwtApprovalVerifier, load_trusted_keys
+    from acme_common.adapters.approval_es256_jwt import Es256JwtApprovalVerifier, load_trusted_keys
 
     if not s.approval_public_key_path:
         raise ApprovalVerifierNotConfigured("es256_jwt needs APPROVAL_PUBLIC_KEY_PATH")
@@ -102,13 +109,13 @@ def build_approval_verifier(name: str, settings: Settings, *, clock: Clock) -> A
 
 # --- ReplayGuard ---
 def _load_redis_replay(s: Settings, redis: Any, clock: Clock) -> ReplayGuard:
-    from .adapters.redis_replay import RedisReplayGuard
+    from acme_common.adapters.replay_redis import RedisReplayGuard
 
-    return RedisReplayGuard(redis)
+    return RedisReplayGuard(redis, prefix=_redis_ns(s) + "jti:")
 
 
 def _load_in_memory_replay(s: Settings, redis: Any, clock: Clock) -> ReplayGuard:
-    from .adapters.in_memory_replay import InMemoryReplayGuard
+    from acme_common.adapters.replay_memory import InMemoryReplayGuard
 
     return InMemoryReplayGuard(clock)
 

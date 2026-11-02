@@ -22,17 +22,19 @@ _OPS: dict[str, tuple[str, _Spec, _Spec]] = {
         "Tạo ticket mới",
         {
             "title": _TITLE_LABEL,
-            "description": ("Mô tả", "longtext"),
+            "body": ("Mô tả", "longtext"),
             "category": ("Loại", "enum"),
             "priority": ("Ưu tiên", "enum"),
             "assignee_dept": ("Phòng xử lý", "text"),
+            "classification": ("Mức mật", "enum"),
         },
         {
             "title": _TITLE_LABEL,
-            "description": ("Mô tả", "longtext"),
+            "body": ("Mô tả", "longtext"),
             "category": ("Loại", "enum"),
             "priority": ("Ưu tiên", "enum"),
             "assignee_dept": ("Phòng xử lý", "text"),
+            "classification": ("Mức mật", "enum"),
             "status": ("Trạng thái", "enum"),
         },
     ),
@@ -71,6 +73,11 @@ _OPS: dict[str, tuple[str, _Spec, _Spec]] = {
             "resolution": ("Cách xử lý", "longtext"),
         },
     ),
+}
+# Gắn op với issuer: op chỉ được nhận từ MCP sở hữu nó. Thêm MCP ghi mới = thêm một dòng ở đây
+# (và `_AUD_BY_INTENT_ISS` ở adapters/es256_jwt.py), cùng thư mục khoá `INTENT_PUBLIC_KEYS_DIR/<iss>/`.
+ISSUER_OPS: dict[str, frozenset[str]] = {
+    "tickets-mcp": frozenset({"create_ticket", "add_comment", "update_status", "close_ticket"}),
 }
 _TARGET: _Spec = {"ticket_code": ("Ticket", "ticket_ref"), "title": _TITLE_LABEL}
 _MAX_STR = 8192

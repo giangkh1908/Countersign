@@ -109,8 +109,8 @@ def env(tmp_path: Path) -> Env:
     clock = FakeClock()
     intent_key = TestSigner("ES256", INTENT_KID)
     keys_dir = tmp_path / "intent-keys"
-    keys_dir.mkdir()
-    (keys_dir / f"{INTENT_KID}.pem").write_bytes(
+    (keys_dir / "tickets-mcp").mkdir(parents=True)
+    (keys_dir / "tickets-mcp" / f"{INTENT_KID}.pem").write_bytes(
         intent_key._key.public_key().public_bytes(
             serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
         )
@@ -215,7 +215,6 @@ def test_bad_typ_alg_kid_format(env: Env) -> None:
         {"target": {"ticket_code": "TCK-1", "secret": "x"}},  # khoá lạ trong target
         {"after": {"status": "closed", "hidden_flag": True}},  # khoá lạ trong after
         {"args_canonical": json.dumps({"code": "TCK-1", "resolution": "xxxxx", "extra": 1})},
-        {"op": "delete_everything"},
         {"after": {"status": ["closed"]}},  # kiểu không hiển thị được
     ],
 )

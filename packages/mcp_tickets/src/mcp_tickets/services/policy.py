@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from acme_common.ports import Principal
+from acme_common.services.capabilities import Capability, allows
 from acme_common.services.taint import TaintView
 
 from ..ports import Audience, Ticket
 
-LEADS = frozenset({"team_lead", "dept_manager"})
+# vai trò thấy ticket giao cho phòng mình (`management` không có `employee`; khớp RLS tk_select)
+DEPT_VIEWERS = frozenset({"employee", "management"})
 RISK_FLAGS = ("destructive", "internal_comment", "priority_urgent", "possible_downgrade")
 # state machine; `closed` là trạng thái cuối
 TRANSITIONS: dict[str, frozenset[str]] = {
@@ -21,16 +23,20 @@ TRANSITIONS: dict[str, frozenset[str]] = {
 def can_view(p: Principal, t: Ticket) -> bool:
     return (
         t.requester_sub == p.sub
-        or (t.assignee_dept in p.dept and "employee" in p.roles)
+        or (t.assignee_dept in p.dept and bool(DEPT_VIEWERS & set(p.roles)))
         or "admin" in p.roles
     )
 
 
+def can_create(p: Principal) -> bool:
+    return allows(p.roles, Capability.CREATE_TICKET)
+
+
 def can_modify(p: Principal, t: Ticket) -> bool:
-    return (
-        t.assignee_sub == p.sub
-        or "admin" in p.roles
-        or (t.assignee_dept in p.dept and bool(LEADS & set(p.roles)))
+    """Đóng ticket theo ma trận §1: được giao cho mình, hoặc trong phòng (dept_manager, management).
+    `admin`/`auditor` chặn mọi quyền ghi dù có thêm vai trò khác."""
+    return (t.assignee_sub == p.sub and allows(p.roles, Capability.CLOSE_ASSIGNED)) or (
+        t.assignee_dept in p.dept and allows(p.roles, Capability.CLOSE_IN_DEPT)
     )
 
 

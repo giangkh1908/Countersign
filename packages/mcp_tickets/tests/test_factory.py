@@ -66,7 +66,7 @@ def test_missing_config_is_explicit() -> None:
 
 
 def test_approval_keys_directory(tmp_path) -> None:
-    from mcp_tickets.adapters.es256_jwt import load_trusted_keys
+    from acme_common.adapters.approval_es256_jwt import load_trusted_keys
 
     (tmp_path / "ap-1.pem").write_bytes(pem_public(new_key()))
     (tmp_path / "ap-2.pem").write_bytes(pem_public(new_key()))

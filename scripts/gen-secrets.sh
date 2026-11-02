@@ -26,8 +26,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-mkdir -p "$SEC/intent-keys"
-chmod 755 "$SEC" "$SEC/intent-keys" 2>/dev/null || true
+mkdir -p "$SEC/intent-keys/tickets-mcp"
+chmod 755 "$SEC" "$SEC/intent-keys" "$SEC/intent-keys/tickets-mcp" 2>/dev/null || true
 
 # tr -d '\r': openssl trên Git Bash/Windows in CRLF; ký tự CR lọt vào secret làm hỏng env/JSON (vd import realm Keycloak).
 rand_pw()  { openssl rand -base64 33 | tr -d '=+/\r\n' | cut -c1-40; }
@@ -114,8 +114,8 @@ genkey() {
 }
 genkey approval
 genkey intent
-cp "$SEC/intent_es256_public.pem" "$SEC/intent-keys/tickets-mcp-1.pem"
-chmod "$MODE" "$SEC/intent-keys/tickets-mcp-1.pem"
+cp "$SEC/intent_es256_public.pem" "$SEC/intent-keys/tickets-mcp/tickets-mcp-1.pem"
+chmod "$MODE" "$SEC/intent-keys/tickets-mcp/tickets-mcp-1.pem"
 
 # .env: tham số KHÔNG bí mật (xem .env.example)
 if [ ! -f "$ROOT/.env" ] || [ "$CI" -eq 1 ]; then

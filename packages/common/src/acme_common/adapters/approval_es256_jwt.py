@@ -11,10 +11,11 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import jwt
-from acme_common.ports import Clock, Principal
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
+
+from acme_common.ports import Clock, Principal
 
 from ..ports import Approval, ApprovalRejected, ApprovalVerifier
 

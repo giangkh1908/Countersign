@@ -119,6 +119,7 @@ Một instance (`redis-state`), bắt buộc mật khẩu, ACL theo user (`infra
 | docs-mcp | `search_documents(query, top_k, department_filter?)` | `docs:read` | Lọc ACL trong SQL và RLS; kết quả bọc spotlighting, đánh dấu không đáng tin; ghi taint |
 | tickets-mcp | `list_my_tickets`, `get_ticket`, `search_tickets` | `tickets:read` | RLS theo người gọi |
 | tickets-mcp | `prepare_close_ticket(code, resolution)` | `tickets:write` | Chỉ tạo intent đã ký, không đổi dữ liệu |
+| tickets-mcp | `prepare_create_ticket(title, body, category, assignee_dept, priority?, classification?)` | `tickets:write` | Như trên; `code` cấp lúc commit. Quyền theo ma trận ([actions-roles.md](actions-roles.md) §1) |
 | tickets-mcp | `commit_intent(intent_id, approval_token)` | `tickets:write` | Ghi sau khi kiểm approval ([approval.md](approval.md)) |
 
 Mỗi tool khai báo `required_scopes`, timeout và giới hạn kích thước output; `ToolInvoker` bọc xử lý: kiểm schema, scope, rate limit, timeout, cắt output, audit. Chưa có `get_document`, `prepare_create_ticket`, `notify-mcp`.
@@ -196,8 +197,11 @@ Mục tiêu: thêm vendor hoặc biến thể mới là thêm một file adapter
 | gateway | `ChatProvider`, `EmbeddingProvider`, `KeyStore` | `anthropic`, `mock`; `mock_hash`, `openai_compatible`; `postgres` |
 | docs-mcp | `Embedder`, `Reranker`, `DocumentLoader`, `DocumentRetriever`, `DocumentIndexer` | `fake_hash`, `gateway_http`; `none`; `markdown`; `pgvector_hybrid`; `pgvector_indexer` |
 | agent | `ToolProvider`, `ConversationRepository`, `ServiceProbe` | `mcp_http`; `postgres`, `memory`; `http_probe` |
-| tickets-mcp | `TicketRepository`, `IntentIssuer`, `ApprovalVerifier`, `ReplayGuard` | `postgres`; `es256_jws`; `es256_jwt`; `redis`, `in_memory` |
+| tickets-mcp | `TicketRepository` | `postgres` |
+| acme_common (dùng chung cho mọi MCP ghi) | `IntentIssuer`, `ApprovalVerifier`, `ReplayGuard`, `IntentExecutor` | `es256_jws`; `es256_jwt`; `redis`, `in_memory`; executor do từng MCP cài |
 | approval-signer | `IntentVerifier`, `ApprovalSigner` | `es256_jws`; `es256_jwt` |
+
+Hạ tầng intent dùng chung nằm ở `acme_common`: ports/types (`intent_*.py`), adapter Redis/ES256 tham số hoá theo `issuer` và `redis_prefix`, và `services/intent_commit.py` (`IntentCommitService`: thứ tự kiểm approval, máy trạng thái, idempotency). MCP ghi chỉ cài `IntentExecutor` (phân quyền lại + thực thi). Ma trận quyền: `acme_common/services/capabilities.py`. Signer tin nhiều `iss` (`INTENT_ISSUER_NAMES`); khoá công khai ở `INTENT_PUBLIC_KEYS_DIR/<iss>/<kid>.pem`, op gắn với issuer (`rendering.ISSUER_OPS`).
 
 Muốn chuyển ticket sang Jira thì thêm `adapters/jira.py`, một dòng registry và block config; quy tắc quyền, intent/approval và audit trong service giữ nguyên.
 
