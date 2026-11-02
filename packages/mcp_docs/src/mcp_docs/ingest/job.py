@@ -12,7 +12,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +24,7 @@ from ..ports import (
     Embedder,
     IndexedChunk,
 )
-from ..services.chunking import embed_text, split
+from ..services.chunking import ARTICLE_MAX_TOKENS, embed_text, split
 from ..services.normalize import normalize_text
 
 log = logging.getLogger("acme.docs.ingest")
@@ -57,6 +57,11 @@ def parse_meta(rec: dict[str, Any]) -> DocumentMeta:
         raise DocumentRejected(f"{rec['source_path']}: id must be a lowercase uuid")
     if not str(rec["title"]).strip():
         raise DocumentRejected(f"{rec['source_path']}: empty title")
+    doc_num = rec.get("doc_num")
+    if doc_num is not None and (not isinstance(doc_num, str) or not doc_num.strip()):
+        raise DocumentRejected(f"{rec['source_path']}: doc_num must be a non-empty string")
+    if rec.get("kind") == "van_ban_phap_luat" and doc_num is None:
+        raise DocumentRejected(f"{rec['source_path']}: doc_num is required for van_ban_phap_luat")
     return DocumentMeta(
         id=rec["id"],
         source_path=rec["source_path"],
@@ -67,6 +72,7 @@ def parse_meta(rec: dict[str, Any]) -> DocumentMeta:
         allowed_roles=tuple(roles),
         owner_sub=rec.get("owner_sub"),
         version=int(rec.get("version", 1)),
+        doc_num=doc_num,
     )
 
 
@@ -91,6 +97,7 @@ async def run_ingest(
     embedder: Embedder,
     indexer: DocumentIndexer,
     force: bool = False,
+    article_max_tokens: int = ARTICLE_MAX_TOKENS,
 ) -> IngestReport:
     metas = load_metadata(corpus_dir)
     # kiểm tra mọi file trước khi ghi: fail sớm, không ghi dở
@@ -111,10 +118,13 @@ async def run_ingest(
             report.skipped.append(meta.source_path)
             continue
         doc = loader_for(f).load(f, source_path=meta.source_path)
-        chunks = split(doc)
+        if doc.kind == "article":  # tên văn bản và số hiệu do metadata quyết định
+            doc = replace(doc, title=meta.title, doc_num=meta.doc_num or doc.doc_num)
+        chunks = split(doc, article_max_tokens=article_max_tokens)
         if not chunks:
             raise DocumentRejected(f"{meta.source_path}: no content to index")
-        vectors = await embedder.embed([embed_text(c) for c in chunks])
+        title = doc.title if doc.kind == "article" else None
+        vectors = await embedder.embed([embed_text(c, title) for c in chunks])
         await indexer.replace(
             meta, [IndexedChunk(c, v) for c, v in zip(chunks, vectors, strict=True)]
         )
@@ -135,4 +145,5 @@ def _with_sha(m: DocumentMeta, sha: str) -> DocumentMeta:
         allowed_roles=m.allowed_roles,
         owner_sub=m.owner_sub,
         version=m.version,
+        doc_num=m.doc_num,
     )

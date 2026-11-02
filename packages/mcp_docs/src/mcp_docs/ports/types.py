@@ -27,11 +27,22 @@ class DocumentRejected(Exception):
 
 
 @dataclass(frozen=True, slots=True)
+class ArticleUnit:
+    """Một Điều của văn bản luật (đính vào `Section.unit` khi `Document.kind == "article"`)."""
+
+    article: str  # "38", "38a"
+    heading: str
+    chapter: str | None
+    paragraphs: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Section:
     """Một mục của tài liệu. `path` = đường dẫn heading từ gốc; `body` là văn bản của riêng mục."""
 
     path: tuple[str, ...]
     body: str
+    unit: ArticleUnit | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +50,8 @@ class Document:
     source_path: str
     title: str
     sections: tuple[Section, ...]
+    kind: str = "markdown"  # markdown | article
+    doc_num: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +67,7 @@ class DocumentMeta:
     allowed_roles: tuple[str, ...] = ()
     owner_sub: str | None = None
     version: int = 1
+    doc_num: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +76,11 @@ class Chunk:
     heading: str | None
     content: str
     n_tokens: int
+    article: str | None = None
+    clause: str | None = None
+    chapter: str | None = None
+    char_start: int | None = None
+    char_end: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +98,12 @@ class RetrievedChunk:
     score: float = 0.0
     vec_rank: int | None = None
     fts_rank: int | None = None
+    doc_num: str | None = None
+    article: str | None = None
+    clause: str | None = None
+    chapter: str | None = None
+    char_start: int | None = None
+    char_end: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
