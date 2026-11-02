@@ -105,6 +105,14 @@ def test_resolver_leaves_text_unchanged_apart_from_codes() -> None:
     assert CitationResolver().resolve(plain, passages()).text == plain
 
 
+def test_resolver_strips_bare_numeric_codes() -> None:
+    r = CitationResolver().resolve("Nghỉ 12 ngày [1] [#12]. Khác [2].", passages())
+    assert r.text == "Nghỉ 12 ngày [1]. Khác." and r.order == [12] and r.invalid_refs == 2
+    # `[1]` trần không thành citation dù khớp số thứ tự của một đoạn đã truy xuất
+    r = CitationResolver().resolve("Chỉ có mã trần [1].", passages())
+    assert r.text == "Chỉ có mã trần." and r.order == [] and r.invalid_refs == 1
+
+
 def test_resolver_numbers_by_first_appearance_and_multi_code() -> None:
     r = CitationResolver().resolve("B [#12]. A [#11][#12].", passages())
     assert r.text == "B [1]. A [2][1]." and r.order == [12, 11]

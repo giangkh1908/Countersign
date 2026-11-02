@@ -19,6 +19,8 @@ PASSAGE_CHARS = 4000
 # `[#12]`, `[#12][#15]`, `[#12, #15]`, `[#12; 15]`
 _REF = re.compile(r"\s*\[\s*#\d+(?:\s*[,;]\s*#?\d+)*\s*\]")
 _ID = re.compile(r"\d+")
+# `[1]` trần: số thứ tự do mô hình (hoặc tài liệu bơm) tự viết; chỉ mã sinh từ `[#id]` mới hợp lệ
+_BARE = re.compile(r"\s*\[\d+\]")
 
 
 class Passage(BaseModel):
@@ -122,7 +124,7 @@ class CitationResolver:
 
     def resolve(self, draft: str, retrieved: dict[str, Passage]) -> ResolveResult:
         order: list[int] = []
-        invalid = 0
+        draft, invalid = _BARE.subn("", draft)
 
         def sub(m: re.Match[str]) -> str:
             nonlocal invalid

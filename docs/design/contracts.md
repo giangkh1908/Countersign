@@ -146,7 +146,7 @@ Biến môi trường chính; mọi secret có dạng `<TÊN>_FILE`.
 | `INTENT_TTL_S` (300), `APPROVAL_TTL_S` (120) | Hạn intent và approval |
 | `BFF_MAX_CARDS_PER_THREAD_HOUR` (10), `BFF_REJECTED_TTL_S` (600) | Giới hạn thẻ duyệt |
 
-Alias model nằm ở `packages/gateway/config/models.yaml` (hiện `acme-fast`, `acme-smart`, `acme-judge`, `acme-embed`); id model lấy từ đó, không hardcode. `acme-judge` (R2) tạm dùng cùng chain với `acme-fast`; key của agent phải được phép alias này (`AGENT_VERIFY_JUDGE_ALIAS`). Provider chat có `anthropic` và `mock`.
+Alias model nằm ở `packages/gateway/config/models.yaml` (hiện `acme-fast`, `acme-smart`, `acme-judge`, `acme-embed`); id model lấy từ đó, không hardcode. `acme-judge` (R2) tạm dùng cùng chain với `acme-fast`; key của agent (`bootstrap-gateway-keys.sh`) được phép alias này, không có alias runtime riêng; key cấp trước R2 phải chạy `--rotate` (script bỏ qua key còn hợp lệ). `eval.judge_alias` khác verifier vẫn để mở (rag-citations §10). Provider chat có `anthropic` và `mock`.
 
 `acme-embed` là block `kind: embedding` (`adapter`, `model`, `dim`, thêm `base_url`, `timeout_s` tuỳ adapter). Mặc định `adapter: mock_hash` (dim 1024, khớp schema pgvector). Dùng embedding thật: đổi block sang `adapter: openai_compatible` kèm `base_url` và `model` của nhà cung cấp, đặt `GW_EMBEDDING_API_KEY` (hoặc `_FILE`); không sửa code. `POST /v1/embeddings` theo chuẩn OpenAI: `input` là chuỗi hoặc mảng tối đa 32 phần tử, `encoding_format` là `float` hoặc `base64`; dùng cùng auth và kiểm `allowed_models` như chat; không qua PII/guard; ghi `usage_events` như chat (`output_tokens` = 0).
 

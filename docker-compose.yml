@@ -381,6 +381,7 @@ services:
       MCP_TICKETS_URL: http://tickets-mcp:8102/mcp
       AGENT_CHECKPOINT_ENCRYPTION_KEY_FILE: /run/secrets/agent_checkpoint_key   # checkpoint mã hoá mặc định
       AGENT_THREAD_RETENTION_DAYS: "30"
+      AGENT_VERIFY_CITATIONS: ${AGENT_VERIFY_CITATIONS:-on}
     secrets: [agent_gateway_key, kc_agent_client_secret, agent_database_url, agent_checkpoint_key, metrics_token]
     networks: [core]                           # KHÔNG có egress
     depends_on:
