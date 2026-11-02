@@ -81,6 +81,17 @@ Hạn chế: dev có 40 câu `read_first` sát từ vựng luật; chỉ 10 câu
 
 Điểm test thấp hơn dev khoảng 0,27 recall@5. Phần lớn chênh lệch đến từ cách viết câu: dev có 40 câu `read_first` sát từ vựng luật, test toàn câu viết mù. Con số đại diện cho người dùng thật là số test. Khoảng cách này đủ lớn để thử rerank (mục rerank ở trên) và để đo lại hybrid với câu hỏi viết mù. Muốn đo lại phải có tập test mới, không dùng lại tập này để chỉnh.
 
+**Rerank trên dev (2026-11-02, `eval/results/rag/20261102T083952/`):** bge-reranker-v2-m3 Q8_0 qua `llama-server` b11721 (Vulkan, GTX 1650), gateway `/v1/rerank`, nền vector thuần, 81 câu chấm điểm. Baseline khớp số cũ.
+
+| Cấu hình | recall@5 | MRR | nDCG@10 | p50 mỗi truy vấn | Δ recall@5 [CI95] | Δ MRR [CI95] |
+|---|---|---|---|---|---|---|
+| vector | 0,891 | 0,843 | 0,840 | 0,24 s | | |
+| rerank top20 | 0,872 | 0,861 | 0,854 | 3,0 s | −0,019 [−0,068; +0,031] | +0,018 [−0,030; +0,069] |
+| rerank top30 | 0,883 | 0,870 | 0,861 | 4,3 s | −0,008 [−0,058; +0,039] | +0,027 [−0,026; +0,085] |
+| rerank top50 | 0,883 | 0,866 | 0,860 | 6,9 s | −0,008 [−0,058; +0,039] | +0,023 [−0,032; +0,082] |
+
+Không cấu hình nào phân biệt được với vector; câu tổng hợp (13 câu) recall@5 tăng 0,551 → 0,615 ở top30 nhưng mẫu quá nhỏ. Rerank thêm 3–7 s mỗi truy vấn trên GPU này. Quyết định: giữ `DOCS_RERANK=none`; không chạy tập test cho rerank (theo quy tắc trên, cần tập test mới). Qwen3-Reranker-0.6B chạy được (llama-server trả điểm đúng trên câu thử) nhưng lượt đo bị dừng vì máy thiếu RAM, chưa có số.
+
 **DoD R1:** có bảng recall@5/@10 và MRR cho 4 cấu hình trên ~150 câu. Cấu hình mặc định được chọn theo số đo, không theo cảm tính. Toàn bộ chạy lại được bằng một lệnh.
 
 **Khung đánh giá truy xuất (đã chạy thật trên index bge-m3, 40 câu):** `eval/rag/` có chỉ số (recall@k, hit@k, MRR, nDCG@10; hàm thuần, có test), định dạng `vbpl-v1.jsonl` kèm trình kiểm nhãn so với `data/raw/vbpl`, và script chạy 5 cấu hình (vector, FTS `unaccent`, FTS tách từ `segmented`, hybrid, hybrid + tra trực tiếp) qua port `DocumentRetriever`. Cấu hình `hybrid_direct` dùng chung `ArticlePinner` với `DocumentService`. Mới có 40/150 câu (đều loại tra cứu, đủ 19 văn bản; 10 câu nêu số Điều); các câu tổng hợp và câu không có đáp án làm ở đợt sau. Cấu hình `hybrid_rerank` chưa làm; khoảng tin cậy bootstrap đã có (xem dưới). Báo cáo JSON ghi `index_sig`, model, chiều embedding vào `eval/results/rag/<run_id>/report.json` (đã gitignore).
