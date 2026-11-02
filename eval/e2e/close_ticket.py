@@ -135,7 +135,8 @@ R = Report()
 
 
 def secret(name: str) -> str:
-    return (ROOT / "secrets" / name).read_text(encoding="utf-8").strip()
+    base = Path(os.environ.get("SECRETS_DIR") or ROOT / "secrets")  # worktree không có secrets/
+    return (base / name).read_text(encoding="utf-8").strip()
 
 
 def lit(value: str) -> str:

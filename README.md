@@ -26,6 +26,8 @@ uv, Python 3.12, Node 22, pnpm, Docker (compose v2). Windows: dùng Git Bash ho�
 
 Bật ticket: `docker compose --profile tickets up -d`. Dừng: `make down`. Log: `make logs`.
 
+E2E notify-mcp (cần profile `tickets` + `notify`): `bash scripts/e2e-notify.sh`. E2E đóng ticket: `bash scripts/e2e-close-ticket.sh`.
+
 ### Tài nguyên
 
 Đo 2026-11-02 trên Docker Desktop (WSL2), tổng `docker stats` các container (lấy mẫu mỗi 2 giây), dùng `mock-provider`:
