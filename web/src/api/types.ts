@@ -3,20 +3,30 @@ import type { z } from "zod";
 import type { ApiError } from "./errors";
 import type {
   AgentEventSchema,
+  AnswerStatusSchema,
   CardSchema,
   CitationSchema,
+  CitationsDataSchema,
   InterruptRefSchema,
   MeSchema,
   MessageSchema,
   RequestCostSchema,
+  SentenceSchema,
   ThreadMessagesSchema,
   ThreadPageSchema,
   ThreadSummarySchema,
+  VerdictSchema,
+  VerifyInfoSchema,
 } from "./zod";
 
 export type AgentEvent = z.infer<typeof AgentEventSchema>;
 export type InterruptRef = z.infer<typeof InterruptRefSchema>;
 export type Citation = z.infer<typeof CitationSchema>;
+export type Verdict = z.infer<typeof VerdictSchema>;
+export type Sentence = z.infer<typeof SentenceSchema>;
+export type AnswerStatus = z.infer<typeof AnswerStatusSchema>;
+export type VerifyInfo = z.infer<typeof VerifyInfoSchema>;
+export type CitationsData = z.infer<typeof CitationsDataSchema>;
 export type Me = z.infer<typeof MeSchema>;
 /** Phản hồi thô của POST /api/intents/verify; display_fields phân loại ở features/approval/cardModel. */
 export type CardModel = z.infer<typeof CardSchema>;
