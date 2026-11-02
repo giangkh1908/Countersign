@@ -186,6 +186,28 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
 
+  # Migration schema DB knowledge (rag-citations §2.3): dùng chính image Postgres đã pin để có psql; runner là infra/postgres/migrate.sh
+  knowledge-migrate:
+    image: pgvector/pgvector:pg17
+    <<: *hardened
+    restart: "no"
+    user: "999:999"                          # uid postgres trong image; psql không cần quyền đặc biệt
+    entrypoint: ["bash", "/migrate/migrate.sh", "up"]
+    environment:
+      PGHOST: postgres
+      PGDATABASE: knowledge
+      PGUSER: kn_owner
+      KN_OWNER_PASSWORD_FILE: /run/secrets/kn_owner_password
+      EMBED_DIM: ${EMBED_DIM:-1024}
+      MIGRATE_FORCE_REEMBED: ${MIGRATE_FORCE_REEMBED:-0}
+    secrets: [kn_owner_password]
+    volumes:
+      - ./infra/postgres/migrate.sh:/migrate/migrate.sh:ro
+      - ./infra/postgres/migrations:/migrate/migrations:ro
+    networks: [core]
+    depends_on:
+      postgres: { condition: service_healthy }
+
   # ───────────── gateway ─────────────
   gateway:
     build: { context: ., dockerfile: Dockerfile, target: gateway }
@@ -283,6 +305,7 @@ services:
       DOCS_GATEWAY_KEY_FILE: /run/secrets/docs_gateway_key     # key owner_type=service
       MCP_HOST: ${MCP_HOST:-mcp_sdk}
       MCP_PORT: "8101"
+      DOCS_EMBED_DIM: ${EMBED_DIM:-1024}                       # cùng giá trị với knowledge-migrate
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key
     secrets: [docs_database_url, docs_audit_database_url, docs_redis_url, docs_gateway_key, audit_hmac_key, metrics_token]
     networks: [core]
@@ -291,6 +314,7 @@ services:
       redis-state: { condition: service_healthy }
       gateway:     { condition: service_healthy }
       migrate:     { condition: service_completed_successfully }
+      knowledge-migrate: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8101/healthz', timeout=2)"]
       interval: 10s
