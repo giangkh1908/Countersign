@@ -28,6 +28,7 @@ from ..ports.types import (
     RetrievedChunk,
     SearchResult,
 )
+from ..services.fts_query import strip_stopwords
 from ..services.normalize import normalize_query
 from ._pg import connect, embedding_dim, read_index_meta, vec_literal
 from .segmenter_none import NoSegmenter
@@ -36,6 +37,11 @@ log = logging.getLogger("acme.docs.retriever")
 
 # DOCS_FTS_MODE -> cột tsvector (khoá cố định, không nhận chuỗi từ người dùng)
 _FTS_COLUMNS = {"unaccent": "tsv", "segmented": "tsv_seg"}
+# DOCS_FTS_RANK -> hàm xếp hạng (khoá cố định)
+_FTS_RANKS = {"cd": "ts_rank_cd", "rank": "ts_rank"}
+# Thử nghiệm DOCS_FTS_TITLE: ghép tiêu đề văn bản (trọng số A) vào tsv ngay lúc truy vấn, không đổi
+# migration; mất khả năng dùng chỉ mục GIN của tsv (chấp nhận được ở quy mô hàng nghìn chunk).
+_TITLE_DOC = "(setweight(to_tsvector('simple', acme.immutable_unaccent(d.title)), 'A') || c.tsv)"
 
 _SQL = """
 WITH q AS (
@@ -60,9 +66,9 @@ vec AS (
 fts AS (
   SELECT id, row_number() OVER (ORDER BY score DESC, id) AS rnk
   FROM (
-    SELECT c.id, ts_rank_cd(c.{fts_col}, q.qt, 32) AS score
-    FROM chunks c, q
-    WHERE q.qt IS NOT NULL AND c.{fts_col} @@ q.qt
+    SELECT c.id, {rank_fn}({fts_doc}, q.qt, 32) AS score
+    FROM chunks c{fts_from}, q
+    WHERE q.qt IS NOT NULL AND {fts_doc} @@ q.qt
       AND (c.department = 'ALL' OR c.department = ANY (%(depts)s::text[]))
       AND c.classification <= %(clr)s::int
       AND (cardinality(c.allowed_roles) = 0 OR c.allowed_roles && %(roles)s::text[])
@@ -73,7 +79,8 @@ fts AS (
 ),
 fused AS (
   SELECT id,
-         sum(1.0 / (%(rrf_k)s::int + rnk)) AS rrf,
+         sum(CASE WHEN src = 'f' THEN %(w_fts)s::float8 ELSE 1.0 END
+             / (%(rrf_k)s::int + rnk)) AS rrf,
          min(rnk) FILTER (WHERE src = 'v') AS vec_rank,
          min(rnk) FILTER (WHERE src = 'f') AS fts_rank
   FROM (SELECT id, rnk, 'v' AS src FROM vec UNION ALL SELECT id, rnk, 'f' FROM fts) u
@@ -103,12 +110,22 @@ class PgVectorHybridRetriever(DocumentRetriever):
         use_vector: bool = True,
         use_fts: bool = True,
         fts_mode: str = "unaccent",
+        rrf_weight_fts: float = 1.0,
+        fts_stopwords: bool = False,
+        fts_rank: str = "cd",
+        fts_title: bool = False,
         segmenter: TextSegmenter | None = None,
     ) -> None:
         if not (use_vector or use_fts):
             raise ValueError("at least one of use_vector/use_fts must be enabled")
         if fts_mode not in _FTS_COLUMNS:
             raise ValueError(f"fts_mode must be one of {sorted(_FTS_COLUMNS)}")
+        if fts_rank not in _FTS_RANKS:
+            raise ValueError(f"fts_rank must be one of {sorted(_FTS_RANKS)}")
+        if rrf_weight_fts < 0:
+            raise ValueError("rrf_weight_fts must be >= 0")
+        if fts_title and fts_mode != "unaccent":
+            raise ValueError("fts_title chỉ hỗ trợ fts_mode=unaccent")
         self._dsn = dsn
         self._embedder = embedder
         self._rrf_k = rrf_k
@@ -119,7 +136,14 @@ class PgVectorHybridRetriever(DocumentRetriever):
         self._segmenter = segmenter or NoSegmenter()
         # "segmented" truy vấn cột tsv_seg bằng term đã qua cùng bộ tách từ lúc ingest
         self._segment_query = fts_mode == "segmented"
-        self._sql = _SQL.replace("{fts_col}", _FTS_COLUMNS[fts_mode])
+        self._w_fts = rrf_weight_fts
+        self._fts_stopwords = fts_stopwords
+        fts_doc = _TITLE_DOC if fts_title else f"c.{_FTS_COLUMNS[fts_mode]}"
+        self._sql = (
+            _SQL.replace("{fts_doc}", fts_doc)
+            .replace("{fts_from}", " JOIN documents d ON d.id = c.document_id" if fts_title else "")
+            .replace("{rank_fn}", _FTS_RANKS[fts_rank])
+        )
 
     async def verify_schema(
         self, expected_dim: int, *, embed_model: str | None = None, strict_meta: bool = False
@@ -159,7 +183,11 @@ class PgVectorHybridRetriever(DocumentRetriever):
                 if not use_fts:
                     raise RetrievalUnavailable("embedding") from None
         mode = "hybrid" if (qv and use_fts) else "vector_only" if qv else "fts_only"
-        qt = (self._segmenter.segment(text) if self._segment_query else text) if use_fts else None
+        qt = None
+        if use_fts:
+            qt = strip_stopwords(text) if self._fts_stopwords else text
+            if self._segment_query:
+                qt = self._segmenter.segment(qt)
         params = {
             "qv": qv,
             "qt": qt,
@@ -169,6 +197,7 @@ class PgVectorHybridRetriever(DocumentRetriever):
             "dept_f": department_filter,
             "n_cand": self._n_cand or max(50, 5 * k),
             "rrf_k": self._rrf_k,
+            "w_fts": self._w_fts,
             "top_k": k,
         }
         try:
