@@ -11,6 +11,10 @@ class EmbeddingNotConfigured(NotConfigured):
     pass
 
 
+class RerankNotConfigured(NotConfigured):
+    pass
+
+
 class KeyStoreNotConfigured(NotConfigured):
     pass
 

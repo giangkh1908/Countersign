@@ -17,6 +17,7 @@ from ..ports import (
     ArticleReader,
     DocumentRetriever,
     Reranker,
+    RerankUnavailable,
     RetrievalUnavailable,
     RetrievedChunk,
 )
@@ -40,9 +41,11 @@ class DocumentService:
         max_per_doc: int = 2,
         article_reader: ArticleReader | None = None,
         direct_lookup: str = "off",
+        rerank_top_n: int = 30,
     ) -> None:
         self._retriever = retriever
         self._reranker = reranker
+        self._rerank_top_n = max(1, rerank_top_n)
         self._redis = redis
         self._recent_ttl_s = recent_ttl_s
         self._retention_s = retention_s
@@ -64,13 +67,14 @@ class DocumentService:
         """Trả `(output, audit_info)`."""
         p = ctx.principal
         q = normalize_query(query)
+        k = top_k * self._max_per_doc + 4
+        if self._reranker.active:
+            k = max(k, self._rerank_top_n)  # đủ ứng viên để rerank có tác dụng
         try:
-            res = await self._retriever.search(
-                q, p, min(top_k * self._max_per_doc + 4, 60), department_filter
-            )
+            res = await self._retriever.search(q, p, min(k, 60), department_filter)
         except RetrievalUnavailable:
             raise ToolError("upstream_unavailable", "document store unavailable") from None
-        chunks = await self._reranker.rerank(q, res.chunks)
+        chunks, reranked = await self._rerank(q, res.chunks)
         pinned, unresolved = await self._direct_lookup(q, p)
         if pinned:
             ids = {c.chunk_id for c in pinned}
@@ -85,6 +89,7 @@ class DocumentService:
         chunks = self._limit_per_doc(chunks, pinned_ids=pin_ids)[:top_k]
 
         mode = res.mode
+        mode_suffix = "+rerank_skipped" if self._reranker.active and not reranked else ""
         if chunks:
             ok = await self._write_taint(ctx, chunks)
             if not ok and any(c.classification >= 1 for c in chunks):
@@ -95,6 +100,7 @@ class DocumentService:
             elif not ok:
                 self.taint_write_failures += 1  # class 0: best-effort
 
+        mode += mode_suffix
         n_direct = sum(1 for c in chunks if c.chunk_id in pin_ids)
         sp = spotlight.new_spotlight()
         results = [
@@ -126,7 +132,7 @@ class DocumentService:
         out = {
             "query": q,
             "mode": mode,
-            "reranked": False,
+            "reranked": reranked,
             "direct": n_direct,
             "notice": spotlight.notice(sp),
             "spotlight": {
@@ -146,6 +152,19 @@ class DocumentService:
             "max_class": max((c.classification for c in chunks), default=0),
         }
         return out, audit
+
+    async def _rerank(
+        self, query: str, chunks: list[RetrievedChunk]
+    ) -> tuple[list[RetrievedChunk], bool]:
+        """Rerank `rerank_top_n` chunk đầu, phần còn lại giữ phía sau. Lỗi => giữ thứ tự cũ, `False`."""
+        if not self._reranker.active:
+            return chunks, False
+        head, tail = chunks[: self._rerank_top_n], chunks[self._rerank_top_n :]
+        try:
+            return [*await self._reranker.rerank(query, head), *tail], True
+        except RerankUnavailable as exc:
+            log.warning("rerank skipped", extra={"fields": {"kind": exc.kind}})
+            return chunks, False
 
     async def _direct_lookup(self, query: str, principal: Any) -> tuple[list[RetrievedChunk], int]:
         """Ghim chunk của "Điều N <văn bản>" (logic ở `ArticlePinner`); chỉ chạy khi `DOCS_DIRECT_LOOKUP=pin`."""

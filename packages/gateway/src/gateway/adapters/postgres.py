@@ -45,6 +45,13 @@ RETURNING prefix
 """
 
 
+UPDATE_MODELS_SQL = """
+UPDATE api_keys SET allowed_models = $2
+WHERE id = $1::uuid AND status = 'active'
+RETURNING prefix
+"""
+
+
 def normalize_dsn(url: str) -> str:
     """asyncpg không nhận hậu tố driver kiểu SQLAlchemy (`postgresql+asyncpg://`)."""
     return re.sub(r"^postgres(ql)?\+\w+://", "postgresql://", url)
@@ -142,6 +149,19 @@ class PostgresKeyStore(KeyStore):
         if row is None:
             raise KeyNotFound(key_id)
         self._l1.pop(row["prefix"], None)
+
+    async def update_allowed_models(
+        self, key_id: str, allowed_models: tuple[str, ...], actor: str
+    ) -> None:
+        try:
+            uuid.UUID(key_id)
+        except ValueError:
+            raise KeyNotFound(key_id) from None
+        pool = await self._get_pool()
+        row = await pool.fetchrow(UPDATE_MODELS_SQL, key_id, list(allowed_models))
+        if row is None:
+            raise KeyNotFound(key_id)
+        self._l1.pop(row["prefix"], None)  # L1 của tiến trình này; gateway tự hết hạn sau L1_TTL_S
 
     async def aclose(self) -> None:
         if self._pool is not None:

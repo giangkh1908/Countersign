@@ -4,7 +4,7 @@
 # ghi vào secrets/agent_gateway_key và secrets/docs_gateway_key (cùng file mode với gen-secrets.sh).
 #
 # Dùng:
-#   bash scripts/bootstrap-gateway-keys.sh            # idempotent: bỏ qua key mà file đã có và còn hợp lệ trong DB
+#   bash scripts/bootstrap-gateway-keys.sh            # idempotent: key hợp lệ có sẵn giữ nguyên, chỉ đặt lại danh sách model
 #   bash scripts/bootstrap-gateway-keys.sh --rotate   # tạo key mới cho cả hai (key cũ KHÔNG tự thu hồi;
 #                                                           # thu hồi bằng `gateway.cli revoke-key`)
 #
@@ -43,8 +43,14 @@ provision() {
     local rc=0
     $COMPOSE exec -T gateway python -m gateway.cli check-key < "$file" >/dev/null 2>&1 || rc=$?
     if [ "$rc" -eq 0 ]; then
-      echo "skip   $name: $fname đã có key hợp lệ (dùng --rotate để tạo lại)"
-      return 0
+      # Key cấp trước khi danh sách model đổi: đặt lại model tại chỗ, không phải rotate.
+      if $COMPOSE exec -T gateway python -m gateway.cli --actor bootstrap-gateway-keys \
+           update-key-models --allowed-models "$models" < "$file" >/dev/null 2>&1; then
+        echo "skip   $name: $fname đã có key hợp lệ (models=$models; dùng --rotate để tạo lại)"
+        return 0
+      fi
+      echo "FAIL   $name: không cập nhật được danh sách model của key trong secrets/$fname (xem: $COMPOSE logs gateway)" >&2
+      return 1
     elif [ "$rc" -eq 3 ]; then
       echo "key trong secrets/$fname không có trong DB (DB mới?), tạo key mới"
     else
@@ -69,12 +75,13 @@ provision() {
 }
 
 # agent-service: gọi LLM thay mặt người dùng, nên tin end-user token. `acme-judge` cho bộ kiểm chứng
-# trích dẫn (R2). Key cấp trước R2 không có alias này: script bỏ qua key còn hợp lệ, nên phải chạy `--rotate`.
+# trích dẫn (R2). Key cấp trước R2 không có alias này: script đặt lại danh sách model của key còn hợp lệ.
 provision agent_gateway_key agent agent-service acme-fast,acme-smart,acme-judge \
   --rpm 120 --tpm 200000 --max-concurrency 8 --trust-end-user-token
-# docs-mcp: chỉ embedding. `create-key` không kiểm alias với catalog, nên key cấp được dù gateway
-# chưa phục vụ `acme-embed`; khi R1 thêm alias vào models.yaml là dùng được ngay, không phải cấp lại key.
-provision docs_gateway_key docs-mcp docs-mcp acme-embed \
+# docs-mcp: embedding và rerank. `create-key` không kiểm alias với catalog, nên key cấp được dù gateway
+# chưa phục vụ `acme-rerank` (chỉ có trong models.ollama.yaml). Key hợp lệ có sẵn được đặt lại danh sách
+# model bằng `update-key-models` (không rotate).
+provision docs_gateway_key docs-mcp docs-mcp acme-embed,acme-rerank \
   --rpm 120 --tpm 200000 --max-concurrency 4
 
 if [ "$created" -eq 1 ] && [ "$RESTART" -eq 1 ]; then

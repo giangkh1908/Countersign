@@ -32,6 +32,22 @@ class EmbeddingResult:
 
 
 @dataclass(slots=True)
+class RerankItem:
+    """Điểm liên quan của `documents[index]` với truy vấn (cao hơn = liên quan hơn)."""
+
+    index: int
+    score: float
+
+
+@dataclass(slots=True)
+class RerankResult:
+    """Kết quả rerank: các mục có thể chưa sắp xếp; `prompt_tokens` = 0 nếu runtime không báo."""
+
+    items: list[RerankItem]
+    prompt_tokens: int = 0
+
+
+@dataclass(slots=True)
 class ChatRequest:
     """Form OpenAI đã chuẩn hoá. `model` là id model của provider (đã resolve từ alias)."""
 

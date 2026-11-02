@@ -14,8 +14,14 @@ from acme_common.ports import Clock
 
 from .ports.chat_provider import ChatProvider
 from .ports.embedding_provider import EmbeddingProvider
-from .ports.errors import EmbeddingNotConfigured, KeyStoreNotConfigured, ProviderNotConfigured
+from .ports.errors import (
+    EmbeddingNotConfigured,
+    KeyStoreNotConfigured,
+    ProviderNotConfigured,
+    RerankNotConfigured,
+)
 from .ports.key_store import KeyStore
+from .ports.rerank_provider import RerankProvider
 from .settings import Settings
 
 # --- ChatProvider ---
@@ -112,6 +118,65 @@ class EmbeddingPool:
     def get(self, alias: str, adapter: str, options: Mapping[str, Any]) -> EmbeddingProvider:
         if alias not in self._items:
             self._items[alias] = build_embedding_provider(adapter, self._settings, {**options})
+        return self._items[alias]
+
+    async def aclose(self) -> None:
+        for p in self._items.values():
+            await p.aclose()
+        self._items.clear()
+
+
+# --- RerankProvider ---
+
+
+def _load_http_rerank(settings: Settings, options: Mapping[str, Any]) -> RerankProvider:
+    from acme_common.http import RetryingHttpClient
+
+    from .adapters.http_rerank import HttpRerankProvider
+
+    base_url = options.get("base_url")
+    if not base_url:
+        raise RerankNotConfigured("rerank adapter 'http_rerank' requires 'base_url'")
+    http = RetryingHttpClient(
+        timeout_s=float(options.get("timeout_s", 30)),
+        max_attempts=int(options.get("max_attempts", 1)),  # runtime cục bộ chậm: không nhân tải
+    )
+    return HttpRerankProvider(
+        base_url=str(base_url),
+        api_key=settings.gw_rerank_api_key,
+        http=http,
+        path=str(options.get("path", "/v1/rerank")),
+    )
+
+
+_RERANKERS: dict[str, Callable[[Settings, Mapping[str, Any]], RerankProvider]] = {
+    "http_rerank": _load_http_rerank,
+}
+
+
+def build_rerank_provider(
+    name: str, settings: Settings, options: Mapping[str, Any] | None = None
+) -> RerankProvider:
+    """`options`: phần block alias trong models.yaml (base_url, timeout_s, max_attempts, path)."""
+    try:
+        loader = _RERANKERS[name]
+    except KeyError:
+        raise RerankNotConfigured(
+            f"unknown rerank provider {name!r}; known: {sorted(_RERANKERS)}"
+        ) from None
+    return loader(settings, options or {})
+
+
+class RerankPool:
+    """Cache một instance `RerankProvider` cho mỗi alias rerank."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._items: dict[str, RerankProvider] = {}
+
+    def get(self, alias: str, adapter: str, options: Mapping[str, Any]) -> RerankProvider:
+        if alias not in self._items:
+            self._items[alias] = build_rerank_provider(adapter, self._settings, {**options})
         return self._items[alias]
 
     async def aclose(self) -> None:

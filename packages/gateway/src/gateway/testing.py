@@ -10,6 +10,7 @@ from .ports.chat_provider import ChatProvider
 from .ports.embedding_provider import EmbeddingProvider
 from .ports.errors import KeyAlreadyExists, KeyNotFound
 from .ports.key_store import KeyStore
+from .ports.rerank_provider import RerankProvider
 from .ports.types import (
     ChatChunk,
     ChatRequest,
@@ -18,6 +19,8 @@ from .ports.types import (
     KeyRecord,
     NewKey,
     ProviderError,
+    RerankItem,
+    RerankResult,
 )
 
 
@@ -55,6 +58,15 @@ class FakeKeyStore(KeyStore):
         for prefix, rec in self.records.items():
             if rec.key_id == key_id and rec.status != "revoked":
                 self.records[prefix] = replace(rec, status="revoked")
+                return
+        raise KeyNotFound(key_id)
+
+    async def update_allowed_models(
+        self, key_id: str, allowed_models: tuple[str, ...], actor: str
+    ) -> None:
+        for prefix, rec in self.records.items():
+            if rec.key_id == key_id and rec.status == "active":
+                self.records[prefix] = replace(rec, allowed_models=allowed_models)
                 return
         raise KeyNotFound(key_id)
 
@@ -111,6 +123,27 @@ class FakeEmbeddingProvider(EmbeddingProvider):
         return EmbeddingResult(self.vectors, len(texts))
 
 
+class FakeRerankProvider(RerankProvider):
+    """Trả điểm dựng sẵn (theo thứ tự `documents`) hoặc raise `ProviderError`; ghi lại lời gọi."""
+
+    name = "fake"
+
+    def __init__(
+        self, scores: list[float] | None = None, error: ProviderError | None = None
+    ) -> None:
+        self.scores, self.error = scores, error
+        self.calls: list[tuple[str, str, list[str], int]] = []
+
+    async def rerank(
+        self, model: str, query: str, documents: list[str], top_n: int
+    ) -> RerankResult:
+        self.calls.append((model, query, documents, top_n))
+        if self.error:
+            raise self.error
+        assert self.scores is not None
+        return RerankResult([RerankItem(i, s) for i, s in enumerate(self.scores)], len(query))
+
+
 def provider_lookup(**providers: ChatProvider) -> Callable[[str], ChatProvider]:
     from .ports.errors import ProviderNotConfigured
 
@@ -123,4 +156,10 @@ def provider_lookup(**providers: ChatProvider) -> Callable[[str], ChatProvider]:
     return get
 
 
-__all__ = ["FakeChatProvider", "FakeEmbeddingProvider", "FakeKeyStore", "provider_lookup"]
+__all__ = [
+    "FakeChatProvider",
+    "FakeEmbeddingProvider",
+    "FakeKeyStore",
+    "FakeRerankProvider",
+    "provider_lookup",
+]

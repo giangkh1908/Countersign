@@ -4,6 +4,7 @@
         --allowed-models acme-fast,acme-smart --rpm 120 --tpm 200000 --trust-end-user-token
     python -m gateway.cli revoke-key --key-id <uuid> --reason "leaked"
     echo "$KEY" | python -m gateway.cli check-key   # key đọc từ stdin; exit 0 = dùng được, 3 = không có/đã thu hồi
+    echo "$KEY" | python -m gateway.cli update-key-models --allowed-models acme-embed,acme-rerank   # đặt lại model, không rotate
 
 Cần `GW_DATABASE_URL`(_FILE) và `GW_KEY_PEPPER`(_FILE). Plaintext chỉ in ra stdout đúng một lần.
 Mỗi thao tác ghi một sự kiện `audit` qua `EventSink.append(sync=True)` (không chứa secret).
@@ -112,6 +113,44 @@ async def check_key(
     return 0
 
 
+async def update_key_models(
+    args: argparse.Namespace, keys: KeyStore, sink: EventSink, clock: Clock, settings: Settings
+) -> int:
+    """Đọc key từ stdin, thay `allowed_models` của key đó (không phải rotate). 0 = xong; 3 = key không hợp lệ."""
+    models = tuple(m.strip() for m in args.allowed_models.split(",") if m.strip())
+    if not models:
+        print("error: --allowed-models rỗng", file=sys.stderr)
+        return 2
+    parsed = parse_key(sys.stdin.read().strip())
+    if parsed is None:
+        return EXIT_KEY_MISSING
+    prefix, secret = parsed
+    try:
+        rec = await keys.lookup(prefix)
+    except Exception:  # noqa: BLE001 - mọi lỗi hạ tầng gộp thành exit 2, không lộ chi tiết
+        print("error: không tra được key store", file=sys.stderr)
+        return 2
+    if rec is None or rec.status != "active":
+        return EXIT_KEY_MISSING
+    if not hmac.compare_digest(rec.secret_hmac, hmac_secret(secret, settings.key_pepper)):
+        return EXIT_KEY_MISSING
+    try:
+        await keys.update_allowed_models(rec.key_id, models, args.actor)
+    except KeyNotFound:
+        return EXIT_KEY_MISSING
+    _audit(
+        sink,
+        clock,
+        args.actor,
+        "key.update_models",
+        rec.key_id,
+        {"before": list(rec.allowed_models), "after": list(models)},
+    )
+    await sink.flush(5.0)
+    print(f"updated {rec.key_id}", file=sys.stderr)
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="gateway.cli")
     p.add_argument("--actor", default="cli", help="ghi vào created_by/audit")
@@ -132,6 +171,10 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--key-id", required=True)
     r.add_argument("--reason", required=True)
     sub.add_parser("check-key", help="kiểm key (đọc stdin) còn dùng được trong DB")
+    u = sub.add_parser(
+        "update-key-models", help="đặt lại danh sách model của key (đọc stdin), không rotate"
+    )
+    u.add_argument("--allowed-models", required=True, help="vd acme-embed,acme-rerank")
     return p
 
 
@@ -142,9 +185,12 @@ async def run(argv: list[str] | None = None, settings: Settings | None = None) -
     keys = build_key_store(settings.gw_keystore_adapter, settings, clock=clock)
     sink = build_event_sink(settings.event_sink_adapter, settings)
     try:
-        handler = {"create-key": create_key, "revoke-key": revoke_key, "check-key": check_key}[
-            args.cmd
-        ]
+        handler = {
+            "create-key": create_key,
+            "revoke-key": revoke_key,
+            "check-key": check_key,
+            "update-key-models": update_key_models,
+        }[args.cmd]
         return await handler(args, keys, sink, clock, settings)
     finally:
         await keys.aclose()

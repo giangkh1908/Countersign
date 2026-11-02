@@ -13,6 +13,8 @@ from .ports import (
     EmbeddingUnavailable,
     IndexedChunk,
     Ref,
+    Reranker,
+    RerankUnavailable,
     RetrievalUnavailable,
     RetrievedChunk,
     SearchResult,
@@ -49,6 +51,21 @@ class FakeRetriever(DocumentRetriever):
         if department_filter:
             out = [c for c in out if c.department == department_filter]
         return SearchResult(out[:k], self.mode)
+
+
+class FakeReranker(Reranker):
+    """Sắp theo điểm dựng sẵn `scores[chunk_id]` (giảm dần) hoặc raise `RerankUnavailable`."""
+
+    def __init__(self, scores: dict[int, float] | None = None, *, fail: bool = False) -> None:
+        self.scores = scores or {}
+        self.fail = fail
+        self.calls: list[tuple[str, list[int]]] = []
+
+    async def rerank(self, query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+        self.calls.append((query, [c.chunk_id for c in chunks]))
+        if self.fail:
+            raise RerankUnavailable("test")
+        return sorted(chunks, key=lambda c: -self.scores.get(c.chunk_id, 0.0))
 
 
 class FakeIndexer(DocumentIndexer):

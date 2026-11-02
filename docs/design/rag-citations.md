@@ -14,7 +14,7 @@
 | Embedder | **[CÓ]** `adapters/gateway_http.py` (`GatewayHttpEmbedder`, `POST {gateway}/embeddings`, alias `acme-embed`, batch 32, chuẩn hoá L2, kiểm chiều), `adapters/fake_hash.py`; mặc định `docs_embedder="fake_hash"` | Đổi mặc định sang `gateway_http` khi gateway có `/v1/embeddings` (mục 3) |
 | Gateway | **[CÓ]** `gateway/ports/embedder.py` chỉ là **file giữ chỗ** (docstring); `gateway/api/` chỉ có `chat.py`, `middleware.py`, không có route embeddings | **[MỚI]** route `/v1/embeddings`, port, adapter (mục 3) |
 | Retriever | **[CÓ]** `adapters/pgvector_hybrid.py` (`PgVectorHybridRetriever`): KNN `<=>` + full-text `ts_rank_cd` + RRF (`docs_rrf_k=60`), ACL hai lớp (WHERE + RLS qua `set_config`), suy giảm `fts_only` khi embedder lỗi | **[SỬA]** thêm bật/tắt từng nhánh, cột trích dẫn, tuỳ chọn tách từ (mục 4) |
-| Rerank | **[CÓ]** port + `adapters/none.py`; `DocumentService` gọi `reranker.rerank` trực tiếp, output luôn ghi `"reranked": False` (`services/document_service.py`) | **[MỚI]** adapter rerank thật; **[SỬA]** ghi đúng cờ `reranked` |
+| Rerank | **[CÓ]** port `Reranker` (`active`), adapter `none` và `gateway_rerank` (gọi `POST {gateway}/rerank`, alias `acme-rerank`); `DocumentService` rerank `DOCS_RERANK_TOP_N` ứng viên đầu, phần còn lại giữ phía sau; cờ `reranked` ghi đúng; lỗi rerank => `mode` có hậu tố `+rerank_skipped`. Gateway có `POST /v1/rerank` + port `RerankProvider` + adapter `http_rerank` (kiểu Jina/Cohere/llama.cpp). Mặc định `DOCS_RERANK=none`; chưa đo chất lượng | Đo `vector_rerank` / `hybrid_rerank` trên runtime thật (`--configs rerank`) |
 | Indexer | **[CÓ]** `adapters/pgvector_indexer.py` (`PgVectorIndexer`, `is_current` theo sha256 + ACL, `replace` một transaction/tài liệu, `dim` mặc định 1024) | **[SỬA]** ghi cột trích dẫn, kiểm chiều, chữ ký chỉ mục (mục 2) |
 | Ingest | **[CÓ]** `ingest/job.py::run_ingest` đọc `documents.jsonl` + file nguồn, fail-closed, idempotent theo sha256 | **[SỬA]** `parse_meta` nhận `doc_num` (mục 1.5) |
 | Tool | **[CÓ]** chỉ `search_documents` (`api/tools.py`); `get_document` có trong thiết kế `02 §5.4` và allowlist của `agents/docs.py` nhưng **chưa có handler** | Không bắt buộc cho R1–R3 (mục 5.6) |
@@ -259,6 +259,7 @@ Bốn cấu hình của RQ1: `vector` (`USE_FTS=false`), `bm25` (`USE_VECTOR=fal
 - Port `Reranker` **[CÓ]** (`rerank(query, chunks) -> list[RetrievedChunk]`). Thêm adapter `gateway_rerank.py` **[MỚI]** gọi `POST {gateway}/rerank` với alias `acme-rerank` (hình dạng request kiểu Cohere/Jina: `{model, query, documents:[...], top_n}` => `{results:[{index, relevance_score}]}`; đây **không** thuộc chuẩn OpenAI nên gateway phải thêm route và port `RerankProvider` tương tự `EmbeddingProvider`; cần orchestrator duyệt, mục 10).
 - Chọn ứng viên: lấy `DOCS_RERANK_TOP_N` đầu của RRF, rerank, giữ thứ tự mới; phần còn lại giữ nguyên phía sau. Lỗi rerank (`EmbeddingUnavailable`-tương tự: `RerankUnavailable`) => bỏ qua rerank, ghi `mode` kèm `rerank_skipped`, không làm hỏng truy xuất.
 - Sửa `DocumentService`: `"reranked"` ghi đúng (hiện luôn `False`). Trong `DocumentService` hiện reranker được gọi trực tiếp, không có decorator `Reranking(inner, reranker)` mà `02 §5.0` mô tả; giữ nguyên cách gọi hiện có (đủ cho một chiến lược) — đừng viết thêm decorator khi chưa có nhu cầu.
+- **Bật trên stack [CÓ]:** chạy `llama-server --reranking` (model cross-encoder, ví dụ bge-reranker-v2-m3) trên host cổng 8081; đặt `GW_MODELS_CONFIG` trỏ `models.ollama.yaml` (có alias `acme-rerank`); `bash scripts/bootstrap-gateway-keys.sh --restart` (đặt lại model của key docs-mcp, không rotate); `DOCS_RERANK=gateway_rerank` rồi `docker compose up -d docs-mcp`. Đo bằng `python -m eval.rag run --configs rerank` (báo cáo có `rerank_p50/p95`).
 
 ## 5. Trích dẫn kiểm chứng được (RQ2)
 
@@ -523,12 +524,12 @@ Mọi dòng "factory" nghĩa là: thêm một hàm `_load_*` lazy import + một
 | Dịch vụ | Port (abc) | Adapter | Fake | Factory | Trạng thái |
 |---|---|---|---|---|---|
 | gateway | `EmbeddingProvider` (`gateway/ports/embedder.py` thay file giữ chỗ; tên cần chốt, mục 10) | `mock_hash`; vendor theo mục 10 (một file mỗi vendor) | `FakeEmbeddingProvider` (`gateway/testing.py`) | `gateway/factory.py::build_embedding_provider` (+ decorator `Retrying*`, `Metered*`) | MỚI |
-| gateway | `RerankProvider` | `mock_overlap` (điểm theo độ trùng từ, tất định); vendor theo mục 10 | `FakeRerankProvider` | `gateway/factory.py::build_rerank_provider` | MỚI (tuỳ chọn, nếu giữ cấu hình `hybrid_rerank`) |
+| gateway | `RerankProvider` | `http_rerank` (CÓ; kiểu Jina/Cohere/llama.cpp `--reranking`) | `FakeRerankProvider` (CÓ) | `gateway/factory.py::build_rerank_provider` | CÓ |
 | docs-mcp | `Embedder` | `gateway_http`, `fake_hash` | `FakeHashEmbedder` | `factory.py::build_embedder` | CÓ (đổi mặc định cấu hình) |
 | docs-mcp | `DocumentLoader` | `markdown` (CÓ); **`vbpl_articles`** | — (test dùng file nhỏ) | `factory.py::_LOADERS` thêm khoá `".json"` | `vbpl_articles` MỚI |
 | docs-mcp | `DocumentRetriever` | `pgvector_hybrid` (SỬA: bật/tắt nhánh, cột trích dẫn, `fts_mode`, `verify_schema`) | `FakeRetriever` (SỬA: nhận trường mới) | `factory.py::build_retriever` | SỬA |
 | docs-mcp | `DocumentIndexer` | `pgvector_hybrid` / `PgVectorIndexer` (SỬA: cột mới, `index_sig`, `fts_text`, `verify_schema`) | `FakeIndexer` | `factory.py::build_indexer` | SỬA |
-| docs-mcp | `Reranker` | `none` (CÓ); **`gateway_rerank`** | thêm `FakeReranker` (hiện chưa có trong `testing.py`) | `factory.py::build_reranker` | `gateway_rerank` MỚI |
+| docs-mcp | `Reranker` | `none`, `gateway_rerank` (CÓ) | `FakeReranker` (CÓ, `testing.py`) | `factory.py::build_reranker` | CÓ |
 | docs-mcp | `ArticleReader` | `pg_article_reader` | `FakeArticleReader` | `factory.py::build_article_reader` | MỚI |
 | docs-mcp | `TextSegmenter` | `none`, `syllable_bigram`, `underthesea` (tuỳ chọn) | `FakeSegmenter` (hoặc dùng `none`) | `factory.py::build_segmenter` | MỚI |
 | agent | `SupportJudge` | `gateway_llm` (alias cấu hình được); eval dùng lại | `FakeSupportJudge` (trả verdict theo kịch bản) | `agent/factory.py::build_support_judge` | MỚI |

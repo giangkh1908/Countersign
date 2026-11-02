@@ -70,7 +70,21 @@ def _load_none_reranker(s: Settings) -> Reranker:
     return NoReranker()
 
 
-_RERANKERS: dict[str, Callable[[Settings], Reranker]] = {"none": _load_none_reranker}
+def _load_gateway_rerank(s: Settings) -> Reranker:
+    from .adapters.gateway_rerank import GatewayRerankReranker
+
+    return GatewayRerankReranker(
+        base_url=s.docs_gateway_url,
+        api_key=s.docs_gateway_key,
+        http=RetryingHttpClient(timeout_s=s.docs_rerank_timeout_s, max_attempts=1),
+        model=s.docs_rerank_model,
+    )
+
+
+_RERANKERS: dict[str, Callable[[Settings], Reranker]] = {
+    "none": _load_none_reranker,
+    "gateway_rerank": _load_gateway_rerank,
+}
 
 
 def build_reranker(name: str, settings: Settings) -> Reranker:

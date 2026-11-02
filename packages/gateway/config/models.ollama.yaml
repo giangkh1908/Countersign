@@ -17,3 +17,12 @@ aliases:
     timeout_s: 180
     # Không thử lại khi timeout: runtime vẫn đang tính lô cũ, thử lại chỉ nhân đôi tải.
     max_attempts: 1
+  # Rerank cross-encoder (R1, cấu hình hybrid+rerank): llama.cpp `llama-server --reranking` chạy trên host cổng 8081.
+  # Chỉ có ở file này vì models.yaml mặc định không có runtime rerank.
+  acme-rerank:
+    kind: rerank
+    adapter: http_rerank
+    base_url: http://host.docker.internal:8081
+    model: bge-reranker-v2-m3
+    timeout_s: 60
+    max_attempts: 1

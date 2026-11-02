@@ -7,5 +7,7 @@ from ..ports.types import RetrievedChunk
 
 
 class NoReranker(Reranker):
+    active = False
+
     async def rerank(self, query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
         return chunks

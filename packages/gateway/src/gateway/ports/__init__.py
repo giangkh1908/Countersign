@@ -8,8 +8,10 @@ from .errors import (
     KeyNotFound,
     KeyStoreNotConfigured,
     ProviderNotConfigured,
+    RerankNotConfigured,
 )
 from .key_store import KeyStore
+from .rerank_provider import RerankProvider
 from .types import (
     ChatChunk,
     ChatRequest,
@@ -18,6 +20,8 @@ from .types import (
     KeyRecord,
     NewKey,
     ProviderError,
+    RerankItem,
+    RerankResult,
     ToolCallDelta,
     Usage,
 )
@@ -38,6 +42,10 @@ __all__ = [
     "NewKey",
     "ProviderError",
     "ProviderNotConfigured",
+    "RerankItem",
+    "RerankNotConfigured",
+    "RerankProvider",
+    "RerankResult",
     "ToolCallDelta",
     "Usage",
 ]
