@@ -27,6 +27,7 @@ from prometheus_client import CollectorRegistry
 from .api import ApiError, error_response, router
 from .container import Container, build_container, refresh_optional_agents
 from .factory import build_service_probe
+from .metrics import REGISTRY as AGENT_REGISTRY
 from .settings import Settings
 
 log = logging.getLogger(__name__)
@@ -94,7 +95,9 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         token = c.settings.metrics_token if c else None
         if not bearer_ok(request.headers.get("authorization", ""), token):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
-        return Response(metrics_body(registry), media_type=CONTENT_TYPE)
+        return Response(
+            metrics_body(registry) + metrics_body(AGENT_REGISTRY), media_type=CONTENT_TYPE
+        )
 
     instrument_fastapi(app, "agent")
     return app

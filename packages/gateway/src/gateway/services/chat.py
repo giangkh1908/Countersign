@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from acme_common.ports import Clock, EventSink
+from acme_common.telemetry import start_span
 
 from ..ports.chat_provider import ChatProvider
 from ..ports.errors import ProviderNotConfigured
@@ -37,6 +38,24 @@ _IGNORED = (
     "user",
 )
 _PARAMS = ("temperature", "top_p", "stop", "parallel_tool_calls")
+
+
+def _chat_span(model: str) -> Any:
+    """Span `gen_ai.chat`: chỉ model, token, cache, finish_reason; không nội dung prompt/response."""
+    return start_span("gen_ai.chat", **{"gen_ai.request.model": model, "cache": "miss"})
+
+
+def _end_chat_span(
+    sp: Any, usage: Usage | None, finish_reason: str | None, error: str | None = None
+) -> None:
+    if usage is not None:
+        sp.set_attribute("gen_ai.usage.input_tokens", usage.prompt_tokens)
+        sp.set_attribute("gen_ai.usage.output_tokens", usage.completion_tokens)
+    if finish_reason:
+        sp.set_attribute("finish_reason", finish_reason)
+    if error:
+        sp.set_attribute("error.type", error)
+    sp.end()
 
 
 @dataclass(slots=True)
@@ -220,11 +239,17 @@ class ChatService:
         t0 = self._clock.monotonic()
         resolved, provider, req = self._prepare(caller, parsed)
         t_call = self._clock.monotonic()
+        sp = _chat_span(req.model)
         try:
             resp = await provider.complete(req)
         except ProviderError as exc:
+            _end_chat_span(sp, None, None, exc.kind)
             self._provider_failed(request_id, caller, resolved, provider, req, exc, t0, t_call)
             raise GatewayError("all_providers_failed") from None
+        except BaseException as exc:
+            _end_chat_span(sp, None, None, type(exc).__name__)
+            raise
+        _end_chat_span(sp, resp.usage, resp.finish_reason)
         call_ms = self._ms(t_call)
         total = self._ms(t0)
         self._emit(
@@ -285,20 +310,23 @@ class ChatService:
         resolved, provider, req = self._prepare(caller, parsed)
         t_call = self._clock.monotonic()
         it = provider.stream(req)
+        sp = _chat_span(req.model)
         try:
             first = await anext(it)
         except (ProviderError, StopAsyncIteration) as exc:
             await it.aclose()
             err = exc if isinstance(exc, ProviderError) else ProviderError("protocol")
+            _end_chat_span(sp, None, None, err.kind)
             self._provider_failed(request_id, caller, resolved, provider, req, err, t0, t_call)
             raise GatewayError("all_providers_failed") from None
-        except BaseException:
+        except BaseException as exc:
             await it.aclose()
+            _end_chat_span(sp, None, None, type(exc).__name__)
             raise
         ttft = self._ms(t_call)
         return StreamResult(
             self._run_stream(
-                request_id, caller, parsed, resolved, provider, req, it, first, t0, t_call, ttft
+                request_id, caller, parsed, resolved, provider, req, it, first, t0, t_call, ttft, sp
             ),
             self._headers(request_id, provider.name, req.model, parsed),
         )
@@ -316,17 +344,20 @@ class ChatService:
         t0: float,
         t_call: float,
         ttft: int,
+        sp: Any,
     ) -> AsyncIterator[str]:
         enc = StreamEncoder(
             request_id, parsed.alias, int(self._clock.now().timestamp()), parsed.include_usage
         )
         usage = Usage()
         status, error_code = 200, None
+        finish: str | None = None
         try:
             chunk: Any = first
             while True:
                 if chunk.usage is not None:
                     usage = chunk.usage
+                finish = chunk.finish_reason or finish
                 for line in enc.encode(chunk):
                     yield line
                 try:
@@ -353,6 +384,7 @@ class ChatService:
             usage.estimated = True
             raise
         finally:
+            _end_chat_span(sp, usage, finish, error_code)
             total = self._ms(t0)
             self._emit(
                 request_id=request_id,
