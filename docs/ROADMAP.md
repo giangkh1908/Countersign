@@ -14,7 +14,7 @@
 | R1 | Truy xuất thật + bộ đánh giá truy xuất | Xong (mặc định vector thuần; rerank đo trên dev, không giữ) |
 | R2 | Câu trả lời có trích dẫn kiểm chứng được | Code xong; judge, κ và eval chờ LLM thật |
 | A1 | Hành động qua MCP: ticket, báo cáo nhóm, phân quyền theo vai trò | Phần lớn; còn eval hành động, demo Telegram thật |
-| Q1 | Cache và quan sát (log, trace, metric) | Quan sát xong; exact cache có code và test (mặc định tắt, chưa bật trên stack); chờ số RQ4 |
+| Q1 | Cache và quan sát (log, trace, metric) | Xong với LLM mock: quan sát, exact cache (mặc định tắt) và số RQ4 trên stack thật; chờ LLM thật để đo độ trễ/chất lượng |
 | R3 | An toàn: phân quyền, tài liệu độc, tấn công qua hành động | Corpus độc, harness ASR tầng hệ thống, canary, CI xong; ASR tầng LLM chờ LLM thật |
 | R4 | Đánh giá tổng hợp, demo, báo cáo | |
 
@@ -183,8 +183,8 @@ Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_F
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| ✅ code và test (profile `cache`, `GW_CACHE_ADAPTER=redis`, mặc định tắt) Exact cache (service `redis-cache`): khoá gồm model, prompt, phạm vi quyền; không cache thao tác ghi; giữ nguyên trích dẫn đã kiểm chứng | W | Test: khác phạm vi quyền thì không trúng cache |
-| Harness xong (`python -m eval.cache`), chưa chạy trên stack. Đánh giá RQ4: hit rate, chi phí, độ trễ, chất lượng khi có/không cache; semantic cache ở dạng thử nghiệm, kèm đo rò rỉ | W | Bảng so sánh; semantic cache mặc định vẫn tắt |
+| ✅ code, test và đã chạy trên stack (profile `cache`, `GW_CACHE_ADAPTER=redis`, mặc định tắt) Exact cache (service `redis-cache`): khoá gồm model, prompt, phạm vi quyền; không cache thao tác ghi; giữ nguyên trích dẫn đã kiểm chứng | W | Test: khác phạm vi quyền thì không trúng cache |
+| ✅ đo trên stack thật, LLM mock (`python -m eval.cache users|run|report|scan`; hit rate 12,5% đến 42,5% ở lặp 20%/50%, đường hit 3 đến 9 ms, 28 thăm dò chéo phạm vi trúng 0; số trong `cache-observability.md`). Chưa đo chất lượng RAG qua cache và độ trễ với LLM thật. Đánh giá RQ4: hit rate, chi phí, độ trễ, chất lượng khi có/không cache; semantic cache ở dạng thử nghiệm, kèm đo rò rỉ | W | Bảng so sánh; semantic cache mặc định vẫn tắt |
 | ✅ (Tempo) OpenTelemetry xuyên BFF → agent → gateway → MCP; chọn backend trace nhẹ ở profile `obs` | W | Một câu hỏi cho ra một trace đủ các hop |
 | ✅ trừ phần cache: Log JSON có `trace_id`; dashboard Grafana: truy xuất, chi phí, cache, hành động | W | Dashboard chạy trên số thật |
 | ✅ (`python -m eval.canary` xanh) Trace và log không chứa nội dung prompt/tài liệu | W | Quét canary trên trace = 0 |
@@ -195,7 +195,7 @@ Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_F
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| ✅ phần không cache (`scripts/e2e-leak-check.sh`: 16 user, ~61 truy vấn docs-mcp + 5 lượt agent mỗi user, 0 rò rỉ ở search, SSE, trích dẫn, lịch sử; LLM là mock; chưa kiểm cache) Kiểm tra rò rỉ: mỗi user trong 16 user hỏi bộ câu chạm tài liệu trái quyền; kiểm cả câu trả lời, trích dẫn, cache | W | 0 tài liệu trái quyền xuất hiện ở bất kỳ đâu |
+| ✅ phần không cache (`scripts/e2e-leak-check.sh`: 16 user, ~61 truy vấn docs-mcp + 5 lượt agent mỗi user, 0 rò rỉ ở search, SSE, trích dẫn, lịch sử; LLM là mock) và phần cache (cache bật, chạy hai lần liên tiếp: 0 rò rỉ cả hai, lượt 2 có 76 hit; `python -m eval.cache scan` quét 651 khoá redis-cache, 0 dấu vết trái quyền; đối chứng dương trong Redis chưa có vì mock không chép tài liệu) Kiểm tra rò rỉ: mỗi user trong 16 user hỏi bộ câu chạm tài liệu trái quyền; kiểm cả câu trả lời, trích dẫn, cache | W | 0 tài liệu trái quyền xuất hiện ở bất kỳ đâu |
 | ✅ Tấn công qua hành động (mock LLM chiếm hoàn toàn, 13 cấu hình lớp, `python -m eval.attack`; ASR tầng LLM chưa đo): tài liệu độc lừa agent tạo ticket hoặc gửi dữ liệu mật vào nhóm (dùng adapter `fake`) | W | Bảng ASR có/không từng lớp (phê duyệt, mức mật kênh, taint) |
 | ✅ corpus (71 tài liệu: 56 độc = 8 kỹ thuật × 7, 5 mật có canary, 10 sạch; ground truth `manifest.jsonl`; nạp: `scripts/ingest-attack-corpus.sh`, chưa nạp vào stack), chưa đo ASR tầng LLM: Xây corpus độc và nạp vào kho; đo tỉ lệ tấn công thành công (ASR) có/không spotlighting và bộ kiểm chứng | W | Bảng ASR theo kỹ thuật |
 | ✅ trong-process (16 user × mọi truy vấn, kể cả retriever rò ACL; stack thật do E2E): Canary trong tài liệu mật không bao giờ ra khỏi phạm vi quyền (log, response, usage) | W | Quét tự động = 0 |

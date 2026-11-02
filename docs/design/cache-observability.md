@@ -65,7 +65,33 @@ CLAUDE.md không bọc Redis client, nhưng cache là năng lực phải nằm s
 - `redis-cache`: `allkeys-lru`, không AOF/RDB, ACL `gwcache` chỉ `GET/SET` trên `cache:v1:*`, user `ops` chỉ đọc để quét canary.
 - Harness RQ4: `python -m eval.cache run ...` rồi `report` (xem `eval/cache/__main__.py`). Hai chế độ `plain` và `agent` (phát lại hội thoại có tools và lượt tool cố định, đại diện lời gọi cuối của agent). Nhánh `evidence-keyed` chỉ là mô phỏng ngoại tuyến, runtime luôn `strict`.
 
-Chưa làm: semantic cache (đúng thứ tự cắt của ADR-007), số RQ4 trên stack, quét canary Redis tự động.
+Chưa làm: semantic cache (đúng thứ tự cắt của ADR-007), chất lượng RAG qua cache (cần LLM thật), số RQ4 với LLM thật.
+
+### Kết quả RQ4 trên stack thật (02/11/2026)
+
+Stack compose đầy đủ (gateway `GW_CACHE_ADAPTER=off` rồi `redis`, cùng image), 7 phiên của 6 user thật từ Keycloak (token aud=llm-gateway đổi như agent, 6 phạm vi khác nhau, `an.nguyen` có hai phiên cùng phạm vi), khoá API của agent. Mỗi ô n=40 request tuần tự, `temperature=0`, `max_tokens=64`; seed cố định nên cache-off và cache-on hỏi đúng cùng dãy. Lệnh: `python -m eval.cache users --out <file>` (token ngắn hạn 300 giây, sinh lại trước mỗi lượt, xoá file sau khi dùng), `run --mode plain|agent --label cache-off|cache-on --seed 11|21`, `report`.
+
+**LLM là `mock-provider`, độ trễ cố định khoảng 1,29 giây mỗi lời gọi.** Vì vậy p50/p95 của miss và mức tiết kiệm độ trễ KHÔNG đại diện LLM thật; chỉ có ý nghĩa: (a) chi phí phụ của cache so với không cache, (b) độ trễ của đường hit (Redis + gateway).
+
+| Chế độ | Lặp | Hit rate (off / on) | p50 ms (off / on) | p95 ms (off / on) | p50 hit / miss ms (on) | Token tính phí (off / on) | Thăm dò chéo / trúng |
+|---|---|---|---|---|---|---|---|
+| plain | 0% | 0 / 0,0% | 1286 / 1287 | 1289 / 1300 | - / 1287 | 2320 / 2320 | 4 / 0 |
+| plain | 20% | 0 / 15,0% | 1286 / 1287 | 1292 / 1329 | 3 / 1287 | 2320 / 1972 | 6 / 0 |
+| plain | 50% | 0 / 37,5% | 1286 / 1287 | 1287 / 1332 | 4 / 1287 | 2320 / 1450 | 2 / 0 |
+| agent | 0% | 0 / 0,0% | 1286 / 1287 | 1293 / 1294 | - / 1287 | 5400 / 5400 | 7 / 0 |
+| agent | 20% | 0 / 12,5% | 1286 / 1287 | 1288 / 1328 | 5 / 1287 | 5400 / 4725 | 3 / 0 |
+| agent | 50% | 0 / 42,5% | 1286 / 1287 | 1289 / 1333 | 9 / 1289 | 5400 / 3105 | 6 / 0 |
+
+- Mọi lặp hợp lệ (cùng phạm vi hỏi lại) đều trúng: 6/6, 15/15, 5/5, 17/17; hit rate thấp hơn mức lặp danh nghĩa chỉ vì lặp chỉ phát sinh khi user đã hỏi trước đó.
+- 28 thăm dò chéo phạm vi (prompt chỉ phạm vi khác đã hỏi), trúng 0. Khoá có phạm vi nên hai phạm vi khác nhau không bao giờ chung entry.
+- Chi phí phụ ở mức lặp 0%: p50 tăng khoảng 1 ms, token không đổi; p95 chênh trong khoảng sai số đo (n=40). Ở mức 20% và 50% p95 cao hơn khoảng 40 ms ở nhánh on, chưa rõ nguyên nhân (có thể do ghi Redis sau lời gọi hoặc nhiễu), cần n lớn hơn mới kết luận.
+- Đường hit mất 3 đến 9 ms; token tính phí giảm đúng bằng hit rate (12,5% đến 42,5%).
+- Cột `evidence-keyed*` trong báo cáo là mô phỏng ngoại tuyến: hit rate sẽ cao hơn strict ở mọi mức (vd plain 50%: 42,5% so với 37,5%; agent 50%: 57,5% so với 42,5%), cái giá an toàn là phần chênh này. Runtime luôn `strict`.
+- Cỡ mẫu nhỏ (n=40 mỗi ô, một seed): số ở đây là chứng minh cơ chế và mốc chi phí, chưa phải ước lượng thống kê. Lượt đầu n=100 bị hỏng vì token hết hạn giữa chừng nên không dùng.
+
+**Rò rỉ có cache.** `scripts/e2e-leak-check.sh` (16 user, ~61 truy vấn docs-mcp + 5 lượt agent mỗi user) chạy hai lần liên tiếp khi cache bật: lượt 1 và lượt 2 đều 0 rò rỉ cứng, 0 rò tiêu đề, 0 lỗi, mọi user có đối chứng dương. Metric `gateway_cache_lookups_total` (gateway mới khởi động trước lượt 1): sau lượt 1 miss=228, hit=0; sau lượt 2 miss=380, hit=76, tức lượt 2 có 76 hit trên 228 lookup. Chưa có hit nào bị rò vì mọi hit đều cùng phạm vi.
+
+**Quét canary trong redis-cache** (`python -m eval.cache scan`, user ACL `ops` chỉ đọc, mật khẩu đọc trong container từ secret): 651 khoá, 0 sai dạng; với mỗi khoá, tài liệu trái quyền của phạm vi trong khoá được tính độc lập với RLS (hàm của `eval/e2e/leak_check.py`), quét doc_id, tiêu đề và vân tay trong giá trị: 0 dấu vết. Hạn chế: mock-provider không chép nội dung tài liệu vào câu trả lời nên đối chứng dương bằng 0 (không khoá nào chứa dấu vết cả tài liệu được phép); phép quét được kiểm bằng test đơn vị với dữ liệu giả có rò, chưa chứng minh được bằng LLM thật. Cần chạy lại với LLM thật.
 
 ### Đo RQ4
 
