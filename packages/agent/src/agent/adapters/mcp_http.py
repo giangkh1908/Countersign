@@ -16,6 +16,7 @@ from typing import Any
 import httpx2
 from acme_common.mcp.context import THREAD_ID_META_KEY
 from acme_common.ports import Principal, TokenBroker
+from acme_common.telemetry import inject_trace_headers
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
@@ -29,7 +30,13 @@ MAX_OUTPUT_BYTES = 8192
 
 
 def _default_http(headers: dict[str, str]) -> httpx2.AsyncClient:
-    return httpx2.AsyncClient(headers=headers, timeout=httpx2.Timeout(30.0, read=60.0))
+    return httpx2.AsyncClient(
+        headers=headers,
+        timeout=httpx2.Timeout(30.0, read=60.0),
+        event_hooks={
+            "request": [inject_trace_headers]
+        },  # traceparent sang MCP (httpx2 không có instrumentation)
+    )
 
 
 class McpHttpToolProvider(ToolProvider):

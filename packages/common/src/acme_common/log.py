@@ -1,6 +1,6 @@
 """Logging JSON có cấu trúc (module thường, không phải port).
 
-- Mỗi dòng là một object JSON: `ts`, `level`, `logger`, `msg`, `service`, `request_id`, cùng các
+- Mỗi dòng là một object JSON: `ts`, `level`, `logger`, `msg`, `service`, `request_id`, `trace_id` (khi có span), cùng các
   trường truyền qua `extra={"fields": {...}}`.
 - `request_id` lấy từ contextvar (`bind_request_id`), không cần truyền tay.
 - Không log payload: khoá nhạy cảm (token, authorization, password, secret, body...) bị che.
@@ -15,6 +15,8 @@ import sys
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+
+from .telemetry import current_trace_id
 
 request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "acme_request_id", default=None
@@ -86,6 +88,9 @@ class JsonFormatter(logging.Formatter):
         rid = request_id_var.get()
         if rid:
             out["request_id"] = rid
+        tid = current_trace_id()
+        if tid:
+            out["trace_id"] = tid
         fields = getattr(record, "fields", None)
         if isinstance(fields, dict):
             out.update({k: v for k, v in _scrub(fields).items() if k not in out})

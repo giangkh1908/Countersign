@@ -7,6 +7,7 @@ AuthMiddleware, cộng endpoint `/internal/taint/forget`. Test truyền fake qua
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -18,7 +19,9 @@ from acme_common.factory import (
     build_token_verifier,
     build_tool_server_host,
 )
-from acme_common.mcp import AuthMiddleware, ToolInvoker
+from acme_common.log import configure_logging
+from acme_common.mcp import AuthMiddleware, CallerContext, ToolInvoker, ToolOutput
+from acme_common.metrics import CONTENT_TYPE, bearer_ok, metrics_body
 from acme_common.ports import (
     Clock,
     EventSink,
@@ -26,6 +29,8 @@ from acme_common.ports import (
     TokenVerifier,
     ToolServerHost,
 )
+from acme_common.telemetry import span, traced_asgi
+from prometheus_client import CollectorRegistry, Counter, Histogram
 
 from .api.forget import PATH as FORGET_PATH
 from .api.forget import TaintForgetEndpoint
@@ -52,6 +57,54 @@ async def _noop() -> None:
     return None
 
 
+class RetrievalMetrics:
+    """Metric truy xuất của docs-mcp. Nhãn chỉ gồm `mode` và `outcome` (tập hữu hạn)."""
+
+    def __init__(self, registry: CollectorRegistry) -> None:
+        self.total = Counter(
+            "docs_retrieval_total",
+            "Lượt truy xuất theo chế độ và kết quả",
+            ["mode", "outcome"],
+            registry=registry,
+        )
+        self.duration = Histogram(
+            "docs_retrieval_duration_seconds",
+            "Thời gian truy xuất (hybrid, kèm rerank)",
+            ["mode"],
+            registry=registry,
+        )
+        self.returned = Histogram(
+            "docs_retrieval_returned",
+            "Số đoạn trả về mỗi lượt",
+            buckets=(0, 1, 2, 3, 5, 8, 12, 20),
+            registry=registry,
+        )
+
+    def wrap(self, handler: Any) -> Any:
+        """Đo thời gian + mở span `retrieval` (chỉ số đếm, không nội dung)."""
+
+        async def run(ctx: CallerContext, args: dict[str, Any]) -> Any:
+            start = time.perf_counter()
+            with span("retrieval") as sp:
+                try:
+                    out = await handler(ctx, args)
+                except Exception:
+                    self.total.labels("unknown", "error").inc()
+                    raise
+                data = out.data if isinstance(out, ToolOutput) else out
+                mode = str(data.get("mode", "unknown"))
+                n = len(data.get("results", ()))
+                sp.set_attribute("mode", mode)
+                sp.set_attribute("returned", n)
+                sp.set_attribute("reranked", bool(data.get("reranked", False)))
+            self.total.labels(mode, "ok").inc()
+            self.duration.labels(mode).observe(time.perf_counter() - start)
+            self.returned.observe(n)
+            return out
+
+        return run
+
+
 @dataclass
 class Runtime:
     settings: Settings
@@ -61,18 +114,47 @@ class Runtime:
     app: Any  # ASGI
     # kiểm cấu hình lúc khởi động (schema, số chiều, embedder); sai => IndexConfigError, dừng dịch vụ
     startup_check: Callable[[], Awaitable[None]] = field(default=_noop)
+    registry: CollectorRegistry = field(default_factory=CollectorRegistry)
 
 
 class _Router:
-    """ASGI: `/internal/taint/forget` -> endpoint riêng; còn lại -> AuthMiddleware(host)."""
+    """ASGI: `/internal/taint/forget`, `/metrics` -> endpoint riêng; còn lại -> AuthMiddleware(host)."""
 
-    def __init__(self, mcp_app: Any, forget: TaintForgetEndpoint) -> None:
+    def __init__(
+        self,
+        mcp_app: Any,
+        forget: TaintForgetEndpoint,
+        registry: CollectorRegistry,
+        metrics_token: str | None,
+    ) -> None:
         self._mcp = mcp_app
         self._forget = forget
+        self._registry = registry
+        self._metrics_token = metrics_token
+
+    async def _metrics(self, scope: Any, send: Any) -> None:
+        auth = dict(scope["headers"]).get(b"authorization", b"").decode("latin-1")
+        if bearer_ok(auth, self._metrics_token):
+            status, body, ctype = 200, metrics_body(self._registry), CONTENT_TYPE
+        else:
+            status, body, ctype = 401, b"", "text/plain"
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status,
+                "headers": [
+                    (b"content-type", ctype.encode()),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if scope["type"] == "http" and scope["path"] == FORGET_PATH:
             await self._forget(scope, receive, send)
+        elif scope["type"] == "http" and scope["path"] == "/metrics":
+            await self._metrics(scope, send)
         else:
             await self._mcp(scope, receive, send)
 
@@ -135,7 +217,10 @@ def build_runtime(
     )
     host = build_tool_server_host(s.mcp_host, s, server_name=SERVER)
     spec = search_spec(max_output_bytes=s.mcp_max_output_bytes)
-    host.register(spec, invoker.wrap(spec, search_handler(service)))
+    registry = CollectorRegistry()
+    host.register(
+        spec, invoker.wrap(spec, RetrievalMetrics(registry).wrap(search_handler(service)))
+    )
 
     scopes = {spec.name: spec.required_scopes}
     mcp_app = AuthMiddleware(
@@ -167,7 +252,8 @@ def build_runtime(
             s.docs_embed_dim, embed_model=model, strict_meta=s.docs_strict_index_meta
         )
 
-    return Runtime(s, host, invoker, service, _Router(mcp_app, forget), startup_check)
+    router = _Router(mcp_app, forget, registry, s.metrics_token)
+    return Runtime(s, host, invoker, service, router, startup_check, registry)
 
 
 class _LazyApp:
@@ -185,6 +271,7 @@ class _LazyApp:
             first = await receive()
             if first["type"] == "lifespan.startup":
                 try:
+                    configure_logging(Settings().log_level, SERVER)
                     rt = self._rt = self._rt or build_runtime()
                     await rt.startup_check()
                 except IndexConfigError as e:
@@ -209,4 +296,4 @@ class _LazyApp:
         return self._rt.app
 
 
-app = _LazyApp()
+app = traced_asgi(_LazyApp(), SERVER)

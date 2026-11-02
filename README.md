@@ -35,6 +35,7 @@ Bật ticket: `docker compose --profile tickets up -d`. Dừng: `make down`. Log
 | Stack mặc định, rảnh | 1,2 GiB |
 | Thêm profile `tickets`, rảnh | 1,3 GiB |
 | Đỉnh khi chạy E2E đóng ticket | 1,4 GiB |
+| Thêm profile `obs` (Tempo, Prometheus, Grafana), rảnh, đo 2026-11-02 sau một câu hỏi | cộng thêm khoảng 0,3 GiB: Tempo 103 MiB, Grafana 157 MiB, Prometheus 51 MiB |
 | Đỉnh khi chạy 20 câu hỏi qua luồng agent thật (kho đã ingest 2.072 chunk; số này đo với embedding `mock_hash`, chưa đo lại với Ollama) | 1,26 GiB (trung bình 1,24) |
 
 Keycloak chiếm khoảng 550 đến 630 MiB. Trong lượt 20 câu hỏi, CPU trung bình mỗi container dưới 10% và đỉnh cao nhất 48% (một lõi): bff 47%, keycloak 48%, docs-mcp 28%, agent 26%, gateway 26% (bff và agent gồm cả tiến trình `docker exec` của script đo). Câu hỏi đi qua `search_documents` thật (agent, docs-mcp, gateway, Postgres) nhưng LLM là `mock-provider` được kịch bản hoá để gọi công cụ tìm kiếm, nên số này không gồm chi phí của LLM thật. Số trên chưa tính Docker engine và cache của hệ điều hành.

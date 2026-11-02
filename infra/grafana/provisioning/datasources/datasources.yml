@@ -1,4 +1,4 @@
-# Hai datasource: prometheus và gw-postgres (db gateway, role gw_report)
+# Ba datasource: prometheus, tempo (trace) và gw-postgres (db gateway, role gw_report)
 apiVersion: 1
 datasources:
   - name: prometheus
@@ -7,6 +7,11 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: true
+  - name: tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
   - name: gw-postgres
     uid: gw-postgres
     type: grafana-postgresql-datasource

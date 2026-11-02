@@ -16,6 +16,12 @@ dependencies = [
     "jsonschema>=4.26.0",
     "redis>=8.1.0",
     "psycopg[binary]>=3.2",
+    "opentelemetry-sdk>=1.45.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2",
+    "opentelemetry-instrumentation-fastapi>=0.66b2",
+    "opentelemetry-instrumentation-httpx>=0.66b2",
+    "opentelemetry-instrumentation-asgi>=0.66b2",
+    "prometheus-client>=0.26.0",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -11,9 +11,18 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from acme_common.log import configure_logging
+from acme_common.metrics import (
+    CONTENT_TYPE,
+    HttpMetrics,
+    HttpMetricsMiddleware,
+    bearer_ok,
+    metrics_body,
+)
+from acme_common.telemetry import instrument_fastapi
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CollectorRegistry
 
 from .api import ApiError, error_response, router
 from .container import Container, build_container, refresh_optional_agents
@@ -58,7 +67,10 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             for close in c.closers:
                 await close()
 
+    registry = CollectorRegistry()
+    http_metrics = HttpMetrics(registry, "agent")
     app = FastAPI(title="agent", lifespan=lifespan)
+    app.add_middleware(HttpMetricsMiddleware, metrics=http_metrics)
     if container is not None:  # test dùng ASGITransport không chạy lifespan
         app.state.container = container
     app.include_router(router)
@@ -75,6 +87,16 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/metrics")
+    def metrics(request: Request) -> Response:
+        """Bearer `METRICS_TOKEN` (contracts §1)."""
+        c: Container | None = getattr(request.app.state, "container", None)
+        token = c.settings.metrics_token if c else None
+        if not bearer_ok(request.headers.get("authorization", ""), token):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        return Response(metrics_body(registry), media_type=CONTENT_TYPE)
+
+    instrument_fastapi(app, "agent")
     return app
 
 
