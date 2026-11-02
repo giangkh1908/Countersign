@@ -8,9 +8,8 @@ from typing import Any
 import jwt
 import pytest
 from acme_common.services.canonical import canonical_json
-from mcp_tickets.adapters.es256_jws import INTENT_PREFIX
 from mcp_tickets.testing import make_ticket
-from tickets_harness import ASSIGNEE, OTHER, REQUESTER, Env, new_key, principal
+from tickets_harness import ASSIGNEE, INTENT_PREFIX, OTHER, REQUESTER, Env, new_key, principal
 
 CLOSE = {"code": "TCK-000123", "resolution": "Đã thay mực và cài lại driver máy in."}
 
@@ -388,15 +387,15 @@ async def test_stale_committing_recovery_not_applied(env: Env) -> None:
 
 
 async def test_stale_committing_recovery_already_applied(env: Env) -> None:
+    from acme_common.services.intent_commit import intent_from
     from mcp_tickets.ports import Approval
-    from mcp_tickets.services.ticket_service import TicketService
 
     out = await prepare(env)
     await env.issuer.begin_commit(out["intent_id"], "owner-1")
     st = await env.issuer.load(out["intent_id"])
     # owner đã ghi DB rồi mới chết
     await env.repo.commit_write(
-        TicketService._intent_from(st),
+        intent_from(st),
         Approval("11111111-1111-4111-8111-111111111111", out["intent_id"], st.sha256),
         principal(),
     )
@@ -545,6 +544,7 @@ async def test_tool_manifest_and_no_other_write_tools(env: Env) -> None:
         "get_ticket",
         "search_tickets",
         "prepare_close_ticket",
+        "prepare_create_ticket",
         "commit_intent",
     }
     for t in env.host.tool_manifest():

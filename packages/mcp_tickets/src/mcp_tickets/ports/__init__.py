@@ -1,35 +1,37 @@
-"""Ports của tickets-mcp (abc.ABC theo năng lực, không import vendor)."""
+"""Ports của tickets-mcp (abc.ABC theo năng lực, không import vendor).
 
-from .approval_verifier import ApprovalVerifier
-from .errors import (
+Các kiểu/port của hạ tầng intent đã chuyển sang `acme_common.ports`; re-export ở đây chỉ để nghiệp vụ
+ticket import một chỗ.
+"""
+
+from acme_common.ports import (
+    Approval,
     ApprovalRejected,
+    ApprovalVerifier,
     ApprovalVerifierNotConfigured,
     BackendUnavailable,
+    CasResult,
+    Draft,
     DuplicateIntent,
+    Intent,
     IntentInvalid,
+    IntentIssuer,
     IntentIssuerNotConfigured,
+    ReplayGuard,
     ReplayGuardNotConfigured,
+    SignedIntent,
+    StoredIntent,
+)
+
+from .errors import (
     RepositoryRolledBack,
     RepositoryUnavailable,
     TicketConflict,
     TicketRepositoryNotConfigured,
     UnsupportedOperation,
 )
-from .intent_issuer import IntentIssuer
-from .replay_guard import ReplayGuard
 from .ticket_repository import TicketRepository
-from .types import (
-    AppliedOp,
-    Approval,
-    Audience,
-    CasResult,
-    Comment,
-    Draft,
-    Intent,
-    SignedIntent,
-    StoredIntent,
-    Ticket,
-)
+from .types import AppliedOp, Audience, Comment, Ticket
 
 __all__ = [
     "AppliedOp",

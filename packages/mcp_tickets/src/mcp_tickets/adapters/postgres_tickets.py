@@ -49,7 +49,7 @@ _TCOLS = ", ".join(f"t.{c.strip()}" for c in _COLS.split(","))
 _COMMENT_COLS = "c.id, c.author_sub, c.body, c.internal, c.created_at"
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 
-_OP_ACTION = {"close_ticket": "close"}
+_OP_ACTION = {"close_ticket": "close", "create_ticket": "create"}
 
 
 def _ticket(row: Sequence[Any]) -> Ticket:
@@ -234,7 +234,10 @@ class PostgresTicketRepository(TicketRepository):
         reached_commit = False
         try:
             async with self._tx(principal) as conn:
-                applied = await self._close_ticket(conn, intent, approval, principal)
+                if intent.op == "create_ticket":
+                    applied = await self._create_ticket(conn, intent, approval, principal)
+                else:
+                    applied = await self._close_ticket(conn, intent, approval, principal)
                 reached_commit = True  # từ đây lỗi chỉ có thể đến từ COMMIT: kết quả không xác định
         except TicketConflict:
             raise
@@ -271,6 +274,54 @@ class PostgresTicketRepository(TicketRepository):
         if row is None:
             raise TicketConflict  # 0 dòng: ticket đã đổi (hoặc RLS chặn); transaction rollback
         ticket_id, ticket = row[0], _ticket(row[1:])
+        return await self._record_event(conn, ticket_id, ticket, intent, approval, principal)
+
+    async def _create_ticket(
+        self,
+        conn: psycopg.AsyncConnection[Any],
+        intent: Intent,
+        approval: Approval,
+        principal: Principal,
+    ) -> AppliedOp:
+        a = intent.args
+        # `code` rỗng => trigger `ticket_code_default` cấp từ id (chỉ cấp lúc commit)
+        cur = await conn.execute(
+            f"INSERT INTO tickets (code, title, description, status, priority, category, "
+            f"requester_sub, requester_dept, assignee_dept, classification) "
+            f"VALUES ('', %s, %s, 'open', %s, %s, %s, %s, %s, %s) RETURNING id, {_COLS}",
+            (
+                a["title"],
+                a["body"],
+                a["priority"],
+                a["category"],
+                principal.sub,
+                principal.dept[0],
+                a["assignee_dept"],
+                a["classification"],
+            ),
+        )
+        row = await cur.fetchone()
+        if row is None:
+            raise RepositoryRolledBack
+        ticket = _ticket(row[1:])
+        return await self._record_event(
+            conn,
+            row[0],
+            ticket,
+            replace(intent, target={**intent.target, "ticket_code": ticket.code}),
+            approval,
+            principal,
+        )
+
+    async def _record_event(
+        self,
+        conn: psycopg.AsyncConnection[Any],
+        ticket_id: int,
+        ticket: Ticket,
+        intent: Intent,
+        approval: Approval,
+        principal: Principal,
+    ) -> AppliedOp:
         cur = await conn.execute(
             "INSERT INTO ticket_events (ticket_id, actor_sub, on_behalf_of, action, approval_jti, "
             "intent_id, intent_sha256, before, after) VALUES (%s, %s, NULL, %s, %s, %s, %s, %s, %s) "

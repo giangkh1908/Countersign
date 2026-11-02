@@ -349,7 +349,7 @@ services:
       MCP_REDIS_URL_FILE: /run/secrets/tickets_redis_url
       APPROVAL_PUBLIC_KEY_PATH: /run/secrets/approval_public_key     # verify approval token do approval-signer ký
       INTENT_PRIVATE_KEY_PATH: /run/secrets/intent_private_key       # ký intent JWS
-      INTENT_KEY_ID: tickets-mcp-1                                    # = secrets/intent-keys/<kid>.pem do gen-secrets.sh tạo (cố định, không đọc .env)
+      INTENT_KEY_ID: tickets-mcp-1                                    # = secrets/intent-keys/<iss>/<kid>.pem do gen-secrets.sh tạo (cố định, không đọc .env)
       INTENT_TTL_S: "300"
       TAINT_POLICY: ${TAINT_POLICY:-warn}                            # warn|block
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key

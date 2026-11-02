@@ -76,3 +76,36 @@ class RateLimiterNotConfigured(NotConfigured):
 
 class ToolServerHostNotConfigured(NotConfigured):
     pass
+
+
+class IntentIssuerNotConfigured(NotConfigured):
+    pass
+
+
+class ApprovalVerifierNotConfigured(NotConfigured):
+    pass
+
+
+class ReplayGuardNotConfigured(NotConfigured):
+    pass
+
+
+class BackendUnavailable(Exception):
+    """Kho trạng thái (Redis) không phản hồi: fail-closed (`upstream_unavailable`)."""
+
+
+class IntentInvalid(Exception):
+    """Intent đã lưu có chữ ký sai/hash lệch/định dạng hỏng: coi như bị giả mạo (`intent_mismatch`)."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"intent_invalid: {reason}")
+        self.reason = reason
+
+
+class ApprovalRejected(Exception):
+    """Approval token không đạt; `code` là mã lỗi tool (`approval_*`)."""
+
+    def __init__(self, code: str, reason: str = "") -> None:
+        super().__init__(f"{code}: {reason}")
+        self.code = code
+        self.reason = reason

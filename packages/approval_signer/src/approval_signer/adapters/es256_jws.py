@@ -1,13 +1,15 @@
 """Adapter `es256_jws` cho port `IntentVerifier`.
 
-Khoá công khai intent đọc từ `INTENT_PUBLIC_KEYS_DIR/<kid>.pem|.pub` (mỗi lần verify đọc lại,
-nên xoá file = thu hồi `kid` ngay, thêm file = xoay khoá không cần khởi động lại).
+Khoá công khai intent đọc từ `INTENT_PUBLIC_KEYS_DIR/<iss>/<kid>.pem|.pub`, GẮN với issuer: MCP bị chiếm
+chỉ ký được intent mang `iss` của chính nó, không mạo danh MCP khác. Mỗi lần verify đọc lại, nên xoá file =
+thu hồi `kid` ngay, thêm file = xoay khoá không cần khởi động lại.
 Header `kid` lạ => từ chối, không fetch mạng. Tài liệu: docs/design/approval.md §2.1.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
 
 import jwt
@@ -18,7 +20,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
 from ..ports import IntentVerifier, RenderModel, SignerError, VerifiedIntent
-from ..rendering import build_render_model
+from ..rendering import ISSUER_OPS, build_render_model
 
 _KID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _MAX_JWS_BYTES = 16 * 1024
@@ -35,19 +37,22 @@ class Es256JwsIntentVerifier(IntentVerifier):
         keys_dir: str | Path,
         clock: Clock,
         *,
-        issuer: str = "tickets-mcp",
+        issuers: Iterable[str] = ("tickets-mcp",),
         audience: str = "approval-signer",
     ) -> None:
         self._dir = Path(keys_dir)
         self._clock = clock
-        self._issuer = issuer
+        self._issuers = frozenset(issuers)
+        unknown = self._issuers - ISSUER_OPS.keys()
+        if not self._issuers or unknown:
+            raise ValueError(f"unsupported intent issuers: {sorted(unknown)}")
         self._audience = audience
 
-    def _public_key(self, kid: str) -> ec.EllipticCurvePublicKey:
-        if not _KID_RE.fullmatch(kid):
+    def _public_key(self, iss: str, kid: str) -> ec.EllipticCurvePublicKey:
+        if not _KID_RE.fullmatch(kid) or iss not in self._issuers:
             raise _mismatch("kid")
         for ext in (".pem", ".pub"):
-            path = self._dir / f"{kid}{ext}"
+            path = self._dir / iss / f"{kid}{ext}"
             if path.is_file():
                 try:
                     key = load_pem_public_key(path.read_bytes())
@@ -74,7 +79,14 @@ class Es256JwsIntentVerifier(IntentVerifier):
         kid = header.get("kid")
         if not isinstance(kid, str):
             raise _mismatch("kid")
-        key = self._public_key(kid)
+        # `iss` chưa tin cậy chỉ dùng để chọn thư mục khoá; chữ ký phải khớp khoá của đúng issuer đó
+        try:
+            claimed = jwt.decode(intent_jws, options={"verify_signature": False}).get("iss")
+        except jwt.PyJWTError:
+            raise SignerError("invalid_argument") from None
+        if not isinstance(claimed, str) or claimed not in self._issuers:
+            raise _mismatch("iss")
+        key = self._public_key(claimed, kid)
         try:
             payload = jwt.decode(
                 intent_jws,
@@ -92,8 +104,10 @@ class Es256JwsIntentVerifier(IntentVerifier):
             raise _mismatch("signature") from None
         except jwt.PyJWTError:
             raise SignerError("invalid_argument") from None
-        if payload.get("iss") != self._issuer:
+        if payload.get("iss") != claimed:
             raise _mismatch("iss")
+        if payload.get("op") not in ISSUER_OPS[claimed]:
+            raise _mismatch("op")
         if payload.get("aud") != self._audience:
             raise _mismatch("aud")
         if not isinstance(payload.get("intent_id"), str) or not isinstance(payload.get("sub"), str):

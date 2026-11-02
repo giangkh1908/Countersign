@@ -82,7 +82,10 @@ GRANT INSERT, SELECT ON tool_audit TO mcp_audit_w;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO tk_app;
 GRANT USAGE ON SEQUENCE tool_audit_id_seq TO mcp_audit_w;
 
--- RLS (FORCE): requester_sub = app.sub OR (assignee_dept IN app.depts AND employee) OR admin
+-- RLS (FORCE). Đọc: requester | assignee_dept với employee/management | admin.
+-- Ghi: bản viết tay của ma trận docs/design/actions-roles.md §1 (nguồn Python:
+-- acme_common/services/capabilities.py; test tham số hoá mọi ô chạy qua cả hai). Sửa ma trận => sửa ở đây.
+-- `admin`/`auditor` là vai trò CHẶN: có mặt là mất mọi quyền ghi dù có thêm vai trò khác.
 ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;         ALTER TABLE tickets FORCE ROW LEVEL SECURITY;
 ALTER TABLE ticket_comments ENABLE ROW LEVEL SECURITY; ALTER TABLE ticket_comments FORCE ROW LEVEL SECURITY;
 ALTER TABLE ticket_events ENABLE ROW LEVEL SECURITY;   ALTER TABLE ticket_events FORCE ROW LEVEL SECURITY;
@@ -90,24 +93,33 @@ ALTER TABLE ticket_events ENABLE ROW LEVEL SECURITY;   ALTER TABLE ticket_events
 DROP POLICY IF EXISTS tk_select ON tickets;
 CREATE POLICY tk_select ON tickets FOR SELECT TO tk_app USING (
   requester_sub = acme.ctx_sub()
-  OR (assignee_dept = ANY (acme.ctx_depts()) AND 'employee' = ANY (acme.ctx_roles()))
+  OR (assignee_dept = ANY (acme.ctx_depts()) AND acme.ctx_roles() && ARRAY['employee', 'management'])
   OR 'admin' = ANY (acme.ctx_roles())
 );
+-- Đóng ticket: được giao cho mình (mọi vai trò có quyền ghi) hoặc trong phòng (dept_manager, management).
 DROP POLICY IF EXISTS tk_update ON tickets;
 CREATE POLICY tk_update ON tickets FOR UPDATE TO tk_app
   USING (
-    requester_sub = acme.ctx_sub()
-    OR (assignee_dept = ANY (acme.ctx_depts()) AND 'employee' = ANY (acme.ctx_roles()))
-    OR 'admin' = ANY (acme.ctx_roles()))
+    NOT (acme.ctx_roles() && ARRAY['admin', 'auditor'])
+    AND (
+      (assignee_sub = acme.ctx_sub()
+        AND acme.ctx_roles() && ARRAY['employee', 'team_lead', 'dept_manager', 'management'])
+      OR (assignee_dept = ANY (acme.ctx_depts()) AND acme.ctx_roles() && ARRAY['dept_manager', 'management'])
+    ))
   WITH CHECK (
-    requester_sub = acme.ctx_sub()
-    OR (assignee_dept = ANY (acme.ctx_depts()) AND 'employee' = ANY (acme.ctx_roles()))
-    OR 'admin' = ANY (acme.ctx_roles()));
+    NOT (acme.ctx_roles() && ARRAY['admin', 'auditor'])
+    AND (
+      (assignee_sub = acme.ctx_sub()
+        AND acme.ctx_roles() && ARRAY['employee', 'team_lead', 'dept_manager', 'management'])
+      OR (assignee_dept = ANY (acme.ctx_depts()) AND acme.ctx_roles() && ARRAY['dept_manager', 'management'])
+    ));
+-- Tạo ticket: mọi vai trò có quyền ghi, người yêu cầu phải là chính người gọi, ticket mới luôn `open`.
 DROP POLICY IF EXISTS tk_insert ON tickets;
 CREATE POLICY tk_insert ON tickets FOR INSERT TO tk_app WITH CHECK (
-  requester_sub = acme.ctx_sub()
-  OR (assignee_dept = ANY (acme.ctx_depts()) AND 'employee' = ANY (acme.ctx_roles()))
-  OR 'admin' = ANY (acme.ctx_roles())
+  NOT (acme.ctx_roles() && ARRAY['admin', 'auditor'])
+  AND acme.ctx_roles() && ARRAY['employee', 'team_lead', 'dept_manager', 'management']
+  AND requester_sub = acme.ctx_sub()
+  AND status = 'open'
 );
 
 -- Comment: nhìn thấy khi thấy ticket cha (RLS của tickets áp trong subquery); internal chỉ cùng assignee_dept
@@ -132,7 +144,7 @@ CREATE POLICY te_insert ON ticket_events FOR INSERT TO tk_app WITH CHECK (
 
 -- Hàm audience: suy từ điều kiện tk_select. RLS tickets không dùng clearance nên
 -- min_clearance = classification của bản nháp (mặc định 1). dept_set = nơi thấy được ticket qua
--- điều kiện phòng ban: assignee_dept (role employee) và requester_dept (nơi người yêu cầu thuộc về).
+-- điều kiện phòng ban: assignee_dept (role employee/management) và requester_dept (nơi người yêu cầu thuộc về).
 -- 'admin' thấy tất cả không phụ thuộc phòng nên không đưa vào dept_set. Sửa tk_select => sửa hàm này.
 CREATE OR REPLACE FUNCTION acme.ticket_audience(draft jsonb)
 RETURNS TABLE (min_clearance smallint, dept_set text[])

@@ -29,7 +29,7 @@ def _load_es256_jws(settings: Settings, clock: Clock) -> IntentVerifier:
     return Es256JwsIntentVerifier(
         settings.intent_public_keys_dir,
         clock,
-        issuer=settings.intent_issuer_name,
+        issuers=[i.strip() for i in settings.intent_issuer_names.split(",") if i.strip()],
         audience=settings.signer_audience,
     )
 

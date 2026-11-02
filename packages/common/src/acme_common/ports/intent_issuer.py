@@ -10,9 +10,8 @@ import abc
 from collections.abc import Mapping
 from typing import Any, Literal
 
-from acme_common.ports import Principal
-
-from .types import CasResult, Draft, SignedIntent, StoredIntent
+from .intent_types import CasResult, Draft, SignedIntent, StoredIntent
+from .types import Principal
 
 
 class IntentIssuer(abc.ABC):

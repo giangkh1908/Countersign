@@ -1,6 +1,7 @@
 """Adapter `es256_jws` cho port `IntentIssuer`: ký intent ES256 và lưu/chuyển trạng thái trong Redis.
 
-Khoá `mcp:tickets:intent:{intent_id}` là HASH `{jws, sha256, sub, status, owner_jti, updated_at}`,
+Dùng chung cho mọi MCP ghi: mỗi MCP có `issuer` (iss), `redis_prefix` và khoá ký riêng.
+Khoá `{redis_prefix}{intent_id}` (tickets: `mcp:tickets:intent:`) là HASH `{jws, sha256, sub, status, owner_jti, updated_at}`,
 TTL = intent `exp` + 30s (contracts §6). Chuyển trạng thái bằng Lua CAS (docs/design/approval.md §2.3). `load`
 verify lại chữ ký JWS bằng khoá công khai của chính tickets-mcp rồi băm lại payload, nên sửa Redis
 không đổi được `args_canonical`.
@@ -11,30 +12,30 @@ from __future__ import annotations
 import hmac
 import uuid
 from collections.abc import Mapping
-from pathlib import Path
 from typing import Any, Literal
 
 import jwt
-from acme_common.mcp.errors import ToolError
-from acme_common.ports import Clock, Principal
-from acme_common.services.canonical import canonical_json, intent_sha256
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from redis.exceptions import RedisError
 
+from acme_common.mcp.errors import ToolError
+from acme_common.services.canonical import canonical_json, intent_sha256
+
 from ..ports import (
     BackendUnavailable,
     CasResult,
+    Clock,
     Draft,
     IntentInvalid,
     IntentIssuer,
+    Principal,
     SignedIntent,
     StoredIntent,
 )
 
 INTENT_TYP = "acme-intent+jws"
-INTENT_PREFIX = "mcp:tickets:intent:"
 GRACE_S = 30
 MAX_PAYLOAD_BYTES = 8192
 STALE_COMMITTING_S = 30.0
@@ -97,12 +98,15 @@ class Es256JwsIntentIssuer(IntentIssuer):
         private_key_pem: bytes,
         key_id: str,
         clock: Clock,
+        issuer: str,
+        redis_prefix: str,
         ttl_s: int = 300,
-        issuer: str = "tickets-mcp",
         audience: str = "approval-signer",
     ) -> None:
         if not key_id:
             raise ValueError("INTENT_KEY_ID is required")
+        if not issuer or not redis_prefix:
+            raise ValueError("issuer and redis_prefix are required")
         self._r = redis
         self._key = load_ec_private_key(private_key_pem)
         self._pub = self._key.public_key()
@@ -110,16 +114,11 @@ class Es256JwsIntentIssuer(IntentIssuer):
         self._clock = clock
         self._ttl = ttl_s
         self._iss = issuer
+        self._prefix = redis_prefix
         self._aud = audience
         self._begin = redis.register_script(_BEGIN_LUA)
         self._finish = redis.register_script(_FINISH_LUA)
         self._recover = redis.register_script(_RECOVER_LUA)
-
-    @classmethod
-    def from_path(cls, redis: Any, *, private_key_path: str, **kw: Any) -> Es256JwsIntentIssuer:
-        if not private_key_path:
-            raise ValueError("INTENT_PRIVATE_KEY_PATH is required")
-        return cls(redis, private_key_pem=Path(private_key_path).read_bytes(), **kw)
 
     # --- phát hành ---
     async def issue(
@@ -158,7 +157,7 @@ class Es256JwsIntentIssuer(IntentIssuer):
         jws = jwt.encode(
             payload, self._key, algorithm="ES256", headers={"typ": INTENT_TYP, "kid": self._kid}
         )
-        key = INTENT_PREFIX + intent_id
+        key = self._prefix + intent_id
         try:
             async with self._r.pipeline(transaction=True) as pipe:
                 pipe.hset(
@@ -181,7 +180,7 @@ class Es256JwsIntentIssuer(IntentIssuer):
     # --- đọc lại + verify ---
     async def load(self, intent_id: str) -> StoredIntent | None:
         try:
-            raw = await self._r.hgetall(INTENT_PREFIX + intent_id)
+            raw = await self._r.hgetall(self._prefix + intent_id)
         except (RedisError, OSError, TimeoutError):
             raise BackendUnavailable("redis") from None
         if not raw:
@@ -248,7 +247,7 @@ class Es256JwsIntentIssuer(IntentIssuer):
     async def begin_commit(self, intent_id: str, jti: str) -> CasResult:
         now = _num(self._clock.now().timestamp())
         try:
-            res = await self._begin(keys=[INTENT_PREFIX + intent_id], args=[jti, now])
+            res = await self._begin(keys=[self._prefix + intent_id], args=[jti, now])
         except (RedisError, OSError, TimeoutError):
             raise BackendUnavailable("redis") from None
         st, owner, upd = (_s(x) for x in res)
@@ -259,7 +258,7 @@ class Es256JwsIntentIssuer(IntentIssuer):
     ) -> bool:
         now = _num(self._clock.now().timestamp())
         try:
-            res = await self._finish(keys=[INTENT_PREFIX + intent_id], args=[jti, new, now])
+            res = await self._finish(keys=[self._prefix + intent_id], args=[jti, new, now])
         except (RedisError, OSError, TimeoutError):
             raise BackendUnavailable("redis") from None
         return bool(int(res))
@@ -270,7 +269,7 @@ class Es256JwsIntentIssuer(IntentIssuer):
         now = _num(self._clock.now().timestamp())
         try:
             res = await self._recover(
-                keys=[INTENT_PREFIX + intent_id],
+                keys=[self._prefix + intent_id],
                 args=[stale_owner_jti, new, now, str(STALE_COMMITTING_S)],
             )
         except (RedisError, OSError, TimeoutError):

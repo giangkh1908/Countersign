@@ -19,8 +19,8 @@ async def test_real_signer_roundtrip(tmp_path) -> None:
 
     env = Env()
     keys = tmp_path / "intent-keys"
-    keys.mkdir()
-    (keys / "tickets-mcp-1.pem").write_bytes(pem_public(env.intent_key))
+    (keys / "tickets-mcp").mkdir(parents=True)
+    (keys / "tickets-mcp" / "tickets-mcp-1.pem").write_bytes(pem_public(env.intent_key))
     err, out = await env.call("prepare_close_ticket", CLOSE)
     assert not err
 
