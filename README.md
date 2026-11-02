@@ -26,7 +26,7 @@ uv, Python 3.12, Node 22, pnpm, Docker (compose v2). Windows: dùng Git Bash ho�
 
 Bật ticket: `docker compose --profile tickets up -d`. Dừng: `make down`. Log: `make logs`.
 
-E2E notify-mcp (cần profile `tickets` + `notify`): `bash scripts/e2e-notify.sh`. E2E đóng ticket: `bash scripts/e2e-close-ticket.sh`.
+E2E notify-mcp (cần profile `tickets` + `notify`): `bash scripts/e2e-notify.sh`. E2E đóng ticket: `bash scripts/e2e-close-ticket.sh`. E2E tạo ticket: `bash scripts/e2e-create-ticket.sh`. Kiểm rò rỉ 16 user: `bash scripts/e2e-leak-check.sh` (báo cáo ở `eval/results/`). Trong worktree đặt `SECRETS_DIR` trỏ về `secrets/` của repo chính (cả Playwright).
 
 ### Tài nguyên
 
