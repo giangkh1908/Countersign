@@ -17,6 +17,7 @@ dependencies = [
     "asyncpg",  # adapter KeyStore postgres (chỉ trong adapters/)
     "anthropic",  # SDK chính thức, chỉ import trong adapters/anthropic.py
     "prometheus-client",
+    "redis>=8.1.0",  # adapter ResponseCache (chỉ trong adapters/redis.py)
     # CẤM: onnxruntime, torch, tokenizers, transformers, sentence-transformers, huggingface_hub.
 ]
 
@@ -30,6 +31,7 @@ packages = ["src/gateway"]
 [dependency-groups]
 dev = [
     "acme-mock-provider",
+    "fakeredis[lua]>=2.40.0",
     "httpx2",  # anthropic SDK dùng httpx2 cho http_client tiêm vào (test qua ASGI)
     "langchain-openai",
     "openai",

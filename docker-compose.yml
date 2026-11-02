@@ -85,6 +85,9 @@ secrets:                                   # sinh bởi scripts/gen-secrets.sh (
   notify_database_url:        { file: ./secrets/notify_database_url }        # role nt_app
   notify_audit_database_url:  { file: ./secrets/notify_audit_database_url }  # role mcp_audit_w @ notify
   notify_redis_url:           { file: ./secrets/notify_redis_url }
+  # exact cache của gateway (profile `cache`)
+  redis_gwcache_password:     { file: ./secrets/redis_gwcache_password }
+  gw_cache_redis_url:         { file: ./secrets/gw_cache_redis_url }
   notify_intent_private_key:  { file: ./secrets/intent_notify_es256_private.pem }   # CHỈ mount vào notify-mcp
   telegram_bot_token:         { file: ./secrets/telegram_bot_token }               # CHỈ mount vào notify-mcp; rỗng nếu chưa có bot
 
@@ -140,6 +143,28 @@ services:
       timeout: 3s
       retries: 10
     deploy: { resources: { limits: { cpus: "0.5", memory: 384m } } }
+
+  # Exact cache của gateway (Q1). Profile `cache`: mặc định không chạy. Không persistence, allkeys-lru, ACL
+  # riêng (gateway chỉ GET/SET cache:v1:*). Không publish cổng; chỉ mạng core.
+  redis-cache:
+    profiles: ["cache"]
+    image: redis:8
+    <<: *hardened
+    user: "999:999"
+    entrypoint: ["/bin/sh", "/etc/redis/entrypoint.sh"]
+    command: ["redis-server", "/etc/redis/redis-cache.conf"]
+    secrets: [redis_gwcache_password, redis_ops_password, redis_health_password]
+    volumes:
+      - ./infra/redis/redis-cache.conf:/etc/redis/redis-cache.conf:ro
+      - ./infra/redis/users-cache.acl.tmpl:/etc/redis/users.acl.tmpl:ro
+      - ./infra/redis/entrypoint.sh:/etc/redis/entrypoint.sh:ro
+    networks: [core]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_health_password) redis-cli --user health ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy: { resources: { limits: { cpus: "0.5", memory: 192m } } }
 
   # ───────────── danh tính ─────────────
   keycloak:
@@ -234,8 +259,12 @@ services:
       GW_PROVIDER_OVERRIDE: ${GW_PROVIDER_OVERRIDE:-mock}      # mặc định mock (chưa có khoá provider thật); factory chọn adapter `mock` (contracts §9.1 mục 5)
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key          # khoá ngoài DB
       AUDIT_HMAC_KEY_ID: ${AUDIT_HMAC_KEY_ID:-1}
+      GW_CACHE_ADAPTER: ${GW_CACHE_ADAPTER:-off}                # off|redis; redis cần chạy `--profile cache` (service redis-cache)
+      GW_CACHE_REDIS_URL_FILE: /run/secrets/gw_cache_redis_url
+      GW_CACHE_TTL_S: ${GW_CACHE_TTL_S:-3600}
+      GW_CACHE_INDEX_VERSION: ${GW_CACHE_INDEX_VERSION:-0}      # tăng khi nạp lại index/đổi embedding
     extra_hosts: ["host.docker.internal:host-gateway"]   # tới runtime embedding trên host (chỉ dùng khi GW_MODELS_CONFIG trỏ models.ollama.yaml)
-    secrets: [gw_app_password, gw_database_url, gw_key_pepper, anthropic_api_key, audit_hmac_key, metrics_token]
+    secrets: [gw_app_password, gw_database_url, gw_key_pepper, anthropic_api_key, audit_hmac_key, metrics_token, gw_cache_redis_url]
     ports: ["8000:8000"]                      # dev; publish được vì gateway có mặt ở network egress (non-internal)
     networks: [core, egress]
     depends_on:

@@ -15,6 +15,7 @@ from acme_common.ports import Clock
 from .ports.chat_provider import ChatProvider
 from .ports.embedding_provider import EmbeddingProvider
 from .ports.errors import (
+    CacheNotConfigured,
     EmbeddingNotConfigured,
     KeyStoreNotConfigured,
     ProviderNotConfigured,
@@ -22,6 +23,7 @@ from .ports.errors import (
 )
 from .ports.key_store import KeyStore
 from .ports.rerank_provider import RerankProvider
+from .ports.response_cache import ResponseCache
 from .settings import Settings
 
 # --- ChatProvider ---
@@ -209,6 +211,40 @@ def build_key_store(name: str, settings: Settings, *, clock: Clock) -> KeyStore:
             f"unknown key store {name!r}; known: {sorted(_KEY_STORES)}"
         ) from None
     return loader(settings, clock)
+
+
+# --- ResponseCache ---
+
+
+def _load_off(settings: Settings) -> ResponseCache | None:
+    return None
+
+
+def _load_redis_cache(settings: Settings) -> ResponseCache | None:
+    from .adapters.redis import RedisResponseCache
+
+    if not settings.gw_cache_redis_url:
+        raise CacheNotConfigured("cache 'redis' requires GW_CACHE_REDIS_URL")
+    return RedisResponseCache(
+        settings.gw_cache_redis_url,
+        timeout_s=settings.gw_cache_timeout_s,
+        max_value_bytes=settings.gw_cache_max_value_bytes,
+    )
+
+
+_CACHES: dict[str, Callable[[Settings], ResponseCache | None]] = {
+    "off": _load_off,
+    "redis": _load_redis_cache,
+}
+
+
+def build_response_cache(name: str, settings: Settings) -> ResponseCache | None:
+    """`off` trả None (không cache)."""
+    try:
+        loader = _CACHES[name]
+    except KeyError:
+        raise CacheNotConfigured(f"unknown cache {name!r}; known: {sorted(_CACHES)}") from None
+    return loader(settings)
 
 
 class ProviderPool:

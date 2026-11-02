@@ -26,6 +26,18 @@ class Metrics:
             ["alias"],
             registry=self.registry,
         )
+        self.cache_lookups = Counter(
+            "gateway_cache_lookups_total",
+            "Tra exact cache theo kết quả: hit|miss|bypass|error",
+            ["result"],
+            registry=self.registry,
+        )
+        self.cache_stores = Counter(
+            "gateway_cache_stores_total",
+            "Ghi exact cache theo kết quả: ok|skipped|error",
+            ["result"],
+            registry=self.registry,
+        )
         self.auth_failures = Counter(
             "gateway_auth_failures_total",
             "Xác thực thất bại theo lý do",

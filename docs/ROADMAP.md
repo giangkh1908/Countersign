@@ -14,7 +14,7 @@
 | R1 | Truy xuất thật + bộ đánh giá truy xuất | Xong (mặc định vector thuần; rerank đo trên dev, không giữ) |
 | R2 | Câu trả lời có trích dẫn kiểm chứng được | Code xong; judge, κ và eval chờ LLM thật |
 | A1 | Hành động qua MCP: ticket, báo cáo nhóm, phân quyền theo vai trò | Phần lớn; còn eval hành động, demo Telegram thật |
-| Q1 | Cache và quan sát (log, trace, metric) | Quan sát xong; cache chưa làm |
+| Q1 | Cache và quan sát (log, trace, metric) | Quan sát xong; exact cache có code và test (mặc định tắt, chưa bật trên stack); chờ số RQ4 |
 | R3 | An toàn: phân quyền, tài liệu độc, tấn công qua hành động | |
 | R4 | Đánh giá tổng hợp, demo, báo cáo | |
 
@@ -183,8 +183,8 @@ Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_F
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Exact cache (thêm lại service `redis-cache`, hiện chưa có): khoá gồm model, prompt, phạm vi quyền; không cache thao tác ghi; giữ nguyên trích dẫn đã kiểm chứng | W | Test: khác phạm vi quyền thì không trúng cache |
-| Đánh giá RQ4: hit rate, chi phí, độ trễ, chất lượng khi có/không cache; semantic cache ở dạng thử nghiệm, kèm đo rò rỉ | W | Bảng so sánh; semantic cache mặc định vẫn tắt |
+| ✅ code và test (profile `cache`, `GW_CACHE_ADAPTER=redis`, mặc định tắt) Exact cache (service `redis-cache`): khoá gồm model, prompt, phạm vi quyền; không cache thao tác ghi; giữ nguyên trích dẫn đã kiểm chứng | W | Test: khác phạm vi quyền thì không trúng cache |
+| Harness xong (`python -m eval.cache`), chưa chạy trên stack. Đánh giá RQ4: hit rate, chi phí, độ trễ, chất lượng khi có/không cache; semantic cache ở dạng thử nghiệm, kèm đo rò rỉ | W | Bảng so sánh; semantic cache mặc định vẫn tắt |
 | ✅ (Tempo) OpenTelemetry xuyên BFF → agent → gateway → MCP; chọn backend trace nhẹ ở profile `obs` | W | Một câu hỏi cho ra một trace đủ các hop |
 | ✅ trừ phần cache: Log JSON có `trace_id`; dashboard Grafana: truy xuất, chi phí, cache, hành động | W | Dashboard chạy trên số thật |
 | ✅ (`python -m eval.canary` xanh) Trace và log không chứa nội dung prompt/tài liệu | W | Quét canary trên trace = 0 |

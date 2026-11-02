@@ -47,8 +47,11 @@ _need_tools = pytest.mark.skipif(
 )
 
 
-def _placeholders() -> set[str]:
-    return set(re.findall(r"@@([A-Z_]+)@@", ACL.read_text(encoding="utf-8")))
+CACHE_ACL = ACL.with_name("users-cache.acl.tmpl")
+
+
+def _placeholders(path: Path = ACL) -> set[str]:
+    return set(re.findall(r"@@([A-Z_]+)@@", path.read_text(encoding="utf-8")))
 
 
 def _secrets_used() -> set[str]:
@@ -83,14 +86,38 @@ def test_entrypoint_renders_acl_with_hashed_passwords(tmp_path: Path) -> None:
         assert re.search(r"(?:^| )#[0-9a-f]{64}(?: |$)", ln), ln
 
 
+def _service_secrets(compose: str, service: str) -> set[str]:
+    block = re.search(rf"^  {service}:\n(.*?)(?=^  \S)", compose, re.S | re.M)
+    assert block, f"không thấy service {service}"
+    declared = re.search(r"secrets:\s*\[([^\]]*)\]", block.group(1))
+    assert declared
+    return {x.strip() for x in declared.group(1).split(",")}
+
+
 def test_entrypoint_secrets_declared_and_placeholders_substituted() -> None:
     script = ENTRYPOINT.read_text(encoding="utf-8")
     compose = COMPOSE.read_text(encoding="utf-8")
-    block = re.search(r"^  redis-state:\n(.*?)(?=^  \S)", compose, re.S | re.M)
-    assert block, "không thấy service redis-state"
-    declared = re.search(r"secrets:\s*\[([^\]]*)\]", block.group(1))
-    assert declared
-    names = {x.strip() for x in declared.group(1).split(",")}
+    names = _service_secrets(compose, "redis-state") | _service_secrets(compose, "redis-cache")
     assert _secrets_used() <= names
-    for ph in _placeholders():
+    for ph in _placeholders() | _placeholders(CACHE_ACL):
         assert f"s/@@{ph}@@/" in script, f"thiếu -e cho @@{ph}@@"
+
+
+def test_redis_cache_acl_least_privilege() -> None:
+    text = CACHE_ACL.read_text(encoding="utf-8")
+    users = {
+        ln.split()[1]: set(ln.split()[2:]) for ln in text.splitlines() if ln.startswith("user ")
+    }
+    assert "off" in users["default"] and "nopass" not in users["default"]
+    gw = users["gwcache"]
+    assert "~cache:v1:*" in gw and "-@all" in gw and {"+get", "+set"} <= gw
+    assert not {"+@write", "+@all", "+del", "+flushall", "+keys"} & gw
+    assert "+set" not in users["ops"] and "+@write" not in users["ops"]
+    compose = COMPOSE.read_text(encoding="utf-8")
+    assert _service_secrets(compose, "redis-cache") == {
+        "redis_gwcache_password",
+        "redis_ops_password",
+        "redis_health_password",
+    }
+    conf = CACHE_ACL.with_name("redis-cache.conf").read_text(encoding="utf-8")
+    assert "appendonly no" in conf and "maxmemory-policy allkeys-lru" in conf

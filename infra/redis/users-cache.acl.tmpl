@@ -1,0 +1,10 @@
+# infra/redis/users-cache.acl.tmpl  (redis-cache: chỉ exact cache của gateway)
+# ACL file KHÔNG hỗ trợ comment cuối dòng; comment ở dòng riêng.
+# Placeholder @@REDIS_*@@ được entrypoint.sh thay bằng SHA256 của mật khẩu.
+# default: off + resetpass. KHÔNG dùng nopass (protected-mode yes sẽ chặn client ngoài loopback).
+# gwcache: gateway; chỉ GET/SET trên khoá cache:v1:*. client|setinfo để redis-py khai báo thư viện (lỗi cũng được bỏ qua).
+# ops: quét canary (đọc/SCAN, không ghi). Dùng chung mật khẩu ops của redis-state.
+user default off resetpass -@all
+user gwcache on #@@REDIS_GWCACHE@@ ~cache:v1:* -@all +get +set +ping +client|setinfo
+user ops on #@@REDIS_OPS@@ ~cache:v1:* -@all +@read +scan +ttl +info +ping
+user health on #@@REDIS_HEALTH@@ resetkeys -@all +ping

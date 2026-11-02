@@ -16,7 +16,7 @@ cache:v1:{dept}:{clearance}:{roles}:{model}:{sha256(request chuẩn hoá)}
 
 - Phần phạm vi quyền ở dạng literal, lấy từ `X-Acme-User-Token` đã xác minh, không lấy từ header hay body do client gửi. Không có token người dùng thì **không dùng cache**.
 - Giá trị phạm vi phải qua allowlist ký tự trước khi ghép, để dấu `:` trong dept không tạo được khoá trùng của phạm vi khác.
-- Request chuẩn hoá gồm `messages`, `temperature`, `max_tokens`, `response_format`. Không gồm request id.
+- Request chuẩn hoá gồm `messages` (kể cả lượt tool), `tools`, `tool_choice`, `temperature`, `max_tokens`. Không gồm request id.
 
 Prompt hiện không chứa thời gian hay id biến đổi (đã kiểm `graph/nodes.py`), nên hai câu hỏi giống nhau cho cùng khoá. Phải giữ tính chất này, và có test để không ai vô tình thêm timestamp vào system prompt.
 
@@ -24,13 +24,14 @@ Prompt hiện không chứa thời gian hay id biến đổi (đã kiểm `graph
 
 Prompt chứa chunk đã qua RLS. Người bị thu hồi quyền sẽ truy xuất ra tập chunk khác, tức prompt khác, tức khoá khác. Tài liệu sửa nội dung cũng vậy. Do đó không cần cơ chế xoá cache theo tài liệu.
 
-Riêng lập luận này cho thấy phạm vi quyền trong khoá là **thừa về lý thuyết**: bằng chứng đã nằm trong prompt. ADR-007 vẫn giữ nó vì an toàn hơn và hit rate thấp đi là cái giá chấp nhận được. Mức thấp đi bao nhiêu chính là một nhánh đo của RQ4: `strict` so với `evidence-keyed`.
+Exact cache an toàn vì câu trả lời chỉ là hàm của prompt (messages, tools, tham số, model): cùng đầu vào thì đầu ra đã được phép lộ cho đúng người đó. Phạm vi quyền trong khoá là **lớp phòng thủ thêm**, thừa về lý thuyết vì bằng chứng đã nằm trong prompt. ADR-007 vẫn giữ nó vì an toàn hơn và hit rate thấp đi là cái giá chấp nhận được. Mức thấp đi bao nhiêu chính là một nhánh đo của RQ4: `strict` so với `evidence-keyed`.
 
 ### Quy tắc
 
 | Trường hợp | Xử lý |
 |---|---|
-| Request có `tools` | Không đọc, không ghi cache. Đây là cách thực thi "không cache thao tác ghi" |
+| Request có `tools` hoặc lượt tool | Vẫn cache được (agent luôn gửi tools). Danh sách tools (sắp xếp ổn định), `tool_choice` và toàn bộ messages nằm trong chuỗi băm |
+| Response có `tool_calls` | Không bao giờ ghi, nên hit không phát lại lời gọi tool. Thao tác ghi luôn cần tool_call (`prepare_*`) nên không bị cache. Chỉ ghi text thuần: `finish_reason=stop`, không tool_calls, nội dung không rỗng |
 | `finish_reason != stop` | Không ghi |
 | Redis lỗi | Coi như miss, vẫn trả lời. Cache không được làm hỏng đường chính |
 | Request stream | Trả lại nội dung đã lưu dưới dạng SSE, giữ đúng định dạng chunk |
@@ -51,6 +52,20 @@ class ResponseCache(ABC):
 ```
 
 CLAUDE.md không bọc Redis client, nhưng cache là năng lực phải nằm sau port: cần fake cho test và cho nhánh đo RQ4. Adapter: `redis.py`, `fake.py`. Logic dựng khoá nằm ở `services/cache_key.py`, thuần, test được mà không cần Redis.
+
+### Trạng thái triển khai
+
+Đã làm (mặc định TẮT, `GW_CACHE_ADAPTER=off`; bật `redis` cùng `--profile cache`):
+
+- Port `ResponseCache` (`ports/response_cache.py`), adapter `adapters/redis.py`, `FakeResponseCache`, factory registry `off|redis`, `services/cache_key.py` thuần.
+- Khoá thực tế: `cache:v1:{ver}:{dept}:{clearance}:{roles}:{provider.model}:{sha256}`. So với thiết kế thêm `ver` (`GW_CACHE_INDEX_VERSION`, tăng khi nạp lại index) và đưa provider vào phần model. Digest băm cả phạm vi, model, messages và params nên dù phần literal có trùng cũng không chung entry. Giá trị ngoài allowlist `[A-Za-z0-9_.-]{1,64}` thì không cache. `response_format` không vào khoá vì gateway bỏ qua tham số này.
+- Không cache (bypass): không có user token đã xác minh. Request có `tools`/`tool_choice`/lượt tool vẫn cache (tools và tool_choice vào băm). Không ghi: `finish_reason != stop`, có tool call, nội dung rỗng, lỗi provider, stream bị ngắt. Redis lỗi hoặc chậm quá `GW_CACHE_TIMEOUT_S` là miss.
+- Cache nằm dưới bước kiểm chứng của agent nên không biết câu trả lời `refused`; câu đó vẫn bị kiểm chứng lại mỗi lần. Chưa có điều kiện theo taint của thread (thiết kế không yêu cầu).
+- Hit: header `x-acme-cache: exact`, `usage_events.cache='exact'` không token, span `cache=exact`, metric `gateway_cache_lookups_total{result}` và `gateway_cache_stores_total{result}`. Stream hit phát lại bằng một chunk nội dung.
+- `redis-cache`: `allkeys-lru`, không AOF/RDB, ACL `gwcache` chỉ `GET/SET` trên `cache:v1:*`, user `ops` chỉ đọc để quét canary.
+- Harness RQ4: `python -m eval.cache run ...` rồi `report` (xem `eval/cache/__main__.py`). Hai chế độ `plain` và `agent` (phát lại hội thoại có tools và lượt tool cố định, đại diện lời gọi cuối của agent). Nhánh `evidence-keyed` chỉ là mô phỏng ngoại tuyến, runtime luôn `strict`.
+
+Chưa làm: semantic cache (đúng thứ tự cắt của ADR-007), số RQ4 trên stack, quét canary Redis tự động.
 
 ### Đo RQ4
 

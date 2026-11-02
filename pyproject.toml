@@ -34,7 +34,7 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-testpaths = ["packages", "data/tests", "eval/rag", "eval/canary"]
+testpaths = ["packages", "data/tests", "eval/rag", "eval/canary", "eval/cache"]
 pythonpath = ["."]
 addopts = "--import-mode=importlib"
 

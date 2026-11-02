@@ -11,6 +11,7 @@ from .ports.embedding_provider import EmbeddingProvider
 from .ports.errors import KeyAlreadyExists, KeyNotFound
 from .ports.key_store import KeyStore
 from .ports.rerank_provider import RerankProvider
+from .ports.response_cache import CachedResponse, ResponseCache
 from .ports.types import (
     ChatChunk,
     ChatRequest,
@@ -144,6 +145,28 @@ class FakeRerankProvider(RerankProvider):
         return RerankResult([RerankItem(i, s) for i, s in enumerate(self.scores)], len(query))
 
 
+class FakeResponseCache(ResponseCache):
+    """Kho trong bộ nhớ; `fail=True` giả lập Redis chết (get/put raise)."""
+
+    def __init__(self, fail: bool = False) -> None:
+        self.items: dict[str, CachedResponse] = {}
+        self.ttls: dict[str, int] = {}
+        self.gets: list[str] = []
+        self.fail = fail
+
+    async def get(self, key: str) -> CachedResponse | None:
+        self.gets.append(key)
+        if self.fail:
+            raise ConnectionError("cache down")
+        return self.items.get(key)
+
+    async def put(self, key: str, value: CachedResponse, ttl_s: int) -> None:
+        if self.fail:
+            raise ConnectionError("cache down")
+        self.items[key] = value
+        self.ttls[key] = ttl_s
+
+
 def provider_lookup(**providers: ChatProvider) -> Callable[[str], ChatProvider]:
     from .ports.errors import ProviderNotConfigured
 
@@ -161,5 +184,6 @@ __all__ = [
     "FakeEmbeddingProvider",
     "FakeKeyStore",
     "FakeRerankProvider",
+    "FakeResponseCache",
     "provider_lookup",
 ]
