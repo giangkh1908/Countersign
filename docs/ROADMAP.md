@@ -53,6 +53,8 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 | ✅ trừ rerank: Hybrid search: pgvector + Postgres full-text (tiếng Việt bỏ dấu/không bỏ dấu), trộn RRF; rerank tuỳ chọn qua gateway; tra trực tiếp khi câu hỏi nêu số Điều/số hiệu | W | Bật/tắt từng thành phần bằng config |
 | ✅ trừ rerank (đã chạy thật 5 cấu hình trên 40 câu, xem dưới): Script đánh giá truy xuất: recall@k, MRR, nDCG theo loại câu; so 4 cấu hình (vector, BM25, hybrid, hybrid+rerank) | W | Bảng kết quả có seed, phiên bản, chi phí |
 
+**Cấu hình tạm trên compose (2026-11-02):** hybrid trọng số FTS 0,25 + ghim, recall@5 0,938 [0,863; 1,000] trên 40 câu. Chọn 0,25 thay vì 0,1 vì 0,1 nằm ở mép lưới và gần như chỉ còn vector. Eval dùng `n_cand` 250 còn docs-mcp thật dùng 70, nên số này chưa đo đúng cấu hình chạy thật. Chốt mặc định khi có bộ 150 câu tách dev/test.
+
 **DoD R1:** có bảng recall@5/@10 và MRR cho 4 cấu hình trên ~150 câu. Cấu hình mặc định được chọn theo số đo, không theo cảm tính. Toàn bộ chạy lại được bằng một lệnh.
 
 **Khung đánh giá truy xuất (đã chạy thật trên index bge-m3, 40 câu):** `eval/rag/` có chỉ số (recall@k, hit@k, MRR, nDCG@10; hàm thuần, có test), định dạng `vbpl-v1.jsonl` kèm trình kiểm nhãn so với `data/raw/vbpl`, và script chạy 5 cấu hình (vector, FTS `unaccent`, FTS tách từ `segmented`, hybrid, hybrid + tra trực tiếp) qua port `DocumentRetriever`. Cấu hình `hybrid_direct` dùng chung `ArticlePinner` với `DocumentService`. Mới có 40/150 câu (đều loại tra cứu, đủ 19 văn bản; 10 câu nêu số Điều); các câu tổng hợp và câu không có đáp án làm ở đợt sau. Cấu hình `hybrid_rerank` chưa làm; khoảng tin cậy bootstrap đã có (xem dưới). Báo cáo JSON ghi `index_sig`, model, chiều embedding vào `eval/results/rag/<run_id>/report.json` (đã gitignore).

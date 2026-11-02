@@ -205,9 +205,13 @@ Luồng: `GatewayHttpEmbedder` **[CÓ]** → `POST {DOCS_GATEWAY_URL}/embeddings
 | `DOCS_USE_FTS` | `true/false` | `true` | tắt => `qt = NULL` (SQL hiện đã xử lý `q.qt IS NOT NULL`) |
 | `DOCS_FTS_MODE` | `unaccent` \| `segmented` | `unaccent` | chọn cột `tsv` hay `tsv_seg` (mục 4.3) |
 | `DOCS_RRF_K` | int | 60 | hằng RRF (mục 4.4) |
+| `DOCS_RRF_WEIGHT_FTS` | float | `1.0`, compose `0.25` | trọng số nhánh FTS khi trộn; RRF không trọng số để nhánh yếu chen chunk đúng của vector (ROADMAP R1) |
+| `DOCS_FTS_STOPWORDS` | `true/false` | `false` | bỏ từ dừng tiếng Việt ở phía truy vấn |
+| `DOCS_FTS_RANK` | `cd` \| `rank` | `cd` | `ts_rank_cd` hay `ts_rank` |
+| `DOCS_FTS_TITLE` | `true/false` | `false` | thử nghiệm: ghép tiêu đề văn bản lúc truy vấn, không dùng chỉ mục GIN |
 | `DOCS_RERANK` | `none` \| `gateway_rerank` | `none` | chọn adapter `Reranker` qua factory |
 | `DOCS_RERANK_TOP_N` | int | 30 | số ứng viên đưa vào rerank |
-| `DOCS_DIRECT_LOOKUP` | `off` \| `pin` | `off` => `pin` sau khi đo | mục 4.5 |
+| `DOCS_DIRECT_LOOKUP` | `off` \| `pin` | `off`, compose `pin` | mục 4.5 |
 | `DOCS_SPOTLIGHT` | `on` \| `off` | `on` | `off` **chỉ khi `ACME_ENV=eval`** (contracts §9.1.11), dùng cho ablation R3 |
 
 Bốn cấu hình của RQ1: `vector` (`USE_FTS=false`), `bm25` (`USE_VECTOR=false`), `hybrid` (cả hai, `RERANK=none`), `hybrid_rerank`. Bộ chạy đánh giá **dựng bốn retriever qua factory** với `Settings` khác nhau (không đổi chữ ký port, không cờ ẩn trong code nghiệp vụ); xem mục 7.4. Kết quả sinh `mode` hiện có (`hybrid`/`fts_only`) vẫn trả về; thêm các giá trị `vector_only`, `fts_only` (đã có), để báo cáo ghi cấu hình thực sự chạy.

@@ -310,7 +310,11 @@ services:
       DOCS_USE_FTS: ${DOCS_USE_FTS:-true}                      # nhánh Postgres FTS (không phải BM25)
       DOCS_FTS_MODE: ${DOCS_FTS_MODE:-unaccent}                # unaccent | segmented
       DOCS_RRF_K: ${DOCS_RRF_K:-60}
-      DOCS_DIRECT_LOOKUP: ${DOCS_DIRECT_LOOKUP:-off}           # off | pin
+      DOCS_RRF_WEIGHT_FTS: ${DOCS_RRF_WEIGHT_FTS:-0.25}        # tạm, chốt khi có bộ 150 câu (ROADMAP R1)
+      DOCS_FTS_STOPWORDS: ${DOCS_FTS_STOPWORDS:-false}
+      DOCS_FTS_RANK: ${DOCS_FTS_RANK:-cd}                      # cd | rank
+      DOCS_FTS_TITLE: ${DOCS_FTS_TITLE:-false}
+      DOCS_DIRECT_LOOKUP: ${DOCS_DIRECT_LOOKUP:-pin}           # off | pin
       DOCS_GATEWAY_KEY_FILE: /run/secrets/docs_gateway_key     # key owner_type=service
       MCP_HOST: ${MCP_HOST:-mcp_sdk}
       MCP_PORT: "8101"
