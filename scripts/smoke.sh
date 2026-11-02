@@ -25,9 +25,11 @@ for svc in "${SERVICES[@]}"; do
 done
 
 echo "== Job migrate =="
-cid="$(docker compose ps -a -q migrate | head -n1 || true)"
-if [ -n "$cid" ] && [ "$(docker inspect -f '{{.State.Status}}/{{.State.ExitCode}}' "$cid")" = "exited/0" ]; then
-  ok "migrate (exited/0)"; else bad "migrate chưa hoàn tất thành công"; fi
+for job in migrate knowledge-migrate; do
+  cid="$(docker compose ps -a -q "$job" | head -n1 || true)"
+  if [ -n "$cid" ] && [ "$(docker inspect -f '{{.State.Status}}/{{.State.ExitCode}}' "$cid")" = "exited/0" ]; then
+    ok "$job (exited/0)"; else bad "$job chưa hoàn tất thành công"; fi
+done
 
 echo "== HTTP từ host (cổng đã publish) =="
 http_ok() { # name url
