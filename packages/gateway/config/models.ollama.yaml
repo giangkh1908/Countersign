@@ -5,6 +5,8 @@ default_max_output: 4096
 aliases:
   acme-fast:  { chain: [anthropic/claude-haiku-5-5], timeout_s: 30 }
   acme-smart: { chain: [anthropic/claude-sonnet-5-5], timeout_s: 90 }
+  # Judge kiểm chứng trích dẫn (R2): cùng chain với acme-fast cho đến khi hiệu chuẩn chọn model riêng.
+  acme-judge: { chain: [anthropic/claude-haiku-5-5], timeout_s: 30 }
   acme-embed:
     kind: embedding
     adapter: openai_compatible

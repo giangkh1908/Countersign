@@ -68,8 +68,9 @@ provision() {
   created=1
 }
 
-# agent-service: gọi LLM thay mặt người dùng, nên tin end-user token.
-provision agent_gateway_key agent agent-service acme-fast,acme-smart \
+# agent-service: gọi LLM thay mặt người dùng, nên tin end-user token. `acme-judge` cho bộ kiểm chứng
+# trích dẫn (R2). Key cấp trước R2 không có alias này: script bỏ qua key còn hợp lệ, nên phải chạy `--rotate`.
+provision agent_gateway_key agent agent-service acme-fast,acme-smart,acme-judge \
   --rpm 120 --tpm 200000 --max-concurrency 8 --trust-end-user-token
 # docs-mcp: chỉ embedding. `create-key` không kiểm alias với catalog, nên key cấp được dù gateway
 # chưa phục vụ `acme-embed`; khi R1 thêm alias vào models.yaml là dùng được ngay, không phải cấp lại key.

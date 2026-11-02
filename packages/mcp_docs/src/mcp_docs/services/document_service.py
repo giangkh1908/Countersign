@@ -110,6 +110,15 @@ class DocumentService:
                 "score": round(c.score, 6),
                 "vec_rank": c.vec_rank,
                 "fts_rank": c.fts_rank,
+                # Cột trích dẫn (rag-citations §5.2). `text` là nội dung thô đã sanitize, không datamark:
+                # agent tách ra làm Passage và KHÔNG chuyển cho mô hình; mô hình chỉ thấy `content`.
+                "doc_num": c.doc_num,
+                "article": c.article,
+                "clause": c.clause,
+                "chapter": spotlight.sanitize(c.chapter) if c.chapter else None,
+                "char_start": c.char_start,
+                "char_end": c.char_end,
+                "text": spotlight.sanitize(c.content),
                 "content": spotlight.wrap(c.content, sp),
             }
             for i, c in enumerate(chunks, start=1)

@@ -12,6 +12,7 @@ from typing import Any
 
 from acme_common.factory import lookup
 from acme_common.ports import TokenBroker
+from langchain_core.language_models.chat_models import BaseChatModel
 
 from .agents import AgentRegistry, AgentSpec
 from .ports.conversations import ConversationRepository
@@ -20,9 +21,11 @@ from .ports.errors import (
     CheckpointerNotConfigured,
     ConversationRepoNotConfigured,
     ServiceProbeNotConfigured,
+    SupportJudgeNotConfigured,
     ToolProviderNotConfigured,
 )
 from .ports.service_probe import ServiceProbe
+from .ports.support_judge import SupportJudge
 from .ports.tool_provider import ToolProvider
 from .settings import Settings
 
@@ -61,6 +64,20 @@ _PROBES: dict[str, Callable[[Settings], ServiceProbe]] = {"http": _load_http_pro
 
 def build_service_probe(name: str, settings: Settings) -> ServiceProbe:
     return lookup(_PROBES, name, ServiceProbeNotConfigured)(settings)
+
+
+# --- SupportJudge ---
+def _load_gateway_llm_judge(settings: Settings, chat: BaseChatModel) -> SupportJudge:
+    from .adapters.gateway_llm import GatewayLlmSupportJudge
+
+    return GatewayLlmSupportJudge(chat)
+
+
+_SUPPORT_JUDGES: dict[str, Callable[..., SupportJudge]] = {"gateway_llm": _load_gateway_llm_judge}
+
+
+def build_support_judge(name: str, settings: Settings, *, chat: BaseChatModel) -> SupportJudge:
+    return lookup(_SUPPORT_JUDGES, name, SupportJudgeNotConfigured)(settings, chat)
 
 
 # --- ToolProvider ---
@@ -187,6 +204,7 @@ async def build_checkpointer(
 __all__ = [
     "build_agent_registry",
     "build_service_probe",
+    "build_support_judge",
     "build_checkpointer",
     "build_conversation_repo",
     "build_serde",

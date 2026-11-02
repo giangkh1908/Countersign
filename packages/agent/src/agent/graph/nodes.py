@@ -28,6 +28,9 @@ from pydantic import BaseModel, ValidationError, model_validator
 
 from ..agents import AgentRegistry, AgentSpec
 from ..ports.errors import ToolUnavailable
+from ..services.answer import build_answer, fit_frame, refusal
+from ..services.citation_verifier import CitationVerifier
+from ..services.citations import Passage
 from .state import AgentState, PendingAction, RunContext
 
 Rt = Runtime[RunContext]
@@ -75,6 +78,9 @@ async def begin_turn(state: AgentState, runtime: Rt) -> dict[str, Any]:
         "approval": None,
         "write_result": None,
         "citations": [],
+        "retrieved": {},
+        "retrieval": None,
+        "answer_meta": None,
         "turn_base": {"tool_calls": state.get("tool_calls", 0)},
     }
 
@@ -234,6 +240,16 @@ def _summary(name: str, ok: bool, data: Any) -> str:
     return "ok"
 
 
+def _content_for_model(data: dict[str, Any]) -> str:
+    """Nội dung tool đưa cho mô hình: bỏ `text` thô (chỉ `content` đã spotlight), thêm mã trích `[#id]`."""
+    res = [
+        {**{k: v for k, v in r.items() if k != "text"}, "cite": f"[#{r['chunk_id']}]"}
+        for r in data.get("results", [])
+        if isinstance(r, dict)
+    ]
+    return json.dumps({**data, "results": res}, ensure_ascii=False)
+
+
 def make_tools_node(spec: AgentSpec) -> NodeFn:
     async def tools_node(state: AgentState, runtime: Rt) -> dict[str, Any]:
         ctx = runtime.context
@@ -243,7 +259,8 @@ def make_tools_node(spec: AgentSpec) -> NodeFn:
         assert isinstance(last, AIMessage)
         seen = set(state.get("seen_intents", []))
         out: list[ToolMessage] = []
-        citations: list[dict[str, Any]] = []
+        passages: dict[str, dict[str, Any]] = {}
+        searches = 0
         pending: dict[str, Any] | None = None
         new_seen: list[str] = []
         reads = 0
@@ -324,8 +341,11 @@ def make_tools_node(spec: AgentSpec) -> NodeFn:
                 ).model_dump()
                 new_seen.append(iid)
                 content = "Đã chuẩn bị đề xuất, chờ người dùng xác nhận trên giao diện. Chưa có gì được thực hiện."
-            elif ok and spec.citations_extractor and isinstance(data, dict):
-                citations += spec.citations_extractor(name, data)
+            elif ok and spec.citations_extractor and isinstance(data, dict) and "results" in data:
+                searches += 1
+                got = spec.citations_extractor(name, data)
+                passages.update({str(p["chunk_id"]): p for p in got})
+                content = _content_for_model(data)
             out.append(
                 ToolMessage(
                     content, tool_call_id=cid, name=name, status="success" if ok else "error"
@@ -334,14 +354,32 @@ def make_tools_node(spec: AgentSpec) -> NodeFn:
         upd: dict[str, Any] = {
             "messages": out,
             "tool_calls": len(last.tool_calls),
-            "citations": citations,
         }
+        if searches:
+            prev = state.get("retrieval") or {}
+            n_passages = len({*(state.get("retrieved") or {}), *passages})
+            upd["retrieval"] = {
+                "searches": prev.get("searches", 0) + searches,
+                "passages": n_passages,
+            }
+            if passages:
+                upd["retrieved"] = passages
         if pending:
             upd["pending_action"] = pending
             upd["seen_intents"] = new_seen
         return upd
 
     return tools_node
+
+
+def cited_tools_edge(spec: AgentSpec) -> Callable[[AgentState], str]:
+    """Agent có trích dẫn: tìm kiếm thành công mà 0 đoạn => từ chối ngay, không gọi mô hình sinh (§5.3.6a)."""
+
+    def edge(state: AgentState) -> str:
+        r = state.get("retrieval") or {}
+        return "final_answer" if r.get("searches") and not r.get("passages") else spec.node_name
+
+    return edge
 
 
 def tools_edge(spec: AgentSpec) -> Callable[[AgentState], str]:
@@ -554,12 +592,54 @@ def write_outcome_text(state: AgentState) -> str | None:
     return None
 
 
+async def _cited_answer(
+    state: AgentState, ctx: RunContext, last: BaseMessage
+) -> dict[str, Any] | None:
+    """Agent có trích dẫn: resolve mã `[#id]`, kiểm chứng (nếu bật), từ chối khi không đủ nguồn.
+
+    Văn bản được sinh trọn rồi mới phát (bản nháp là một AIMessage hoàn chỉnh), nên không cần sự kiện
+    "thay thế văn bản" (rag-citations §5.3).
+    """
+    r = state.get("retrieval") or {}
+    verifying = ctx.verify_enabled and ctx.make_judge is not None
+    if r.get("searches") and not r.get("passages"):
+        ans = refusal(enabled=verifying)  # truy xuất 0 đoạn: từ chối trước khi sinh
+        msg_id = None
+    elif isinstance(last, AIMessage) and not last.tool_calls and _text_of(last).strip():
+        retrieved = {
+            k: Passage.model_validate(v) for k, v in (state.get("retrieved") or {}).items()
+        }
+        verifier = CitationVerifier(ctx.make_judge(), ctx.verify_cfg) if verifying else None  # type: ignore[misc]
+        ans = await build_answer(_text_of(last), retrieved, verifier, ctx.verify_cfg)
+        msg_id = last.id
+    else:
+        return None
+    usd, _ = ctx.cost.drain()
+    if ans.verify.get("enabled"):
+        ans.verify["cost_usd"] = round(usd, 6)
+    payload = fit_frame(ans.payload())
+    _emit_text(ans.text, "final_answer")
+    meta = {k: payload[k] for k in ("sentences", "answer_status", "verify")}
+    return {
+        "messages": [AIMessage(ans.text, id=msg_id, additional_kwargs={"citations": payload})],
+        "citations": payload["items"],
+        "answer_meta": meta,
+        "cost_usd": usd,
+    }
+
+
 async def final_answer(state: AgentState, runtime: Rt) -> dict[str, Any]:
+    ctx = runtime.context
     text = write_outcome_text(state)
     if text is not None:
         _emit_text(text, "final_answer")
         return {"messages": [AIMessage(text)]}
     last = state["messages"][-1]
+    spec = ctx.registry.by_route((state.get("route_info") or {}).get("route", ""))
+    if spec is not None and spec.citations_extractor is not None:
+        ans = await _cited_answer(state, ctx, last)
+        if ans is not None:
+            return ans
     if isinstance(last, AIMessage) and not last.tool_calls and _text_of(last).strip():
         _emit_text(_text_of(last), "final_answer")  # bản nháp cuối của agent chính là câu trả lời
         return {}

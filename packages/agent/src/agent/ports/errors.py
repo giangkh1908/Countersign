@@ -44,5 +44,9 @@ class CheckpointerNotConfigured(NotConfigured):
     pass
 
 
+class SupportJudgeNotConfigured(NotConfigured):
+    """Tên adapter SupportJudge lạ."""
+
+
 class ServiceProbeNotConfigured(NotConfigured):
     """Tên adapter ServiceProbe lạ."""

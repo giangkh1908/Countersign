@@ -23,14 +23,17 @@ from .factory import (
     build_checkpointer,
     build_conversation_repo,
     build_service_probe,
+    build_support_judge,
     build_tool_provider,
 )
 from .graph.builder import build_graph
 from .ports.conversations import ConversationRepository
 from .ports.service_probe import ServiceProbe
+from .ports.support_judge import SupportJudge
 from .ports.tool_provider import ToolProvider
 from .settings import Settings
 
+JudgeFactory = Callable[[str, str], SupportJudge]
 # (gateway_user_token, run_id) -> (role -> chat model)
 ChatFactory = Callable[[str, str], Callable[[str], BaseChatModel]]
 
@@ -48,6 +51,8 @@ class Container:
     clock: Clock
     chat_factory: ChatFactory
     write_broker: TokenBroker | None = None
+    # (gateway_user_token, run_id) -> SupportJudge; None = không có bộ kiểm chứng
+    judge_factory: JudgeFactory | None = None
     base_settings: Settings | None = None  # trước khi lọc agent tuỳ chọn (availability)
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     locks: dict[str, asyncio.Lock] = field(default_factory=dict)
@@ -94,6 +99,18 @@ async def build_container(settings: Settings) -> Container:
             http_client=llm_http,
         )
 
+    def judge_factory(gw_token: str, run_id: str) -> SupportJudge:
+        chat = make_chat_model(
+            "judge",
+            settings=settings,
+            gateway_user_token=gw_token,
+            run_id=run_id,
+            http_client=llm_http,
+            max_tokens=400,
+            alias=settings.agent_verify_judge_alias,
+        )
+        return build_support_judge(settings.agent_verify_judge_adapter, settings, chat=chat)
+
     return Container(
         settings=settings,
         verifier=verifier,
@@ -106,6 +123,7 @@ async def build_container(settings: Settings) -> Container:
         clock=clock,
         chat_factory=chat_factory,
         write_broker=write_broker,
+        judge_factory=judge_factory,
         base_settings=base_settings,
         closers=[close_saver, close_repo, llm_http.aclose],
     )

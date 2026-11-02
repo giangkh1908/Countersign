@@ -248,3 +248,38 @@ async def test_audit_written_without_content(redis) -> None:
     assert rec["resource"] == "search_documents" and rec["decision"] == "allow"
     assert rec["details"]["rows_returned"] >= 1
     assert "Nội dung số" not in json.dumps(rec, default=str)
+
+
+async def test_result_has_citation_columns_and_raw_text(redis) -> None:
+    """Cột trích dẫn (rag-citations §5.2): vị trí Điều/khoản/offset và `text` thô không datamark."""
+    c = RetrievedChunk(
+        chunk_id=7,
+        doc_id="00000000-0000-0000-0000-000000000007",
+        title="Bộ luật Lao động",
+        heading="Điều 38. Đơn phương chấm dứt",
+        source="blld.json#3",
+        ord=3,
+        department="ALL",
+        classification=0,
+        allowed_roles=(),
+        content="Người lao động có quyền đơn phương chấm dứt hợp đồng.",
+        score=0.5,
+        doc_num="45/2019/QH14",
+        article="38",
+        clause="1-2",
+        chapter="Chương IV",
+        char_start=120,
+        char_end=173,
+    )
+    out = await Env(FakeRetriever([c]), redis).call(principal(("SALES",), 0))
+    r = out["results"][0]
+    assert (r["doc_num"], r["article"], r["clause"], r["chapter"]) == (
+        "45/2019/QH14",
+        "38",
+        "1-2",
+        "Chương IV",
+    )
+    assert (r["char_start"], r["char_end"]) == (120, 173)
+    assert r["text"] == "Người lao động có quyền đơn phương chấm dứt hợp đồng."
+    mark = out["spotlight"]["datamark"]
+    assert mark in r["content"] and mark not in r["text"]  # chỉ `content` bị datamark
