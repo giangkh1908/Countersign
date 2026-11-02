@@ -25,6 +25,7 @@ async def _main(args: argparse.Namespace) -> int:
             embedder=embedder,
             indexer=indexer,
             force=args.force,
+            article_max_tokens=s.docs_article_max_tokens,
         )
     except (DocumentRejected, EmbeddingUnavailable, RetrievalUnavailable) as e:
         print(f"ingest FAILED: {e}", file=sys.stderr)

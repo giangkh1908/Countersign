@@ -13,6 +13,7 @@ from .errors import (
 )
 from .reranker import Reranker
 from .types import (
+    ArticleUnit,
     Chunk,
     Document,
     DocumentMeta,
@@ -25,6 +26,7 @@ from .types import (
 )
 
 __all__ = [
+    "ArticleUnit",
     "Chunk",
     "Document",
     "DocumentIndexer",

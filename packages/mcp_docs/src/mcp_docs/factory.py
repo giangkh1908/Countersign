@@ -77,9 +77,16 @@ def _load_markdown(s: Settings) -> DocumentLoader:
     return MarkdownLoader()
 
 
+def _load_vbpl_articles(s: Settings) -> DocumentLoader:
+    from .adapters.vbpl_articles import VbplArticlesLoader
+
+    return VbplArticlesLoader()
+
+
 _LOADERS: dict[str, Callable[[Settings], DocumentLoader]] = {
     ".md": _load_markdown,
     ".markdown": _load_markdown,
+    ".json": _load_vbpl_articles,
 }
 
 

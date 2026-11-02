@@ -29,6 +29,7 @@ class Settings(CommonSettings):
     docs_n_cand: int | None = None  # None => max(50, 5*top_k)
     docs_ingest_database_url: str | None = None  # role kn_ingest (chỉ job ingest)
     docs_corpus_dir: str = "data/generated"
+    docs_article_max_tokens: int = 600  # Điều <= ngưỡng này là một chunk
     docs_max_per_doc: int = 2
     docs_audit_sink: str | None = (
         None  # None: "postgres" nếu có MCP_AUDIT_DATABASE_URL, ngược lại event_sink_adapter
