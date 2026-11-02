@@ -73,13 +73,25 @@ _OPS: dict[str, tuple[str, _Spec, _Spec]] = {
             "resolution": ("Cách xử lý", "longtext"),
         },
     ),
+    "send_group_report": (
+        "Gửi báo cáo tới nhóm {code}",
+        {"channel": ("Nhóm nhận", "text"), "text": ("Nội dung báo cáo", "longtext")},
+        {"text": ("Nội dung báo cáo", "longtext")},
+    ),
 }
 # Gắn op với issuer: op chỉ được nhận từ MCP sở hữu nó. Thêm MCP ghi mới = thêm một dòng ở đây
 # (và `_AUD_BY_INTENT_ISS` ở adapters/es256_jwt.py), cùng thư mục khoá `INTENT_PUBLIC_KEYS_DIR/<iss>/`.
 ISSUER_OPS: dict[str, frozenset[str]] = {
     "tickets-mcp": frozenset({"create_ticket", "add_comment", "update_status", "close_ticket"}),
+    "notify-mcp": frozenset({"send_group_report"}),
 }
-_TARGET: _Spec = {"ticket_code": ("Ticket", "ticket_ref"), "title": _TITLE_LABEL}
+_TARGET: _Spec = {
+    "ticket_code": ("Ticket", "ticket_ref"),
+    "title": _TITLE_LABEL,
+    "channel": ("Nhóm nhận", "text"),
+}
+# khoá target bắt buộc theo op (create_ticket chưa có ticket nên không có)
+_REQUIRED_TARGET = {"send_group_report": "channel", "create_ticket": None}
 _MAX_STR = 8192
 _ESCAPE_CATEGORIES = {"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"}  # gồm bidi, zero-width, C0/C1
 _RISKS = {"low", "medium", "high"}
@@ -161,8 +173,11 @@ def build_render_model(intent: VerifiedIntent, now: datetime) -> RenderModel:
         raise _unrenderable(*bad)
     if not after or not args:
         raise _unrenderable("after" if not after else "args_canonical")
-    if op != "create_ticket" and "ticket_code" not in target:
-        raise _unrenderable("target.ticket_code")
+    required = _REQUIRED_TARGET.get(op, "ticket_code")
+    if required is not None and required not in target:
+        raise _unrenderable(f"target.{required}")
+    if op == "send_group_report" and set(target) != {"channel"}:
+        raise _unrenderable(*[f"target.{k}" for k in target if k != "channel"])
     for group, prefix in ((target, "target"), (before, "before"), (after, "after"), (args, "args")):
         for k, v in group.items():
             _scalar(v, f"{prefix}.{k}")
@@ -202,9 +217,11 @@ def build_render_model(intent: VerifiedIntent, now: datetime) -> RenderModel:
         risk = (
             "high"
             if "possible_downgrade" in flags
-            else ("medium" if op == "close_ticket" else "low")
+            else ("medium" if op in ("close_ticket", "send_group_report") else "low")
         )
-    code = escape_text(str(target.get("ticket_code") or args.get("code") or ""))
+    code = escape_text(
+        str(target.get("ticket_code") or target.get("channel") or args.get("code") or "")
+    )
     try:
         exp = datetime.fromtimestamp(int(p["exp"]), UTC)
     except (KeyError, TypeError, ValueError, OverflowError, OSError):

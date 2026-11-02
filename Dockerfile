@@ -56,6 +56,13 @@ USER 10001
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "mcp_tickets.main:app", "--host", "0.0.0.0", "--port", "8102", "--no-server-header"]
 
+FROM base AS mcp_notify
+RUN uv sync --frozen --no-dev --no-editable --package acme-mcp-notify
+RUN bash scripts/check_pth.sh /app/.venv
+USER 10001
+ENV PATH="/app/.venv/bin:$PATH"
+CMD ["uvicorn", "mcp_notify.main:app", "--host", "0.0.0.0", "--port", "8103", "--no-server-header"]
+
 # ───────────── agent (8200) ─────────────
 FROM base AS agent
 RUN uv sync --frozen --no-dev --no-editable --package acme-agent

@@ -11,6 +11,7 @@ h() {
   fi
 }
 sed -e "s/@@REDIS_TICKETS@@/$(h redis_tickets_password)/" \
+    -e "s/@@REDIS_NOTIFY@@/$(h redis_notify_password)/" \
     -e "s/@@REDIS_DOCS@@/$(h redis_docs_password)/" \
     -e "s/@@REDIS_BFF@@/$(h redis_bff_password)/" \
     -e "s/@@REDIS_OPS@@/$(h redis_ops_password)/" \

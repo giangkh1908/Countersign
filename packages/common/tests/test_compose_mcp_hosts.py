@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 COMPOSE = Path(__file__).resolve().parents[3] / "docker-compose.yml"
-PORTS = {"docs-mcp": "8101", "tickets-mcp": "8102"}
+PORTS = {"docs-mcp": "8101", "tickets-mcp": "8102", "notify-mcp": "8103"}
 
 
 @pytest.mark.parametrize("service", sorted(PORTS))

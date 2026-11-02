@@ -69,6 +69,7 @@ Quy tắc (chi tiết và bằng chứng: [ADR-005](../adr/ADR-005-token-flow.md
 | `llm:invoke` | `agent-service` | gateway |
 | `docs:read` | `agent-service` | docs-mcp (`search_documents`) |
 | `tickets:read`, `tickets:write` | `agent-service` | tickets-mcp |
+| `notify:write` | `agent-service` | notify-mcp |
 
 Vai trò realm: `employee`, `team_lead`, `dept_manager`, `management`, `admin`, `auditor`. Vai trò, phòng ban, cấp mật đi vào GUC `app.roles`, `app.depts`, `app.clearance`, `app.sub` trong transaction của MCP; RLS của Postgres đọc các GUC này. Ma trận quyền theo tool và kênh gửi chưa làm (A1, dự thảo ở [ADR-007](../adr/ADR-007-actions-cache-observability.md)).
 

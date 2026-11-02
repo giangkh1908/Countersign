@@ -28,6 +28,9 @@ class AgentSpec:
     write_scopes: tuple[str, ...] = ()
     editable_fields: dict[str, frozenset[str]] = field(default_factory=dict)
     citations_extractor: CitationExtractor | None = None
+    # op ghi -> tên tham số văn bản do agent soạn từ tài liệu. Node kiểm chứng văn bản đó với các đoạn
+    # đã truy xuất trước khi gọi prepare_<op>, và đặt `unverified_claims=true` khi không kiểm chứng đủ.
+    verify_text_arg: dict[str, str] = field(default_factory=dict)
 
     @property
     def prepare_tools(self) -> frozenset[str]:

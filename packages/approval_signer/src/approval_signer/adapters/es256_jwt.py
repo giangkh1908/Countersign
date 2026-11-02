@@ -18,7 +18,7 @@ from ..ports import ApprovalSigner, ApprovalToken, SignerError, VerifiedIntent
 APPROVAL_ISSUER = "acme-approval"
 APPROVAL_TYP = "acme-approval+jwt"
 # iss của intent -> aud của approval (hằng trong mã)
-_AUD_BY_INTENT_ISS: dict[str, str] = {"tickets-mcp": "tickets-mcp"}
+_AUD_BY_INTENT_ISS: dict[str, str] = {"tickets-mcp": "tickets-mcp", "notify-mcp": "notify-mcp"}
 
 
 def load_ec_private_key(pem: bytes) -> ec.EllipticCurvePrivateKey:

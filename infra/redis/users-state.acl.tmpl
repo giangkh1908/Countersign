@@ -7,6 +7,8 @@
 # default: off + resetpass (không mật khẩu nào). KHÔNG dùng nopass: với protected-mode yes, nopass làm Redis chặn mọi client ngoài loopback.
 user default off resetpass -@all
 user tickets on #@@REDIS_TICKETS@@ ~mcp:tickets:* ~mcp:rl:tickets-mcp:* ~mcp:taint:* +@read +@write +@scripting +multi +exec +discard -@dangerous
+# notify: như tickets (kho intent trong MULTI/EXEC, jti). taint chỉ để kiểm tra trước khi gửi nhưng dùng chung nhóm lệnh ghi vì get_taint cũng chạy qua script/EXPIRE; không có quyền chạm mcp:tickets:*
+user notify on #@@REDIS_NOTIFY@@ ~mcp:notify:* ~mcp:rl:notify-mcp:* ~mcp:taint:* +@read +@write +@scripting +multi +exec +discard -@dangerous
 user docs on #@@REDIS_DOCS@@ ~mcp:rl:docs-mcp:* ~mcp:taint:* +@read +@write +@scripting -@dangerous
 user bff on #@@REDIS_BFF@@ ~bff:sess:* +@read +@write -@dangerous
 user ops on #@@REDIS_OPS@@ ~* +@read +info +ping -@dangerous

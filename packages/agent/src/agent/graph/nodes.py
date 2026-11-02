@@ -252,6 +252,26 @@ def _content_for_model(data: dict[str, Any]) -> str:
     return json.dumps({**data, "results": res}, ensure_ascii=False)
 
 
+async def _claims_unverified(ctx: RunContext, text: str, retrieved: dict[str, Any]) -> bool:
+    """Văn bản agent soạn từ tài liệu có chưa kiểm chứng đủ không? Fail-closed: mọi trường hợp không
+    kiểm chứng được (tắt verify, không có đoạn nguồn, judge lỗi) đều tính là chưa kiểm chứng.
+    """
+    if not (ctx.verify_enabled and ctx.make_judge is not None) or not retrieved or not text.strip():
+        return True
+    try:
+        passages = {k: Passage.model_validate(v) for k, v in retrieved.items()}
+        verifier = CitationVerifier(ctx.make_judge(), ctx.verify_cfg)
+        ans = await build_answer(text, passages, verifier, ctx.verify_cfg)
+    except Exception:  # noqa: BLE001 - lỗi bất kỳ khi kiểm chứng = chưa kiểm chứng
+        return True
+    return (
+        ans.answer_status != "answered"
+        or not ans.items
+        or bool(ans.verify.get("invalid_refs"))
+        or bool(ans.verify.get("dropped_sentences"))
+    )
+
+
 def make_tools_node(spec: AgentSpec) -> NodeFn:
     async def tools_node(state: AgentState, runtime: Rt) -> dict[str, Any]:
         ctx = runtime.context
@@ -287,6 +307,20 @@ def make_tools_node(spec: AgentSpec) -> NodeFn:
                 )
                 continue
             reads += 0 if is_prepare else 1
+            text_arg = (
+                spec.verify_text_arg.get(name.removeprefix("prepare_")) if is_prepare else None
+            )
+            if text_arg:
+                body = args.get(text_arg)
+                unverified = await _claims_unverified(
+                    ctx,
+                    body if isinstance(body, str) else "",
+                    {**(state.get("retrieved") or {}), **passages},
+                )
+                args = {
+                    **args,
+                    "unverified_claims": unverified or bool(args.get("unverified_claims")),
+                }
             _emit(
                 "tool_start",
                 {
@@ -471,6 +505,14 @@ def make_reprepare(registry: AgentRegistry) -> NodeFn:
             if k in allowed
         }
         args = {**pa.prepare_args, **edits}
+        text_arg = spec.verify_text_arg.get(pa.op)
+        if (
+            text_arg and text_arg in edits
+        ):  # người dùng sửa văn bản: kiểm chứng lại, không dùng cờ cũ
+            body = args.get(text_arg)
+            args["unverified_claims"] = await _claims_unverified(
+                ctx, body if isinstance(body, str) else "", state.get("retrieved") or {}
+            )
         by_name = {t.name: t for t in await _tools(ctx, spec)}
         tool = by_name.get(f"prepare_{pa.op}")
         fail = {

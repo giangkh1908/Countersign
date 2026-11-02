@@ -43,6 +43,7 @@ class Settings(CommonSettings):
     # --- MCP ---
     mcp_docs_url: str = "http://docs-mcp:8101/mcp"
     mcp_tickets_url: str = "http://tickets-mcp:8102/mcp"  # rỗng = tắt agent ticket
+    mcp_notify_url: str = "http://notify-mcp:8103/mcp"  # rỗng = tắt agent report
 
     # --- Giới hạn vòng lặp ---
     agent_max_tool_calls_turn: int = 8
@@ -79,7 +80,7 @@ class Settings(CommonSettings):
     checkpointer_adapter: str = "postgres"
     service_probe_adapter: str = "http"
     optional_agents_recheck_s: float = 10.0  # 0 = không dò lại sau khi khởi động
-    agents_enabled: str = "docs,ticket"
+    agents_enabled: str = "docs,ticket,report"
 
     @property
     def mcp_servers(self) -> dict[str, str]:
@@ -87,6 +88,7 @@ class Settings(CommonSettings):
         all_servers = {
             "docs-mcp": self.mcp_docs_url,
             "tickets-mcp": self.mcp_tickets_url,
+            "notify-mcp": self.mcp_notify_url,
         }
         return {aud: url for aud, url in all_servers.items() if url}
 
