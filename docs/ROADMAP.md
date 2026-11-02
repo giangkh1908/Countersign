@@ -161,7 +161,7 @@ Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_F
 |---|---|---|
 | ✅ Định dạng trả lời: mỗi câu có mã trích `[n]` trỏ tới đoạn cụ thể (văn bản, Điều, khoản, vị trí ký tự); agent chỉ được trích đoạn đã truy xuất | W | Test: trích nguồn ngoài danh sách bị loại |
 | ✅ code, chưa chạy với judge thật: Bộ kiểm chứng sau sinh: tách câu → kiểm từng câu có được đoạn trích hỗ trợ (LLM-judge, JSON có cấu trúc; thêm alias `acme-judge` vào `models.yaml`); câu không được hỗ trợ bị gắn cờ hoặc bỏ; không đủ nguồn thì trả lời "không tìm thấy trong tài liệu" | W | Bật/tắt bằng config; đo được chi phí và độ trễ thêm |
-| ✅ Vitest, Playwright chưa chạy: UI: bấm `[n]` mở đoạn nguồn, tô đúng câu được trích; hiển thị câu bị gắn cờ "chưa kiểm chứng" | W | Vitest + Playwright |
+| ✅ Vitest + Playwright (4/4 spec xanh trên stack; citations.spec giả BFF bằng page.route nên không cần LLM sinh `[#id]`): UI: bấm `[n]` mở đoạn nguồn, tô đúng câu được trích; hiển thị câu bị gắn cờ "chưa kiểm chứng" | W | Vitest + Playwright |
 | Hiệu chuẩn judge: 30–50 câu chấm tay, Cohen's κ người–judge | O + R | Báo cáo κ |
 | Đánh giá: citation precision/recall, faithfulness, tỉ lệ từ chối đúng với câu không có đáp án; có và không có bộ kiểm chứng | W | Bảng so sánh kèm chi phí/câu và độ trễ p50/p95 |
 
@@ -172,7 +172,7 @@ Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_F
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
 | ✅ Ma trận quyền vai trò × tool × kênh (dự thảo ở ADR-007), thực thi ở MCP server | O + W | Test mọi ô của ma trận, cả cho phép lẫn từ chối |
-| ✅ unit/integration, chưa E2E tạo ticket trên stack: tickets-mcp: `prepare_create_ticket` qua intent + phê duyệt ký số; router agent thêm nhánh tạo ticket | W | E2E tạo ticket xanh; từ chối thì không ghi gì |
+| ✅ unit/integration + E2E tạo ticket trên stack (`scripts/e2e-create-ticket.sh`, 30/30 assertion: duyệt, từ chối, replay, admin/auditor bị chặn, vượt clearance): tickets-mcp: `prepare_create_ticket` qua intent + phê duyệt ký số; router agent thêm nhánh tạo ticket | W | E2E tạo ticket xanh; từ chối thì không ghi gì |
 | ✅ `notify-mcp`: port `MessageChannel`, adapter `telegram` + `fake`, tool `prepare_send_group_report`, bí danh kênh, mức mật theo kênh, profile `notify` | W | E2E gửi qua `fake`; chat ID tuỳ ý bị từ chối; dữ liệu vượt mức mật bị chặn; leak-grep rỗng. Đã đạt: `bash scripts/e2e-notify.sh` 30/30 assertion, 45 giây (gửi đủ luồng duyệt, replay, kênh tuỳ ý, kênh phòng khác, taint, vai trò chặn) |
 | Eval hành động: chọn đúng tool và tham số, từ chối đúng khi thiếu quyền, không hành động khi chỉ hỏi | W | Bảng kết quả theo vai trò, chạy lại bằng một lệnh |
 | ✅ Đo RAM khi bật `tickets` + `notify` (+ `obs`): 1,95 GiB rảnh, notify-mcp 93 MiB (bảng trong README) | W | Bảng số đo thật trong README |
@@ -195,7 +195,7 @@ Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_F
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Kiểm tra rò rỉ: mỗi user trong 16 user hỏi bộ câu chạm tài liệu trái quyền; kiểm cả câu trả lời, trích dẫn, cache | W | 0 tài liệu trái quyền xuất hiện ở bất kỳ đâu |
+| ✅ phần không cache (`scripts/e2e-leak-check.sh`: 16 user, ~61 truy vấn docs-mcp + 5 lượt agent mỗi user, 0 rò rỉ ở search, SSE, trích dẫn, lịch sử; LLM là mock; chưa kiểm cache) Kiểm tra rò rỉ: mỗi user trong 16 user hỏi bộ câu chạm tài liệu trái quyền; kiểm cả câu trả lời, trích dẫn, cache | W | 0 tài liệu trái quyền xuất hiện ở bất kỳ đâu |
 | ✅ Tấn công qua hành động (mock LLM chiếm hoàn toàn, 13 cấu hình lớp, `python -m eval.attack`; ASR tầng LLM chưa đo): tài liệu độc lừa agent tạo ticket hoặc gửi dữ liệu mật vào nhóm (dùng adapter `fake`) | W | Bảng ASR có/không từng lớp (phê duyệt, mức mật kênh, taint) |
 | ✅ corpus (71 tài liệu: 56 độc = 8 kỹ thuật × 7, 5 mật có canary, 10 sạch; ground truth `manifest.jsonl`; nạp: `scripts/ingest-attack-corpus.sh`, chưa nạp vào stack), chưa đo ASR tầng LLM: Xây corpus độc và nạp vào kho; đo tỉ lệ tấn công thành công (ASR) có/không spotlighting và bộ kiểm chứng | W | Bảng ASR theo kỹ thuật |
 | ✅ trong-process (16 user × mọi truy vấn, kể cả retriever rò ACL; stack thật do E2E): Canary trong tài liệu mật không bao giờ ra khỏi phạm vi quyền (log, response, usage) | W | Quét tự động = 0 |

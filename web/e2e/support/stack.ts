@@ -10,7 +10,9 @@ const KC = "http://localhost:8080";
 const REALM = "acme";
 
 export function secret(name: string): string {
-  return readFileSync(path.join(ROOT, "secrets", name), "utf-8").trim();
+  // worktree không có secrets/: cho phép trỏ về thư mục của repo chính (cùng quy ước với eval/e2e/close_ticket.py)
+  const dir = process.env.SECRETS_DIR ?? path.join(ROOT, "secrets");
+  return readFileSync(path.join(dir, name), "utf-8").trim();
 }
 
 /** Đặt mật khẩu ngẫu nhiên (chỉ trong bộ nhớ) cho user test qua Keycloak Admin API. */
