@@ -347,6 +347,7 @@ Không thêm sự kiện mới: dùng lại `citations` (có sẵn trong `AgentE
 - `sentences[].start/end` là offset (đơn vị ký tự Unicode, theo điểm mã) trong văn bản trả lời cuối cùng = ghép các `token.text` theo thứ tự. UI tô từng câu theo `verdict` và nối `[n]` ↔ `items[n-1]`.
 - `answer_status ∈ {answered, partially_verified, refused}`; `partially_verified` khi còn câu `partial/unverified/unsupported` (chế độ `flag`).
 - Khi kiểm chứng tắt: `verify.enabled=false`, mọi `verdict="unverified"`, `sentences` có thể rỗng; UI không hiện cảnh báo "chưa kiểm chứng" khi `enabled=false`.
+- Lịch sử: `GET /threads/{id}/messages` trả trên mỗi tin assistant các trường `citations` (= `items`), `sentences`, `answer_status`, `verify` (cùng tên như trên); `verdict` của câu không phải khẳng định là `null`.
 - Kích thước khung ≤ 64 KiB (giới hạn của BFF, `07 §2.8`): giới hạn `items` ≤ 8 và `passage` ≤ 4.000 ký tự/mục; vượt thì cắt `passage` (đặt `passage_truncated=true`).
 - Bắt buộc cập nhật: `03 §Citation` (kiểu ở trên), `07` (`CitationSchema` trong `web/src/api/zod.ts`, kiểu `Citation`, `Citations.tsx`: bấm `[n]` mở panel hiển thị `passage`, tô `evidence_start..end`, nhãn "chưa kiểm chứng" cho `verdict ≠ supported` khi `verify.enabled`). Lịch sử `GET /api/threads/{id}/messages` trả `messages[].citations` cùng cấu trúc `items`. BFF không đổi logic (chỉ chuyển tiếp); vì citations chứa văn bản tài liệu nên **không** ghi vào log BFF.
 - Văn bản `passage`/`snippet` hiển thị qua `react-markdown` + `rehype-sanitize` như mọi nội dung (chặn ảnh/link ngoài; `07`).

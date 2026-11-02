@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+from typing import Literal
 
 from acme_common.settings import CommonSettings
 from pydantic import Field
@@ -20,7 +21,7 @@ DEFAULT_ROLE_ALIASES: dict[str, str] = {
     "final": "acme-fast",
     "direct": "acme-fast",
     "summarize": "acme-fast",
-    "judge": "acme-smart",
+    "judge": "acme-judge",
 }
 
 
@@ -50,6 +51,16 @@ class Settings(CommonSettings):
     agent_recursion_limit: int = 25
     agent_conf_min: float = 0.5
     agent_max_input_chars: int = 4000
+
+    # --- Kiểm chứng trích dẫn sau sinh (rag-citations §5.3) ---
+    agent_verify_citations: Literal["on", "off"] = "on"
+    agent_verify_judge_adapter: str = "gateway_llm"
+    agent_verify_judge_alias: str = "acme-judge"
+    agent_verify_max_concurrency: int = 4
+    agent_verify_max_pairs: int = 12
+    agent_verify_require_citation: bool = True
+    agent_verify_on_unsupported: Literal["flag", "drop"] = "flag"
+    agent_verify_min_supported_ratio: float = 0.5
 
     # --- Lưu trữ ---
     agent_database_url: str | None = None

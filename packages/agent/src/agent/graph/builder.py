@@ -35,6 +35,12 @@ def build_graph(checkpointer: Any, registry: AgentRegistry) -> Any:
             g.add_conditional_edges(
                 f"{spec.route}_tools", nodes.tools_edge(spec), [spec.node_name, "approval"]
             )
+        elif spec.citations_extractor:
+            g.add_conditional_edges(
+                f"{spec.route}_tools",
+                nodes.cited_tools_edge(spec),
+                [spec.node_name, "final_answer"],
+            )
         else:
             g.add_edge(f"{spec.route}_tools", spec.node_name)
     g.add_edge(START, "begin_turn")

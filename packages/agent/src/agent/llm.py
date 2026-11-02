@@ -77,8 +77,9 @@ def make_chat_model(
     http_client: httpx.AsyncClient | None = None,
     temperature: float = 0.0,
     max_tokens: int = 1024,
+    alias: str | None = None,
 ) -> BaseChatModel:
-    alias = settings.agent_role_aliases.get(role) or DEFAULT_ROLE_ALIASES.get(role)
+    alias = alias or settings.agent_role_aliases.get(role) or DEFAULT_ROLE_ALIASES.get(role)
     if alias is None:
         raise ConfigError(f"unknown chat role {role!r}")
     if not settings.agent_gateway_key:

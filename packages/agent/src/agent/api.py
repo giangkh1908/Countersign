@@ -183,13 +183,19 @@ async def messages(thread_id: UUID, caller: AuthDep, c: ContDep) -> dict[str, An
     out = []
     for m in values.get("messages", []):
         if m.type in ("human", "ai") and isinstance(m.content, str) and m.content:
-            out.append(
-                {
-                    "id": m.id,
-                    "role": "user" if m.type == "human" else "assistant",
-                    "content": m.content,
-                }
-            )
+            item: dict[str, Any] = {
+                "id": m.id,
+                "role": "user" if m.type == "human" else "assistant",
+                "content": m.content,
+            }
+            cit = m.additional_kwargs.get("citations") if m.type == "ai" else None
+            if isinstance(cit, dict) and cit.get("items") is not None:
+                # cùng tên trường với sự kiện SSE `citations` (rag-citations §5.4)
+                item["citations"] = cit["items"]
+                item["sentences"] = cit.get("sentences", [])
+                item["answer_status"] = cit.get("answer_status", "answered")
+                item["verify"] = cit.get("verify", {})
+            out.append(item)
     return {
         "messages": out,
         "pending_interrupt": pending_interrupt(snap),

@@ -21,6 +21,7 @@ from .container import Container
 from .factory import build_agent_registry, build_serde
 from .graph.builder import build_graph
 from .ports.service_probe import ServiceProbe
+from .ports.support_judge import SupportJudge, SupportVerdict
 from .ports.tool_provider import ToolProvider
 from .settings import Settings
 
@@ -84,6 +85,34 @@ def scripted_factory(
         return lambda role: ScriptedChatModel(queue=queues.setdefault(role, deque()))
 
     return chat_factory
+
+
+class FakeSupportJudge(SupportJudge):
+    """Judge giả. `rules`: danh sách (chuỗi con của câu, verdict); mặc định `supported` kèm bằng chứng
+    là 30 ký tự đầu của đoạn. `fail=True` ném lỗi truyền tải. Ghi lại mọi lời gọi."""
+
+    def __init__(
+        self,
+        rules: list[tuple[str, str]] | None = None,
+        default: str = "supported",
+        fail: bool = False,
+    ) -> None:
+        self.rules, self.default, self.fail = rules or [], default, fail
+        self.calls: list[tuple[str, str]] = []
+
+    async def judge(self, sentence: str, passage: str) -> SupportVerdict:
+        self.calls.append((sentence, passage))
+        if self.fail:
+            raise RuntimeError("judge down")
+        verdict = next((v for sub, v in self.rules if sub in sentence), self.default)
+        quote = passage.strip()[:30] if verdict != "unsupported" else ""
+        return SupportVerdict(
+            verdict=verdict,  # type: ignore[arg-type]
+            evidence_quote=quote,
+            calls=1,
+            input_tokens=100,
+            output_tokens=20,
+        )
 
 
 class _AnyArgs(BaseModel):
@@ -165,13 +194,16 @@ def build_test_container(
     scripts: dict[str, list[AIMessage]],
     *,
     token: str = "user-token",
+    judge: SupportJudge | None = None,
+    settings: Settings | None = None,
 ) -> Container:
     """Container thuần fake (saver mã hoá thật dùng khoá thử nghiệm)."""
     from langgraph.checkpoint.memory import InMemorySaver
 
     from .adapters.memory_conversations import MemoryConversationRepository
 
-    settings = Settings(acme_env="test", agent_checkpoint_encryption_key=TEST_KEY_B64)
+    settings = settings or Settings(acme_env="test", agent_checkpoint_encryption_key=TEST_KEY_B64)
+    the_judge = judge or FakeSupportJudge()
     registry = build_agent_registry(settings)
     saver = InMemorySaver(serde=build_serde(settings))
     clock = FakeClock()
@@ -186,6 +218,7 @@ def build_test_container(
         repo=MemoryConversationRepository(),
         clock=clock,
         chat_factory=scripted_factory(scripts),
+        judge_factory=lambda gw_token, run_id: the_judge,
     )
 
 

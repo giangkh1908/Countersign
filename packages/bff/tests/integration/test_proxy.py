@@ -341,6 +341,32 @@ async def test_unknown_agent_events_are_dropped_and_others_forwarded_verbatim(
     assert events[0][1] == payload
 
 
+async def test_extended_citations_payload_is_forwarded_verbatim(logged_in: Env) -> None:
+    """R2 (rag-citations §5.4): BFF chuyển nguyên văn items/sentences/answer_status/verify."""
+    payload = {
+        "items": [
+            {
+                "n": 1,
+                "doc_id": "d",
+                "passage": "Đoạn",
+                "char_start": 10,
+                "evidence_start": 12,
+                "evidence_end": 15,
+                "verdict": "supported",
+                "sentence_ids": [0],
+            }
+        ],
+        "sentences": [{"id": 0, "start": 0, "end": 9, "cites": [1], "verdict": "supported"}],
+        "answer_status": "answered",
+        "verify": {"enabled": True, "pairs": 1, "judge_calls": 1, "ms": 5},
+    }
+    logged_in.backends.agent_body = sse(
+        ("citations", payload), ("done", {"status": "completed", "message_id": "m"})
+    )
+    r = await logged_in.browser.post("/api/chat", json={**CHAT, "thread_id": THREAD})
+    assert parse_sse(r.text)[0] == ("citations", payload)
+
+
 async def test_agent_sse_error_is_forwarded(logged_in: Env) -> None:
     logged_in.backends.agent_body = sse(
         ("error", {"code": "rate_limited", "message": "Quá tải", "retryable": True})

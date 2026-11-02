@@ -7,7 +7,9 @@ from langchain_core.messages import AIMessage
 SEARCH = {
     "results": [
         {
+            "chunk_id": 11,
             "doc_id": "d1",
+            "text": "Xin nghi phep qua HR truoc 3 ngay.",
             "title": "Quy trinh nghi phep",
             "heading": "H",
             "source": "d1#2",
@@ -52,7 +54,7 @@ async def test_docs_question_with_citations(make_env):
             "router": [route("docs")],
             "agent": [
                 tool_call("search_documents", {"query": "nghi phep"}),
-                AIMessage("Xin nghi phep qua HR."),
+                AIMessage("Xin nghi phep qua HR truoc 3 ngay [#11]."),
             ],
         },
     )

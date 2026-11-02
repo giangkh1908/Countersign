@@ -21,16 +21,22 @@ from pydantic import BaseModel
 
 from ..agents import AgentRegistry
 from ..llm import CostCollector
+from ..ports.support_judge import SupportJudge
 from ..ports.tool_provider import ToolProvider
+from ..services.citation_verifier import VerifyConfig
 
 
-def _merge_citations(a: list[dict], b: list[dict] | None) -> list[dict]:
+def _merge_retrieved(a: dict[str, dict], b: dict[str, dict] | None) -> dict[str, dict]:
+    """chunk_id (chuỗi) -> Passage.model_dump(), gom từ mọi `search_documents` trong lượt; `{}` = reset."""
     if b is None:
         return a
-    if b == []:
-        return []  # begin_turn reset
-    seen = {(c["doc_id"], c.get("chunk_ord")) for c in a}
-    return a + [c for c in b if (c["doc_id"], c.get("chunk_ord")) not in seen]
+    if b == {}:
+        return {}
+    return {**a, **b}
+
+
+def _replace_citations(a: list[dict], b: list[dict] | None) -> list[dict]:
+    return a if b is None else b  # `final_answer` ghi đè; `begin_turn` reset về []
 
 
 class AgentState(TypedDict, total=False):
@@ -39,7 +45,12 @@ class AgentState(TypedDict, total=False):
     pending_action: dict | None  # PendingAction.model_dump()
     approval: dict | None  # {decision, edits, approval_token, reason}; token xoá sau execute_write
     write_result: dict | None
-    citations: Annotated[list[dict], _merge_citations]
+    retrieved: Annotated[
+        dict[str, dict], _merge_retrieved
+    ]  # đoạn đã truy xuất trong lượt (Passage)
+    retrieval: dict | None  # {searches, passages}: số lần tìm kiếm thành công / số đoạn trong lượt
+    citations: Annotated[list[dict], _replace_citations]  # items đã resolve/kiểm chứng
+    answer_meta: dict | None  # {sentences, answer_status, verify} đi kèm citations
     seen_intents: Annotated[
         list[str], operator.add
     ]  # chống replay intent_id trong thread (ADR-005)
@@ -83,4 +94,8 @@ class RunContext:
     clock: Clock
     cost: CostCollector
     limits: Limits = field(default_factory=Limits)
+    # Kiểm chứng trích dẫn: `make_judge` None hoặc `verify.enabled=False` => tắt (rag-citations §5.3)
+    make_judge: Callable[[], SupportJudge] | None = None
+    verify_enabled: bool = False
+    verify_cfg: VerifyConfig = field(default_factory=VerifyConfig)
     tool_cache: dict[str, list[BaseTool]] = field(default_factory=dict)

@@ -20,6 +20,7 @@ from .graph.nodes import ERROR_EVENT_CODES
 from .graph.state import Limits, RunContext
 from .llm import CostCollector, current_cost, translate_llm_error
 from .ports.errors import ConfigError, GatewayError, ToolUnavailable
+from .services.citation_verifier import VerifyConfig
 
 log = logging.getLogger("agent.run")
 Event = tuple[str, dict[str, Any]]
@@ -50,6 +51,15 @@ def pending_interrupt(snap: Any) -> dict[str, Any] | None:
         if isinstance(v, dict) and "interrupt_id" in v:
             return {"interrupt_id": v["interrupt_id"], "payload": v}
     return None
+
+
+def citations_payload(values: dict[str, Any]) -> dict[str, Any] | None:
+    """Dữ liệu sự kiện `citations` (rag-citations §5.4); None nếu lượt không có gì để báo."""
+    items = values.get("citations") or []
+    meta = values.get("answer_meta")
+    if not items and not (meta and meta.get("answer_status") != "answered"):
+        return None
+    return {"items": items, **(meta or {"sentences": [], "answer_status": "answered"})}
 
 
 def _error_event(code: str, message: str | None = None, retryable: bool = False) -> Event:
@@ -102,6 +112,15 @@ async def stream_run(
             clock=c.clock,
             cost=cost,
             limits=Limits(s.agent_max_tool_calls_turn, s.agent_max_react_iters, s.agent_conf_min),
+            make_judge=(lambda: c.judge_factory(gw.value, run_id)) if c.judge_factory else None,
+            verify_enabled=s.agent_verify_citations == "on",
+            verify_cfg=VerifyConfig(
+                max_concurrency=s.agent_verify_max_concurrency,
+                max_pairs=s.agent_verify_max_pairs,
+                require_citation=s.agent_verify_require_citation,
+                on_unsupported=s.agent_verify_on_unsupported,
+                min_supported_ratio=s.agent_verify_min_supported_ratio,
+            ),
         )
         async for mode, chunk in c.graph.astream(
             graph_input,
@@ -117,8 +136,8 @@ async def stream_run(
         interrupt = pending_interrupt(snap)
         if interrupt:
             yield "interrupt", interrupt
-        elif values.get("citations"):
-            yield "citations", {"items": values["citations"]}
+        elif citations_payload(values) is not None:
+            yield "citations", citations_payload(values)  # type: ignore[misc]
         msgs = values.get("messages") or []
         last_ai = next((m for m in reversed(msgs) if isinstance(m, AIMessage)), None)
         yield (
