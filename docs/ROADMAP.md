@@ -164,7 +164,7 @@ Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_F
 | tickets-mcp: `prepare_create_ticket` qua intent + phê duyệt ký số; router agent thêm nhánh tạo ticket | W | E2E tạo ticket xanh; từ chối thì không ghi gì |
 | `notify-mcp`: port `MessageChannel`, adapter `telegram` + `fake`, tool `prepare_send_group_report`, bí danh kênh, mức mật theo kênh, profile `notify` | W | E2E gửi qua `fake`; chat ID tuỳ ý bị từ chối; dữ liệu vượt mức mật bị chặn; leak-grep rỗng |
 | Eval hành động: chọn đúng tool và tham số, từ chối đúng khi thiếu quyền, không hành động khi chỉ hỏi | W | Bảng kết quả theo vai trò, chạy lại bằng một lệnh |
-| Đo RAM khi bật `tickets` + `notify` | W | Bảng số đo thật trong README |
+| ✅ Đo RAM khi bật `tickets` + `notify` (+ `obs`): 1,95 GiB rảnh, notify-mcp 93 MiB (bảng trong README) | W | Bảng số đo thật trong README |
 
 **DoD A1:** user tạo ticket và gửi báo cáo Telegram qua chat, có thẻ duyệt; ma trận quyền có test đầy đủ; thêm kênh mới chỉ là thêm file adapter.
 
