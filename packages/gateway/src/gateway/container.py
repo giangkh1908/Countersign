@@ -10,11 +10,18 @@ from pathlib import Path
 from acme_common.factory import build_clock, build_event_sink, build_token_verifier
 from acme_common.ports import Clock, EventSink, TokenVerifier
 
-from .factory import EmbeddingPool, ProviderPool, RerankPool, build_key_store
+from .factory import (
+    EmbeddingPool,
+    ProviderPool,
+    RerankPool,
+    build_key_store,
+    build_response_cache,
+)
 from .ports.chat_provider import ChatProvider
 from .ports.embedding_provider import EmbeddingProvider
 from .ports.key_store import KeyStore
 from .ports.rerank_provider import RerankProvider
+from .ports.response_cache import ResponseCache
 from .services.auth import AuthService
 from .services.catalog import EmbeddingSpec, ModelCatalog, RerankSpec
 from .services.chat import ChatService
@@ -56,6 +63,7 @@ def build_container(
     providers: Callable[[str], ChatProvider] | None = None,
     embedders: Callable[[EmbeddingSpec], EmbeddingProvider] | None = None,
     rerankers: Callable[[RerankSpec], RerankProvider] | None = None,
+    cache: ResponseCache | None = None,
 ) -> Container:
     clock = clock or build_clock(settings.clock_adapter, settings)
     keys = keys or build_key_store(settings.gw_keystore_adapter, settings, clock=clock)
@@ -78,12 +86,25 @@ def build_container(
     rerank_pool = RerankPool(settings)
     rerankers = rerankers or (lambda spec: rerank_pool.get(spec.alias, spec.adapter, spec.options))
     metrics = Metrics()
+    cache = cache or build_response_cache(settings.gw_cache_adapter, settings)
+    closers = [pool.aclose, embed_pool.aclose, rerank_pool.aclose, keys.aclose]
+    if cache is not None:
+        closers.append(cache.aclose)
     return Container(
         auth=AuthService(keys, verifier, clock, settings.key_pepper, settings.key_pepper_prev),
-        chat=ChatService(catalog, providers, sink, clock, metrics),
+        chat=ChatService(
+            catalog,
+            providers,
+            sink,
+            clock,
+            metrics,
+            cache=cache,
+            cache_ttl_s=settings.gw_cache_ttl_s,
+            cache_index_version=settings.gw_cache_index_version,
+        ),
         embeddings=EmbeddingService(catalog, embedders, sink, clock, metrics),
         rerank=RerankService(catalog, rerankers, sink, clock, metrics),
         metrics=metrics,
         sink=sink,
-        closers=[pool.aclose, embed_pool.aclose, rerank_pool.aclose, keys.aclose],
+        closers=closers,
     )

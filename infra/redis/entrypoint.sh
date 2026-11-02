@@ -16,6 +16,7 @@ sed -e "s/@@REDIS_TICKETS@@/$(h redis_tickets_password)/" \
     -e "s/@@REDIS_BFF@@/$(h redis_bff_password)/" \
     -e "s/@@REDIS_OPS@@/$(h redis_ops_password)/" \
     -e "s/@@REDIS_HEALTH@@/$(h redis_health_password)/" \
+    -e "s/@@REDIS_GWCACHE@@/$(h redis_gwcache_password)/" \
     /etc/redis/users.acl.tmpl > /tmp/users.acl
 chmod 600 /tmp/users.acl
 exec "$@"

@@ -62,7 +62,7 @@ for n in pg_superuser_password gw_owner_password gw_app_password kn_owner_passwo
          redis_notify_password \
          ag_app_password ag_owner_password mcp_audit_password kc_app_password \
          gw_report_password redis_tickets_password redis_docs_password \
-         redis_bff_password redis_ops_password redis_health_password \
+         redis_bff_password redis_ops_password redis_health_password redis_gwcache_password \
          kc_admin_password grafana_admin_password; do
   put "$n" rand_pw
 done
@@ -100,7 +100,8 @@ put_url() {
 put_url docs_database_url          'postgresql://kn_app:@PW@@postgres:5432/knowledge'        kn_app_password
 put_url docs_audit_database_url    'postgresql://mcp_audit_w:@PW@@postgres:5432/knowledge'   mcp_audit_password
 put_url docs_redis_url             'redis://docs:@PW@@redis-state:6379/0'                    redis_docs_password
-put_url tickets_database_url       'postgresql://tk_app:@PW@@postgres:5432/tickets'          tk_app_password
+put_url gw_cache_redis_url         'redis://gwcache:@PW@@redis-cache:6379/0'                 redis_gwcache_password
+put_url tickets_database_url      'postgresql://tk_app:@PW@@postgres:5432/tickets'          tk_app_password
 put_url tickets_audit_database_url 'postgresql://mcp_audit_w:@PW@@postgres:5432/tickets'     mcp_audit_password
 put_url tickets_redis_url          'redis://tickets:@PW@@redis-state:6379/0'                 redis_tickets_password
 put_url notify_database_url        'postgresql://nt_app:@PW@@postgres:5432/notify'           nt_app_password

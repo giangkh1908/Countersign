@@ -3,6 +3,7 @@
 from .chat_provider import ChatProvider
 from .embedding_provider import EmbeddingProvider
 from .errors import (
+    CacheNotConfigured,
     EmbeddingNotConfigured,
     KeyAlreadyExists,
     KeyNotFound,
@@ -12,6 +13,7 @@ from .errors import (
 )
 from .key_store import KeyStore
 from .rerank_provider import RerankProvider
+from .response_cache import CachedResponse, ResponseCache
 from .types import (
     ChatChunk,
     ChatRequest,
@@ -27,6 +29,9 @@ from .types import (
 )
 
 __all__ = [
+    "CacheNotConfigured",
+    "CachedResponse",
+    "ResponseCache",
     "ChatChunk",
     "ChatProvider",
     "ChatRequest",

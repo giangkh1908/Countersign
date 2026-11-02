@@ -24,6 +24,16 @@ class Settings(CommonSettings):
         None  # adapter `openai_compatible`; GW_EMBEDDING_API_KEY[_FILE]
     )
     gw_rerank_api_key: str | None = None  # adapter `http_rerank`; GW_RERANK_API_KEY[_FILE]
+    # Exact cache (cache-observability.md §1). Mặc định TẮT; bật: GW_CACHE_ADAPTER=redis
+    gw_cache_adapter: str = "off"
+    gw_cache_redis_url: str | None = (
+        None  # GW_CACHE_REDIS_URL[_FILE]; user ACL riêng của redis-cache
+    )
+    gw_cache_ttl_s: int = 3600
+    gw_cache_timeout_s: float = 0.3  # Redis chậm/chết thì coi như miss, không kéo dài request
+    gw_cache_max_value_bytes: int = 65536
+    # Tăng khi nạp lại index hoặc đổi embedding: entry cũ không bao giờ trúng nữa
+    gw_cache_index_version: str = "0"
     gw_max_body_bytes: int = 4 * 1024 * 1024
     gw_sink_flush_interval_s: float = 2.0  # chu kỳ đẩy buffer EventSink (usage_events)
 

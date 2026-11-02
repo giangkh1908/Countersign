@@ -52,6 +52,20 @@ class ResponseCache(ABC):
 
 CLAUDE.md không bọc Redis client, nhưng cache là năng lực phải nằm sau port: cần fake cho test và cho nhánh đo RQ4. Adapter: `redis.py`, `fake.py`. Logic dựng khoá nằm ở `services/cache_key.py`, thuần, test được mà không cần Redis.
 
+### Trạng thái triển khai
+
+Đã làm (mặc định TẮT, `GW_CACHE_ADAPTER=off`; bật `redis` cùng `--profile cache`):
+
+- Port `ResponseCache` (`ports/response_cache.py`), adapter `adapters/redis.py`, `FakeResponseCache`, factory registry `off|redis`, `services/cache_key.py` thuần.
+- Khoá thực tế: `cache:v1:{ver}:{dept}:{clearance}:{roles}:{provider.model}:{sha256}`. So với thiết kế thêm `ver` (`GW_CACHE_INDEX_VERSION`, tăng khi nạp lại index) và đưa provider vào phần model. Digest băm cả phạm vi, model, messages và params nên dù phần literal có trùng cũng không chung entry. Giá trị ngoài allowlist `[A-Za-z0-9_.-]{1,64}` thì không cache. `response_format` không vào khoá vì gateway bỏ qua tham số này.
+- Không cache (bypass): không có user token đã xác minh, có `tools`/`tool_choice`, hội thoại chứa lượt `tool`. Không ghi: `finish_reason != stop`, có tool call, nội dung rỗng, lỗi provider, stream bị ngắt. Redis lỗi hoặc chậm quá `GW_CACHE_TIMEOUT_S` là miss.
+- Cache nằm dưới bước kiểm chứng của agent nên không biết câu trả lời `refused`; câu đó vẫn bị kiểm chứng lại mỗi lần. Chưa có điều kiện theo taint của thread (thiết kế không yêu cầu).
+- Hit: header `x-acme-cache: exact`, `usage_events.cache='exact'` không token, span `cache=exact`, metric `gateway_cache_lookups_total{result}` và `gateway_cache_stores_total{result}`. Stream hit phát lại bằng một chunk nội dung.
+- `redis-cache`: `allkeys-lru`, không AOF/RDB, ACL `gwcache` chỉ `GET/SET` trên `cache:v1:*`, user `ops` chỉ đọc để quét canary.
+- Harness RQ4: `python -m eval.cache run ...` rồi `report` (xem `eval/cache/__main__.py`). Nhánh `evidence-keyed` chỉ là mô phỏng ngoại tuyến, runtime luôn `strict`.
+
+Chưa làm: semantic cache (đúng thứ tự cắt của ADR-007), số RQ4 trên stack, quét canary Redis tự động.
+
 ### Đo RQ4
 
 | Câu hỏi | Cách đo |

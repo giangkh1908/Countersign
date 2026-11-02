@@ -1,7 +1,8 @@
 """Điều phối một request chat: kiểm alias, gọi provider, dựng response, ghi `usage_events`.
 
-Gateway mỏng: không rate limit, budget, cache, PII, guard, fallback hay breaker (chỉ dùng phần tử
-đầu của chain). Không ghi nội dung prompt/response.
+Gateway mỏng: không rate limit, budget, PII, guard, fallback hay breaker (chỉ dùng phần tử
+đầu của chain). Exact cache (tuỳ chọn, `ResponseCache`) đặt ngay sau `_prepare`, sau khi kiểm
+quyền model. Không ghi nội dung prompt/response vào log, span, metric.
 """
 
 from __future__ import annotations
@@ -17,8 +18,10 @@ from acme_common.telemetry import start_span
 
 from ..ports.chat_provider import ChatProvider
 from ..ports.errors import ProviderNotConfigured
-from ..ports.types import ChatRequest, ProviderError, Usage
+from ..ports.response_cache import CachedResponse, ResponseCache
+from ..ports.types import ChatChunk, ChatRequest, ChatResponse, ProviderError, Usage
 from .auth import Caller
+from .cache_key import build_cache_key
 from .catalog import ModelCatalog, Resolved
 from .encoder import StreamEncoder, completion_body, sse
 from .errors import GatewayError
@@ -40,9 +43,9 @@ _IGNORED = (
 _PARAMS = ("temperature", "top_p", "stop", "parallel_tool_calls")
 
 
-def _chat_span(model: str) -> Any:
+def _chat_span(model: str, cache: str = "miss") -> Any:
     """Span `gen_ai.chat`: chỉ model, token, cache, finish_reason; không nội dung prompt/response."""
-    return start_span("gen_ai.chat", **{"gen_ai.request.model": model, "cache": "miss"})
+    return start_span("gen_ai.chat", **{"gen_ai.request.model": model, "cache": cache})
 
 
 def _end_chat_span(
@@ -132,7 +135,14 @@ class ChatService:
         sink: EventSink,
         clock: Clock,
         metrics: Metrics | None = None,
+        *,
+        cache: ResponseCache | None = None,
+        cache_ttl_s: int = 3600,
+        cache_index_version: str = "0",
     ) -> None:
+        self._cache = cache
+        self._cache_ttl_s = cache_ttl_s
+        self._cache_ver = cache_index_version
         self._catalog = catalog
         self._providers = providers
         self._sink = sink
@@ -181,6 +191,7 @@ class ChatService:
         latency_ms: int,
         overhead_ms: int,
         ttft_ms: int | None,
+        cache: str = "miss",
     ) -> None:
         """Ghi `usage_events` (cột theo contracts §5). Không chứa nội dung prompt."""
         u = usage or Usage()
@@ -202,7 +213,7 @@ class ChatService:
             "latency_ms": latency_ms,
             "ttft_ms": ttft_ms,
             "gateway_overhead_ms": overhead_ms,
-            "cache": "miss",
+            "cache": cache,
             "status_code": status,
             "error_code": error_code,
         }
@@ -220,12 +231,14 @@ class ChatService:
         m.latency.labels(label).observe(latency_ms / 1000)
 
     def _headers(
-        self, request_id: str, provider: str, model: str, parsed: ParsedChat
+        self, request_id: str, provider: str, model: str, parsed: ParsedChat, cache: str | None
     ) -> dict[str, str]:
         h = {
             "x-acme-provider": provider,
             "x-acme-model": model,
         }
+        if cache:
+            h["x-acme-cache"] = cache
         if parsed.ignored:
             h["x-acme-ignored-params"] = ",".join(parsed.ignored)
         return h
@@ -233,11 +246,80 @@ class ChatService:
     def _ms(self, since: float) -> int:
         return int((self._clock.monotonic() - since) * 1000)
 
+    # ---------- exact cache ----------
+
+    def _cache_key(
+        self, caller: Caller, parsed: ParsedChat, provider: ChatProvider, req: ChatRequest
+    ) -> str | None:
+        """Khoá cache, hoặc None nếu không cache (cache tắt / request không đủ điều kiện)."""
+        if self._cache is None:
+            return None
+        key = build_cache_key(
+            user=caller.user,
+            provider=provider.name,
+            model=req.model,
+            messages=req.messages,
+            params=req.params,
+            tools=req.tools,
+            tool_choice=req.tool_choice,
+            index_version=self._cache_ver,
+        )
+        if key is None:
+            self._metrics.cache_lookups.labels("bypass").inc()
+        return key
+
+    async def _cache_get(self, key: str) -> CachedResponse | None:
+        assert self._cache is not None
+        try:
+            hit = await self._cache.get(key)
+        except Exception as exc:  # noqa: BLE001 - Redis lỗi = miss, không làm hỏng đường chính
+            log.warning("cache get failed", extra={"fields": {"error": type(exc).__name__}})
+            self._metrics.cache_lookups.labels("error").inc()
+            return None
+        self._metrics.cache_lookups.labels("hit" if hit else "miss").inc()
+        return hit
+
+    async def _cache_put(
+        self,
+        key: str,
+        *,
+        text: str,
+        finish_reason: str | None,
+        has_tool_call: bool,
+        usage: Usage,
+        provider: str,
+        model: str,
+    ) -> None:
+        """Chỉ ghi câu trả lời văn bản kết thúc `stop`; lỗi cache không ảnh hưởng response."""
+        assert self._cache is not None
+        if finish_reason != "stop" or has_tool_call or not text:
+            self._metrics.cache_stores.labels("skipped").inc()
+            return
+        value = CachedResponse(
+            content=text,
+            finish_reason="stop",
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            provider=provider,
+            model=model,
+        )
+        try:
+            await self._cache.put(key, value, self._cache_ttl_s)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("cache put failed", extra={"fields": {"error": type(exc).__name__}})
+            self._metrics.cache_stores.labels("error").inc()
+            return
+        self._metrics.cache_stores.labels("ok").inc()
+
     # ---------- non-stream ----------
 
     async def complete(self, request_id: str, caller: Caller, parsed: ParsedChat) -> ChatResult:
         t0 = self._clock.monotonic()
         resolved, provider, req = self._prepare(caller, parsed)
+        key = self._cache_key(caller, parsed, provider, req)
+        if key is not None and (hit := await self._cache_get(key)) is not None:
+            return self._complete_hit(request_id, caller, parsed, resolved, hit, t0)
+        cache_state = self._miss_state(key)
         t_call = self._clock.monotonic()
         sp = _chat_span(req.model)
         try:
@@ -250,6 +332,16 @@ class ChatService:
             _end_chat_span(sp, None, None, type(exc).__name__)
             raise
         _end_chat_span(sp, resp.usage, resp.finish_reason)
+        if key is not None:
+            await self._cache_put(
+                key,
+                text=resp.message.get("content") or "",
+                finish_reason=resp.finish_reason,
+                has_tool_call=bool(resp.message.get("tool_calls")),
+                usage=resp.usage,
+                provider=provider.name,
+                model=req.model,
+            )
         call_ms = self._ms(t_call)
         total = self._ms(t0)
         self._emit(
@@ -269,7 +361,66 @@ class ChatService:
         created = int(self._clock.now().timestamp())
         return ChatResult(
             completion_body(request_id, parsed.alias, created, resp),
-            self._headers(request_id, provider.name, req.model, parsed),
+            self._headers(request_id, provider.name, req.model, parsed, cache_state),
+        )
+
+    def _miss_state(self, key: str | None) -> str | None:
+        if self._cache is None:
+            return None
+        return "miss" if key is not None else "bypass"
+
+    def _complete_hit(
+        self,
+        request_id: str,
+        caller: Caller,
+        parsed: ParsedChat,
+        resolved: Resolved,
+        hit: CachedResponse,
+        t0: float,
+    ) -> ChatResult:
+        resp = ChatResponse(
+            message={"role": "assistant", "content": hit.content},
+            finish_reason=hit.finish_reason,
+            usage=Usage(prompt_tokens=hit.prompt_tokens, completion_tokens=hit.completion_tokens),
+            model=hit.model,
+            provider=hit.provider,
+        )
+        _end_chat_span(_chat_span(hit.model, "exact"), None, hit.finish_reason)
+        self._emit_hit(request_id, caller, parsed, resolved, hit, t0, None)
+        created = int(self._clock.now().timestamp())
+        return ChatResult(
+            completion_body(request_id, parsed.alias, created, resp),
+            self._headers(request_id, hit.provider, hit.model, parsed, "exact"),
+        )
+
+    def _emit_hit(
+        self,
+        request_id: str,
+        caller: Caller,
+        parsed: ParsedChat,
+        resolved: Resolved,
+        hit: CachedResponse,
+        t0: float,
+        ttft_ms: int | None,
+        status: int = 200,
+        error_code: str | None = None,
+    ) -> None:
+        """Usage event của lượt trúng cache: không có token tính phí, chi phí 0."""
+        total = self._ms(t0)
+        self._emit(
+            request_id=request_id,
+            caller=caller,
+            resolved=resolved,
+            requested_alias=parsed.alias,
+            provider=hit.provider,
+            model=hit.model,
+            usage=None,
+            status=status,
+            error_code=error_code,
+            latency_ms=total,
+            overhead_ms=total,
+            ttft_ms=ttft_ms,
+            cache="exact",
         )
 
     def _provider_failed(
@@ -308,6 +459,13 @@ class ChatService:
         """Lấy chunk đầu TRƯỚC khi trả response: lỗi trước byte đầu thành HTTP error đúng nghĩa."""
         t0 = self._clock.monotonic()
         resolved, provider, req = self._prepare(caller, parsed)
+        key = self._cache_key(caller, parsed, provider, req)
+        if key is not None and (hit := await self._cache_get(key)) is not None:
+            return StreamResult(
+                self._cached_stream(request_id, caller, parsed, resolved, hit, t0),
+                self._headers(request_id, hit.provider, hit.model, parsed, "exact"),
+            )
+        cache_state = self._miss_state(key)
         t_call = self._clock.monotonic()
         it = provider.stream(req)
         sp = _chat_span(req.model)
@@ -326,10 +484,63 @@ class ChatService:
         ttft = self._ms(t_call)
         return StreamResult(
             self._run_stream(
-                request_id, caller, parsed, resolved, provider, req, it, first, t0, t_call, ttft, sp
+                request_id,
+                caller,
+                parsed,
+                resolved,
+                provider,
+                req,
+                it,
+                first,
+                t0,
+                t_call,
+                ttft,
+                sp,
+                key,
             ),
-            self._headers(request_id, provider.name, req.model, parsed),
+            self._headers(request_id, provider.name, req.model, parsed, cache_state),
         )
+
+    async def _cached_stream(
+        self,
+        request_id: str,
+        caller: Caller,
+        parsed: ParsedChat,
+        resolved: Resolved,
+        hit: CachedResponse,
+        t0: float,
+    ) -> AsyncIterator[str]:
+        """Phát lại nội dung đã lưu theo đúng định dạng chunk SSE (một chunk nội dung)."""
+        sp = _chat_span(hit.model, "exact")
+        enc = StreamEncoder(
+            request_id, parsed.alias, int(self._clock.now().timestamp()), parsed.include_usage
+        )
+        usage = Usage(prompt_tokens=hit.prompt_tokens, completion_tokens=hit.completion_tokens)
+        status, error_code = 200, None
+        ttft = self._ms(t0)
+        try:
+            for ch in (
+                ChatChunk(text=hit.content),
+                ChatChunk(finish_reason=hit.finish_reason, usage=usage),
+            ):
+                for line in enc.encode(ch):
+                    yield line
+            x_acme = {
+                "request_id": request_id,
+                "cost_usd": 0.0,
+                "fallbacks": 0,
+                "provider": hit.provider,
+                "model": hit.model,
+                "cache": "exact",
+            }
+            for line in enc.finish(usage, x_acme):
+                yield line
+        except (asyncio.CancelledError, GeneratorExit):
+            status, error_code = 499, "client_disconnected"
+            raise
+        finally:
+            _end_chat_span(sp, None, hit.finish_reason, error_code)
+            self._emit_hit(request_id, caller, parsed, resolved, hit, t0, ttft, status, error_code)
 
     async def _run_stream(
         self,
@@ -345,6 +556,7 @@ class ChatService:
         t_call: float,
         ttft: int,
         sp: Any,
+        key: str | None = None,
     ) -> AsyncIterator[str]:
         enc = StreamEncoder(
             request_id, parsed.alias, int(self._clock.now().timestamp()), parsed.include_usage
@@ -352,18 +564,33 @@ class ChatService:
         usage = Usage()
         status, error_code = 200, None
         finish: str | None = None
+        text: list[str] = []
+        has_tool_call = False
         try:
             chunk: Any = first
             while True:
                 if chunk.usage is not None:
                     usage = chunk.usage
                 finish = chunk.finish_reason or finish
+                if chunk.text:
+                    text.append(chunk.text)
+                has_tool_call = has_tool_call or chunk.tool_call is not None
                 for line in enc.encode(chunk):
                     yield line
                 try:
                     chunk = await anext(it)
                 except StopAsyncIteration:
                     break
+            if key is not None:  # stream đọc hết, không lỗi: mới được ghi
+                await self._cache_put(
+                    key,
+                    text="".join(text),
+                    finish_reason=finish,
+                    has_tool_call=has_tool_call,
+                    usage=usage,
+                    provider=provider.name,
+                    model=req.model,
+                )
             x_acme = {
                 "request_id": request_id,
                 "cost_usd": 0.0,
