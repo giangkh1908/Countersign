@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import time
 from pathlib import Path
 
 from acme_common.mcp import CallerContext
@@ -20,12 +21,19 @@ from mcp_docs.factory import (
     build_reranker,
     build_retriever,
 )
-from mcp_docs.ports import ArticleReader, DocumentRetriever, SearchResult
+from mcp_docs.ports import (
+    ArticleReader,
+    DocumentRetriever,
+    Reranker,
+    RerankUnavailable,
+    SearchResult,
+)
 from mcp_docs.services.acl import AclPolicy
 from mcp_docs.services.article_pin import ArticlePinner
 from mcp_docs.services.document_service import DocumentService
 from mcp_docs.services.normalize import normalize_query
 from mcp_docs.settings import Settings
+from mcp_docs.testing import FakeReranker
 
 from .fakes import CorpusFakeRetriever, eval_principal
 from .runner import CONFIGS, RetrieverFactory
@@ -37,6 +45,19 @@ OVERRIDES: dict[str, Override] = {
     "fts": {"docs_use_vector": False, "docs_use_fts": True, "docs_direct_lookup": "off"},
     "hybrid": {"docs_use_vector": True, "docs_use_fts": True, "docs_direct_lookup": "off"},
     "hybrid_direct": {"docs_use_vector": True, "docs_use_fts": True, "docs_direct_lookup": "pin"},
+    # Rerank cross-encoder qua gateway (`acme-rerank`) trên ứng viên của vector / hybrid.
+    "vector_rerank": {
+        "docs_use_vector": True,
+        "docs_use_fts": False,
+        "docs_direct_lookup": "off",
+        "docs_rerank": "gateway_rerank",
+    },
+    "hybrid_rerank": {
+        "docs_use_vector": True,
+        "docs_use_fts": True,
+        "docs_direct_lookup": "off",
+        "docs_rerank": "gateway_rerank",
+    },
     # FTS với tách từ (DOCS_FTS_MODE=segmented) để so với FTS unaccent
     "fts_segmented": {
         "docs_use_vector": False,
@@ -53,6 +74,11 @@ SUFFIXES: dict[str, Override] = {
     "wfts0.5": {"docs_rrf_weight_fts": 0.5},
     "wfts0.25": {"docs_rrf_weight_fts": 0.25},
     "wfts0.1": {"docs_rrf_weight_fts": 0.1},
+    # Số ứng viên đầu đưa vào rerank (DOCS_RERANK_TOP_N); mặc định của Settings là 30.
+    "top10": {"docs_rerank_top_n": 10},
+    "top20": {"docs_rerank_top_n": 20},
+    "top30": {"docs_rerank_top_n": 30},
+    "top50": {"docs_rerank_top_n": 50},
     "stop": {"docs_fts_stopwords": True},  # bỏ từ dừng phía truy vấn FTS
     "rank": {"docs_fts_rank": "rank"},  # ts_rank thay ts_rank_cd
     "title": {"docs_fts_title": True},  # tiêu đề văn bản trọng số A, ghép lúc truy vấn
@@ -79,6 +105,12 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "hybrid_direct@wfts0.5", "hybrid_direct@wfts0.25", "hybrid_direct@wfts0.1",
         "hybrid_direct@stop", "hybrid_direct@rank", "hybrid_direct@title",
         "hybrid_direct@stop+wfts0.25",
+    ),
+    # So rerank với nền không rerank, quét top_n. Cần gateway có `acme-rerank` (models.ollama.yaml).
+    "rerank": (
+        "vector", "hybrid",
+        "vector_rerank@top10", "vector_rerank@top30", "vector_rerank@top50",
+        "hybrid_rerank@top10", "hybrid_rerank@top30", "hybrid_rerank@top50",
     ),
 }  # fmt: skip
 
@@ -108,6 +140,43 @@ def parse_configs(spec: str) -> tuple[str, ...]:
 
 class UnsupportedConfig(Exception):
     """Settings của docs-mcp chưa có công tắc cần cho cấu hình này."""
+
+
+class RerankingRetriever(DocumentRetriever):
+    """Decorator: rerank `top_n` ứng viên đầu của retriever, phần còn lại giữ phía sau.
+
+    Cùng quy tắc với `DocumentService`: xin retriever tối thiểu `top_n` ứng viên; lỗi rerank thì giữ
+    thứ tự cũ và đánh dấu `rerank_skipped` ở `mode`. `last_rerank_ms` là độ trễ rerank của lần
+    `search` vừa xong (runner ghi lại mỗi truy vấn); `None` nếu không gọi rerank.
+    """
+
+    def __init__(self, inner: DocumentRetriever, reranker: Reranker, top_n: int) -> None:
+        self._inner = inner
+        self._reranker = reranker
+        self._top_n = max(1, top_n)
+        self.last_rerank_ms: float | None = None
+
+    async def search(
+        self,
+        query: str,
+        principal: Principal,
+        k: int,
+        department_filter: str | None = None,
+    ) -> SearchResult:
+        self.last_rerank_ms = None
+        res = await self._inner.search(query, principal, max(k, self._top_n), department_filter)
+        head, tail = res.chunks[: self._top_n], res.chunks[self._top_n :]
+        t0 = time.perf_counter()
+        try:
+            chunks, mode = [*await self._reranker.rerank(query, head), *tail], res.mode
+        except RerankUnavailable:
+            chunks, mode = res.chunks, f"{res.mode}+rerank_skipped"
+        self.last_rerank_ms = (time.perf_counter() - t0) * 1000
+        return SearchResult(chunks[:k], mode)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+        await self._reranker.aclose()
 
 
 class PinningRetriever(DocumentRetriever):
@@ -145,6 +214,14 @@ class PinningRetriever(DocumentRetriever):
 
 def fake_factory(raw: Path) -> RetrieverFactory:
     def build(config: str) -> DocumentRetriever:
+        base = config.partition("@")[0]
+        if base.endswith("_rerank"):  # rerank giả (giữ thứ tự): chỉ để kiểm mạch decorator
+            top_n = int(
+                config_overrides(config).get("docs_rerank_top_n", Settings().docs_rerank_top_n)
+            )
+            return RerankingRetriever(
+                CorpusFakeRetriever(raw, base.removesuffix("_rerank")), FakeReranker(), top_n
+            )
         return CorpusFakeRetriever(raw, config)
 
     return build
@@ -168,6 +245,9 @@ def real_factory(settings: Settings, configs: tuple[str, ...] = CONFIGS) -> Retr
         retriever = build_retriever(s.docs_retriever, s, embedder=embedder)
         if s.docs_direct_lookup == "pin":
             retriever = PinningRetriever(retriever, build_article_reader(s.docs_retriever, s))
+        reranker = build_reranker(s.docs_rerank, s)
+        if reranker.active:
+            retriever = RerankingRetriever(retriever, reranker, s.docs_rerank_top_n)
         return retriever
 
     return build

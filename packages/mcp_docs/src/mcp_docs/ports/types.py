@@ -22,6 +22,14 @@ class EmbeddingUnavailable(Exception):
         self.kind = kind
 
 
+class RerankUnavailable(Exception):
+    """Reranker không trả điểm (gateway lỗi/timeout, sai dạng). Truy xuất bỏ qua rerank, vẫn trả kết quả."""
+
+    def __init__(self, kind: str) -> None:
+        super().__init__(f"rerank_unavailable: {kind}")
+        self.kind = kind
+
+
 class DocumentRejected(Exception):
     """Tài liệu/metadata không hợp lệ (ingest fail-closed)."""
 

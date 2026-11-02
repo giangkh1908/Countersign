@@ -206,6 +206,7 @@ def build_runtime(
         max_per_doc=s.docs_max_per_doc,
         article_reader=article_reader,
         direct_lookup=s.docs_direct_lookup,
+        rerank_top_n=s.docs_rerank_top_n,
     )
     invoker = ToolInvoker(
         server=SERVER,

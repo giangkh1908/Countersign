@@ -40,6 +40,7 @@ class QuestionResult:
     ranked: list[tuple[str, str]]  # đã gộp theo Điều, tối đa 10
     scores: dict[str, float]
     latency_ms: float
+    rerank_ms: float | None = None  # chỉ cấu hình có rerank
 
 
 @dataclass(slots=True)
@@ -68,7 +69,12 @@ class ConfigResult:
         xs = sorted(r.latency_ms for r in self.results)
         if not xs:
             return {"p50": 0.0, "p95": 0.0}
-        return {"p50": xs[int(0.50 * (len(xs) - 1))], "p95": xs[int(0.95 * (len(xs) - 1))]}
+        out = {"p50": xs[int(0.50 * (len(xs) - 1))], "p95": xs[int(0.95 * (len(xs) - 1))]}
+        rr = sorted(r.rerank_ms for r in self.results if r.rerank_ms is not None)
+        if rr:  # độ trễ riêng phần rerank (đã nằm trong p50/p95 ở trên)
+            out["rerank_p50"] = rr[int(0.50 * (len(rr) - 1))]
+            out["rerank_p95"] = rr[int(0.95 * (len(rr) - 1))]
+        return out
 
 
 def score_names() -> list[str]:
@@ -104,7 +110,10 @@ async def run_config(
         ms = (time.perf_counter() - t0) * 1000
         keys = [(c.doc_num or "", c.article or "") for c in found.chunks]
         ranked = metrics.dedupe_ranking(keys)[:10]
-        res.results.append(QuestionResult(q.id, q.type, ranked, score_question(ranked, q.gold), ms))
+        rerank_ms = getattr(retriever, "last_rerank_ms", None)  # có ở RerankingRetriever
+        res.results.append(
+            QuestionResult(q.id, q.type, ranked, score_question(ranked, q.gold), ms, rerank_ms)
+        )
     return res
 
 
@@ -174,7 +183,12 @@ def build_report(
                 "by_type": r.by_type(),
                 "latency_ms": r.latency(),
                 "per_question": [
-                    {"id": x.id, "ranked": [list(k) for k in x.ranked], "scores": x.scores}
+                    {
+                        "id": x.id,
+                        "ranked": [list(k) for k in x.ranked],
+                        "scores": x.scores,
+                        **({"rerank_ms": x.rerank_ms} if x.rerank_ms is not None else {}),
+                    }
                     for x in r.results
                 ],
             }

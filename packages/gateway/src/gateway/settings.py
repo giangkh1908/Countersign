@@ -23,6 +23,7 @@ class Settings(CommonSettings):
     gw_embedding_api_key: str | None = (
         None  # adapter `openai_compatible`; GW_EMBEDDING_API_KEY[_FILE]
     )
+    gw_rerank_api_key: str | None = None  # adapter `http_rerank`; GW_RERANK_API_KEY[_FILE]
     gw_max_body_bytes: int = 4 * 1024 * 1024
     gw_sink_flush_interval_s: float = 2.0  # chu kỳ đẩy buffer EventSink (usage_events)
 

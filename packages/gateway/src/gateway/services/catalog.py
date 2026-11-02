@@ -37,6 +37,16 @@ class EmbeddingSpec:
     options: dict[str, Any]  # phần còn lại của block (vd base_url); adapter tự chọn phần cần
 
 
+@dataclass(frozen=True, slots=True)
+class RerankSpec:
+    """Block `kind: rerank` của một alias: adapter, id model và tuỳ chọn riêng adapter."""
+
+    alias: str
+    adapter: str
+    model: str
+    options: dict[str, Any]
+
+
 class ModelCatalog:
     def __init__(self, data: dict[str, Any], provider_override: str | None = None) -> None:
         self._aliases: dict[str, dict[str, Any]] = dict(data.get("aliases") or {})
@@ -61,6 +71,18 @@ class ModelCatalog:
             adapter=str(spec.get("adapter", "")),
             model=str(spec.get("model", "")),
             dim=int(spec.get("dim", 1024)),
+            options={k: v for k, v in spec.items() if k not in reserved},
+        )
+
+    def rerank(self, requested: str) -> RerankSpec:
+        spec = self._aliases.get(requested)
+        if spec is None or spec.get("kind") != "rerank":
+            raise GatewayError("invalid_request", f"Unknown rerank model '{requested}'.")
+        reserved = {"kind", "adapter", "model"}
+        return RerankSpec(
+            alias=requested,
+            adapter=str(spec.get("adapter", "")),
+            model=str(spec.get("model", "")),
             options={k: v for k, v in spec.items() if k not in reserved},
         )
 

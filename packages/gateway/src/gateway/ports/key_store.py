@@ -24,5 +24,11 @@ class KeyStore(abc.ABC):
     async def revoke(self, key_id: str, actor: str, reason: str) -> None:
         """Raise `KeyNotFound` khi không có key (hoặc đã thu hồi)."""
 
+    @abc.abstractmethod
+    async def update_allowed_models(
+        self, key_id: str, allowed_models: tuple[str, ...], actor: str
+    ) -> None:
+        """Thay danh sách model của key đang active. Raise `KeyNotFound` khi không có key active."""
+
     async def aclose(self) -> None:  # noqa: B027 - hook tuỳ chọn, không bắt buộc override
         """Đóng kết nối. Mặc định không làm gì."""

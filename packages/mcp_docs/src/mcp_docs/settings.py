@@ -19,7 +19,12 @@ class Settings(CommonSettings):
     forget_allowed_azp: str = "agent-service,agent-maintenance"
     docs_gateway_url: str = "http://gateway:8000/v1"
     docs_gateway_key: str | None = None
-    docs_rerank: str = "none"
+    docs_rerank: str = "none"  # none | gateway_rerank
+    docs_rerank_top_n: int = (
+        30  # số ứng viên đầu (theo RRF) đưa vào rerank; phần còn lại giữ phía sau
+    )
+    docs_rerank_model: str = "acme-rerank"
+    docs_rerank_timeout_s: float = 30.0  # quá hạn => bỏ qua rerank (rerank_skipped)
     docs_retriever: str = "pgvector_hybrid"
     docs_indexer: str = "pgvector_hybrid"
     docs_embedder: str = "fake_hash"  # dev/test; compose đặt "gateway_http"

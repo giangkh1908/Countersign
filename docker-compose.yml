@@ -326,6 +326,8 @@ services:
       DOCS_FTS_RANK: ${DOCS_FTS_RANK:-cd}                      # cd | rank
       DOCS_FTS_TITLE: ${DOCS_FTS_TITLE:-false}
       DOCS_DIRECT_LOOKUP: ${DOCS_DIRECT_LOOKUP:-off}           # off | pin
+      DOCS_RERANK: ${DOCS_RERANK:-none}                        # none | gateway_rerank (alias acme-rerank)
+      DOCS_RERANK_TOP_N: ${DOCS_RERANK_TOP_N:-30}
       DOCS_GATEWAY_KEY_FILE: /run/secrets/docs_gateway_key     # key owner_type=service
       MCP_HOST: ${MCP_HOST:-mcp_sdk}
       MCP_PORT: "8101"
