@@ -9,8 +9,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
-# U+200B..U+200F, U+2060, U+FEFF, U+202A..U+202E (bidi override), U+2066..U+2069
-_INVISIBLE = re.compile("[​-‏⁠﻿‪-‮⁦-⁩]")
+# U+200B..U+200F, U+2060, U+FEFF, U+202A..U+202E (bidi override), U+2066..U+2069, thẻ Unicode U+E0000..U+E007F (ASCII vô hình)
+_INVISIBLE = re.compile("[​-‏⁠﻿‪-‮⁦-⁩󠀀-󠁿]")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _SPACES = re.compile(r"[ \t ]+")
 _BLANKS = re.compile(r"\n{3,}")

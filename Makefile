@@ -1,6 +1,6 @@
 # Trên Windows: chạy trong Git Bash hoặc WSL (Makefile dùng bash).
 SHELL := bash
-.PHONY: setup lint fmt test test-web leak-grep eval-rag eval-rag-fake eval-rag-validate secrets up down logs backup clean
+.PHONY: eval-attack setup lint fmt test test-web leak-grep eval-rag eval-rag-fake eval-rag-validate secrets up down logs backup clean
 
 setup:
 	uv sync --all-packages
@@ -50,3 +50,7 @@ backup:
 
 clean:
 	rm -rf .venv .pytest_cache .ruff_cache .mypy_cache web/node_modules web/dist
+
+# ASR tầng hệ thống (R3), trong-process, không cần stack. Corpus: data/corpus (sinh bằng python -m data.poison).
+eval-attack:
+	uv run --all-packages python -m eval.attack --check
