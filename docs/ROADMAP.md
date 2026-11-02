@@ -10,11 +10,11 @@
 |---|---|---|
 | M0 | Spikes (identity, token exchange, checkpoint) | Xong |
 | M1 | Walking skeleton trên compose | Xong |
-| R0 | Thu gọn stack | |
-| R1 | Truy xuất thật + bộ đánh giá truy xuất | |
-| R2 | Câu trả lời có trích dẫn kiểm chứng được | |
-| A1 | Hành động qua MCP: ticket, báo cáo nhóm, phân quyền theo vai trò | |
-| Q1 | Cache và quan sát (log, trace, metric) | |
+| R0 | Thu gọn stack | Xong |
+| R1 | Truy xuất thật + bộ đánh giá truy xuất | Xong (mặc định vector thuần; rerank đo trên dev, không giữ) |
+| R2 | Câu trả lời có trích dẫn kiểm chứng được | Code xong; judge, κ và eval chờ LLM thật |
+| A1 | Hành động qua MCP: ticket, báo cáo nhóm, phân quyền theo vai trò | Phần lớn; còn eval hành động, demo Telegram thật |
+| Q1 | Cache và quan sát (log, trace, metric) | Quan sát xong; cache chưa làm |
 | R3 | An toàn: phân quyền, tài liệu độc, tấn công qua hành động | |
 | R4 | Đánh giá tổng hợp, demo, báo cáo | |
 
@@ -159,9 +159,9 @@ Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_F
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Định dạng trả lời: mỗi câu có mã trích `[n]` trỏ tới đoạn cụ thể (văn bản, Điều, khoản, vị trí ký tự); agent chỉ được trích đoạn đã truy xuất | W | Test: trích nguồn ngoài danh sách bị loại |
-| Bộ kiểm chứng sau sinh: tách câu → kiểm từng câu có được đoạn trích hỗ trợ (LLM-judge, JSON có cấu trúc; thêm alias `acme-judge` vào `models.yaml`); câu không được hỗ trợ bị gắn cờ hoặc bỏ; không đủ nguồn thì trả lời "không tìm thấy trong tài liệu" | W | Bật/tắt bằng config; đo được chi phí và độ trễ thêm |
-| UI: bấm `[n]` mở đoạn nguồn, tô đúng câu được trích; hiển thị câu bị gắn cờ "chưa kiểm chứng" | W | Vitest + Playwright |
+| ✅ Định dạng trả lời: mỗi câu có mã trích `[n]` trỏ tới đoạn cụ thể (văn bản, Điều, khoản, vị trí ký tự); agent chỉ được trích đoạn đã truy xuất | W | Test: trích nguồn ngoài danh sách bị loại |
+| ✅ code, chưa chạy với judge thật: Bộ kiểm chứng sau sinh: tách câu → kiểm từng câu có được đoạn trích hỗ trợ (LLM-judge, JSON có cấu trúc; thêm alias `acme-judge` vào `models.yaml`); câu không được hỗ trợ bị gắn cờ hoặc bỏ; không đủ nguồn thì trả lời "không tìm thấy trong tài liệu" | W | Bật/tắt bằng config; đo được chi phí và độ trễ thêm |
+| ✅ Vitest, Playwright chưa chạy: UI: bấm `[n]` mở đoạn nguồn, tô đúng câu được trích; hiển thị câu bị gắn cờ "chưa kiểm chứng" | W | Vitest + Playwright |
 | Hiệu chuẩn judge: 30–50 câu chấm tay, Cohen's κ người–judge | O + R | Báo cáo κ |
 | Đánh giá: citation precision/recall, faithfulness, tỉ lệ từ chối đúng với câu không có đáp án; có và không có bộ kiểm chứng | W | Bảng so sánh kèm chi phí/câu và độ trễ p50/p95 |
 
@@ -171,8 +171,8 @@ Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_F
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Ma trận quyền vai trò × tool × kênh (dự thảo ở ADR-007), thực thi ở MCP server | O + W | Test mọi ô của ma trận, cả cho phép lẫn từ chối |
-| tickets-mcp: `prepare_create_ticket` qua intent + phê duyệt ký số; router agent thêm nhánh tạo ticket | W | E2E tạo ticket xanh; từ chối thì không ghi gì |
+| ✅ Ma trận quyền vai trò × tool × kênh (dự thảo ở ADR-007), thực thi ở MCP server | O + W | Test mọi ô của ma trận, cả cho phép lẫn từ chối |
+| ✅ unit/integration, chưa E2E tạo ticket trên stack: tickets-mcp: `prepare_create_ticket` qua intent + phê duyệt ký số; router agent thêm nhánh tạo ticket | W | E2E tạo ticket xanh; từ chối thì không ghi gì |
 | ✅ `notify-mcp`: port `MessageChannel`, adapter `telegram` + `fake`, tool `prepare_send_group_report`, bí danh kênh, mức mật theo kênh, profile `notify` | W | E2E gửi qua `fake`; chat ID tuỳ ý bị từ chối; dữ liệu vượt mức mật bị chặn; leak-grep rỗng. Đã đạt: `bash scripts/e2e-notify.sh` 30/30 assertion, 45 giây (gửi đủ luồng duyệt, replay, kênh tuỳ ý, kênh phòng khác, taint, vai trò chặn) |
 | Eval hành động: chọn đúng tool và tham số, từ chối đúng khi thiếu quyền, không hành động khi chỉ hỏi | W | Bảng kết quả theo vai trò, chạy lại bằng một lệnh |
 | ✅ Đo RAM khi bật `tickets` + `notify` (+ `obs`): 1,95 GiB rảnh, notify-mcp 93 MiB (bảng trong README) | W | Bảng số đo thật trong README |
@@ -185,9 +185,9 @@ Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_F
 |---|---|---|
 | Exact cache (thêm lại service `redis-cache`, hiện chưa có): khoá gồm model, prompt, phạm vi quyền; không cache thao tác ghi; giữ nguyên trích dẫn đã kiểm chứng | W | Test: khác phạm vi quyền thì không trúng cache |
 | Đánh giá RQ4: hit rate, chi phí, độ trễ, chất lượng khi có/không cache; semantic cache ở dạng thử nghiệm, kèm đo rò rỉ | W | Bảng so sánh; semantic cache mặc định vẫn tắt |
-| OpenTelemetry xuyên BFF → agent → gateway → MCP; chọn backend trace nhẹ ở profile `obs` | W | Một câu hỏi cho ra một trace đủ các hop |
-| Log JSON có `trace_id`; dashboard Grafana: truy xuất, chi phí, cache, hành động | W | Dashboard chạy trên số thật |
-| Trace và log không chứa nội dung prompt/tài liệu | W | Quét canary trên trace = 0 |
+| ✅ (Tempo) OpenTelemetry xuyên BFF → agent → gateway → MCP; chọn backend trace nhẹ ở profile `obs` | W | Một câu hỏi cho ra một trace đủ các hop |
+| ✅ trừ phần cache: Log JSON có `trace_id`; dashboard Grafana: truy xuất, chi phí, cache, hành động | W | Dashboard chạy trên số thật |
+| ✅ (`python -m eval.canary` xanh) Trace và log không chứa nội dung prompt/tài liệu | W | Quét canary trên trace = 0 |
 
 **DoD Q1:** có báo cáo RQ4; từ một câu hỏi lần ra được toàn bộ đường đi, chi phí và độ trễ từng hop.
 
