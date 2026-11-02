@@ -11,12 +11,14 @@ from pathlib import Path
 
 from .backends import UnsupportedConfig
 from .dataset import (
+    SPLITS,
     DatasetError,
     distribution,
     load_articles,
     load_questions,
     raw_dir,
     resolve_suite,
+    select_split,
     sha256_file,
     validate_questions,
 )
@@ -46,6 +48,12 @@ def _parser() -> argparse.ArgumentParser:
         "--out", default=DEFAULT_OUT, help="thư mục ghi diagnose.json"
     )
     r = sub.choices["run"]
+    r.add_argument(
+        "--split",
+        choices=SPLITS,
+        default="dev",
+        help="dev (mặc định) để chỉnh cấu hình; test chỉ chạy một lần ở cuối, phải chỉ định rõ",
+    )
     r.add_argument("--fake", action="store_true", help="retriever giả từ corpus; số đo vô nghĩa")
     r.add_argument("--out", default=DEFAULT_OUT, help="thư mục ghi results/<run_id>/report.json")
     r.add_argument(
@@ -77,10 +85,12 @@ async def _run(args: argparse.Namespace) -> int:
         print("\n".join(errors), file=sys.stderr)
         return 1
 
+    scored = select_split(questions, args.split)
     settings = Settings()
     configs = backends.parse_configs(args.configs)
     factory = backends.fake_factory(raw) if args.fake else backends.real_factory(settings, configs)
-    results = await runner.run_all(factory, questions, eval_principal(), configs)
+    k = runner.FAKE_K if args.fake else await backends.service_retrieval_k(settings)
+    results = await runner.run_all(factory, scored, eval_principal(), configs, k=k)
 
     embed_model = None if args.fake else await backends.resolve_embed_model(settings)
     now = datetime.now(UTC)
@@ -93,8 +103,13 @@ async def _run(args: argparse.Namespace) -> int:
         dataset={
             "file": suite_path.name,
             "sha256": sha256_file(suite_path),
-            "n": len(questions),
-            "distribution": distribution(questions),
+            "n": len(scored),
+            "split": args.split,
+            "n_scored": sum(1 for q in scored if q.answerable and q.gold),
+            "n_unanswerable": sum(1 for q in scored if not q.answerable),
+            "retrieval_k": k,
+            "docs_n_cand": None if args.fake else settings.docs_n_cand,
+            "distribution": distribution(scored),
         },
         versions=backends.index_versions(
             settings, fake=args.fake, index_sig=args.index_sig, embed_model=embed_model
@@ -107,6 +122,13 @@ async def _run(args: argparse.Namespace) -> int:
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
     )
     print(runner.format_table(results))
+    n_un = sum(1 for q in scored if not q.answerable)
+    print(
+        f"\nsplit={args.split}: {len(scored)} câu, {len(scored) - n_un} câu có đáp án được chấm; "
+        f"{n_un} câu không đáp án không tính recall (báo riêng)."
+    )
+    if args.split == "test":
+        print("Đây là lần chạy test: không dùng kết quả này để chỉnh cấu hình.")
     if args.fake:
         print("\n[fake] retriever giả: số đo chỉ để kiểm mạch, không có giá trị đánh giá.")
     print(f"\nBáo cáo: {out_dir / 'report.json'}")
@@ -124,6 +146,7 @@ async def _diagnose(args: argparse.Namespace) -> int:
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
+    questions = select_split(questions, "dev")  # chẩn đoán chỉ trên dev, không nhìn test
     configs = ("vector", "hybrid@nc250")
     factory = backends.real_factory(Settings(), configs)
     vector, hybrid = factory(configs[0]), factory(configs[1])

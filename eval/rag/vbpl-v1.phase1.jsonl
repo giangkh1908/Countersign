@@ -1,0 +1,123 @@
+{"id": "q-0041", "question": "Sếp bắt mình tăng ca thì mỗi tháng tối đa được làm thêm bao nhiêu giờ?", "type": "lookup", "group": "hr", "hint": ["45/2019/QH14"]}
+{"id": "q-0042", "question": "Công ty có được giữ bản chính bằng đại học hay chứng chỉ của mình khi mới nhận việc không?", "type": "lookup", "group": "hr", "hint": ["45/2019/QH14"]}
+{"id": "q-0043", "question": "Thử việc thì lương có được trả thấp hơn lương chính thức không, thấp nhất là bao nhiêu phần?", "type": "lookup", "group": "hr", "hint": ["45/2019/QH14"]}
+{"id": "q-0044", "question": "Em làm ca đêm thì tiền lương được cộng thêm bao nhiêu so với làm ban ngày?", "type": "lookup", "group": "hr", "hint": ["45/2019/QH14"]}
+{"id": "q-0045", "question": "Tết âm lịch được nghỉ mấy ngày mà vẫn có lương?", "type": "lookup", "group": "hr", "hint": ["45/2019/QH14"]}
+{"id": "q-0046", "question": "Hợp đồng một năm hết hạn mà công ty vẫn cho mình làm tiếp, không ký gì mới, thì tính là hợp đồng gì?", "type": "lookup", "group": "hr", "hint": ["45/2019/QH14"]}
+{"id": "q-0047", "question": "Mình là nhân viên nữ đang nuôi con dưới một tuổi thì có được nghỉ giữa giờ làm không, có bị trừ lương không?", "type": "lookup", "group": "hr", "hint": ["45/2019/QH14"]}
+{"id": "q-0048", "question": "Vợ sinh đôi thì được nghỉ thai sản mấy tháng?", "type": "lookup", "group": "hr", "hint": ["41/2024/QH15"]}
+{"id": "q-0049", "question": "Đóng bảo hiểm xã hội bao nhiêu năm thì đủ điều kiện nhận lương hưu hằng tháng?", "type": "lookup", "group": "hr", "hint": ["41/2024/QH15"]}
+{"id": "q-0050", "question": "Nghỉ việc rồi muốn rút bảo hiểm xã hội một lần thì điều kiện thế nào?", "type": "lookup", "group": "hr", "hint": ["41/2024/QH15"]}
+{"id": "q-0051", "question": "Chồng mất thì con nhỏ có được nhận tiền hằng tháng từ bảo hiểm xã hội không?", "type": "lookup", "group": "hr", "hint": ["41/2024/QH15"]}
+{"id": "q-0052", "question": "Lương hưu hằng tháng được tính bằng bao nhiêu phần trăm mức bình quân tiền lương đóng bảo hiểm?", "type": "lookup", "group": "hr", "hint": ["41/2024/QH15"]}
+{"id": "q-0053", "question": "Hết thời gian hưởng trợ cấp thất nghiệp mà chưa có việc thì còn được hỗ trợ học nghề hay tư vấn tìm việc không?", "type": "lookup", "group": "hr", "hint": ["74/2025/QH15"]}
+{"id": "q-0054", "question": "Công ty tuyển một bạn người nước ngoài thì bạn đó cần giấy tờ gì để được làm việc hợp pháp ở Việt Nam?", "type": "lookup", "group": "hr", "hint": ["74/2025/QH15"]}
+{"id": "q-0055", "question": "Làm việc ở chỗ có hóa chất độc hại thì mỗi năm công ty phải cho mình đi khám sức khỏe mấy lần?", "type": "lookup", "group": "hr", "hint": ["84/2015/QH13"]}
+{"id": "q-0056", "question": "Công ty có bắt buộc phát đồ bảo hộ miễn phí cho nhân viên không?", "type": "lookup", "group": "hr", "hint": ["84/2015/QH13"]}
+{"id": "q-0057", "question": "Thấy máy móc không an toàn thì mình có quyền ngừng làm và từ chối làm tiếp không?", "type": "lookup", "group": "hr", "hint": ["84/2015/QH13"]}
+{"id": "q-0058", "question": "Bị tai nạn lao động ở xưởng thì công ty phải trả những khoản chi phí gì?", "type": "lookup", "group": "hr", "hint": ["84/2015/QH13"]}
+{"id": "q-0059", "question": "Công đoàn cơ sở được trích bao nhiêu phần trăm quỹ lương để làm kinh phí?", "type": "lookup", "group": "hr", "hint": ["50/2024/QH15"]}
+{"id": "q-0060", "question": "Vào công đoàn có bắt buộc không, đoàn phí một tháng bao nhiêu?", "type": "lookup", "group": "hr", "hint": ["50/2024/QH15"]}
+{"id": "q-0061", "question": "Công ty chưa có công đoàn thì ai đứng ra đại diện bảo vệ quyền lợi của người lao động?", "type": "lookup", "group": "hr", "hint": ["50/2024/QH15"]}
+{"id": "q-0062", "question": "Công ty có được từ chối nhận một bạn nữ vì sợ sau này bạn nghỉ thai sản không?", "type": "lookup", "group": "hr", "hint": ["73/2006/QH11"]}
+{"id": "q-0063", "question": "Nhân viên nữ đang mang thai có bị công ty điều chuyển sang việc khác được không?", "type": "lookup", "group": "hr", "hint": ["73/2006/QH11"]}
+{"id": "q-0064", "question": "Khi hệ thống của công ty bị hacker tấn công thì phải báo cho cơ quan nào?", "type": "lookup", "group": "it", "hint": ["116/2025/QH15"]}
+{"id": "q-0065", "question": "Đăng tin giả trên mạng xã hội làm người ta hoang mang thì có bị cấm không?", "type": "lookup", "group": "it", "hint": ["116/2025/QH15"]}
+{"id": "q-0066", "question": "Hệ thống thông tin quan trọng về an ninh quốc gia là những hệ thống nào?", "type": "lookup", "group": "it", "hint": ["116/2025/QH15"]}
+{"id": "q-0067", "question": "Công ty chụp và lưu căn cước công dân của mình thì có cần mình đồng ý trước không?", "type": "lookup", "group": "it", "hint": ["91/2025/QH15"]}
+{"id": "q-0068", "question": "Mình muốn yêu cầu công ty xóa hết thông tin cá nhân của mình sau khi nghỉ việc thì làm sao?", "type": "lookup", "group": "it", "hint": ["91/2025/QH15"]}
+{"id": "q-0069", "question": "Dữ liệu vân tay, sức khỏe thì công ty xử lý có khác dữ liệu thường không?", "type": "lookup", "group": "it", "hint": ["91/2025/QH15"]}
+{"id": "q-0070", "question": "Gửi danh sách khách hàng cho đối tác ở nước ngoài thì công ty phải làm thủ tục gì?", "type": "lookup", "group": "it", "hint": ["91/2025/QH15"]}
+{"id": "q-0071", "question": "Hóa đơn, chứng từ điện tử có được lưu trữ thay cho giấy không, lưu thế nào mới hợp lệ?", "type": "lookup", "group": "it", "hint": ["20/2023/QH15"]}
+{"id": "q-0072", "question": "Mình nhắn tin trả lời 'ok chốt giá' với khách qua Zalo thì có coi là đã ký hợp đồng không?", "type": "lookup", "group": "it", "hint": ["20/2023/QH15"]}
+{"id": "q-0073", "question": "Muốn dùng chữ ký số cho công ty thì chứng thư số do đơn vị nào cấp?", "type": "lookup", "group": "it", "hint": ["20/2023/QH15"]}
+{"id": "q-0074", "question": "Dữ liệu mở là gì, cơ quan nhà nước phải công bố những gì?", "type": "lookup", "group": "it", "hint": ["60/2024/QH15"]}
+{"id": "q-0075", "question": "Công ty mình có được mua bán dữ liệu không, có loại nào bị cấm?", "type": "lookup", "group": "it", "hint": ["60/2024/QH15"]}
+{"id": "q-0076", "question": "Muốn chuyển dữ liệu quan trọng ra nước ngoài có phải xin phép không?", "type": "lookup", "group": "it", "hint": ["60/2024/QH15"]}
+{"id": "q-0077", "question": "Phần mềm độc hại là gì và những hành vi nào liên quan đến nó bị cấm?", "type": "lookup", "group": "it", "hint": ["86/2015/QH13"]}
+{"id": "q-0078", "question": "Công ty có phải phân loại cấp độ an toàn cho hệ thống thông tin không?", "type": "lookup", "group": "it", "hint": ["86/2015/QH13"]}
+{"id": "q-0079", "question": "Gửi thư rác hay tin nhắn quảng cáo hàng loạt cho khách có vi phạm không?", "type": "lookup", "group": "it", "hint": ["86/2015/QH13"]}
+{"id": "q-0080", "question": "Sổ kế toán ghi sai thì sửa thế nào cho đúng quy định?", "type": "lookup", "group": "finance", "hint": ["88/2015/QH13"]}
+{"id": "q-0081", "question": "Năm tài chính của doanh nghiệp bắt đầu và kết thúc vào thời điểm nào?", "type": "lookup", "group": "finance", "hint": ["88/2015/QH13"]}
+{"id": "q-0082", "question": "Công ty có phải kiểm toán báo cáo tài chính hằng năm không?", "type": "lookup", "group": "finance", "hint": ["88/2015/QH13"]}
+{"id": "q-0083", "question": "Thuế suất thuế thu nhập doanh nghiệp phổ thông hiện nay là bao nhiêu phần trăm?", "type": "lookup", "group": "finance", "hint": ["67/2025/QH15"]}
+{"id": "q-0084", "question": "Tiền phạt vi phạm hành chính có được tính vào chi phí hợp lý khi tính thuế không?", "type": "lookup", "group": "finance", "hint": ["67/2025/QH15"]}
+{"id": "q-0085", "question": "Doanh nghiệp nhỏ và vừa có được giảm hay miễn thuế thu nhập doanh nghiệp không?", "type": "lookup", "group": "finance", "hint": ["67/2025/QH15"]}
+{"id": "q-0086", "question": "Bán nông sản chưa qua chế biến thì có phải nộp thuế giá trị gia tăng không?", "type": "lookup", "group": "finance", "hint": ["48/2024/QH15"]}
+{"id": "q-0087", "question": "Muốn được khấu trừ thuế giá trị gia tăng đầu vào thì hóa đơn mua hàng phải thanh toán thế nào?", "type": "lookup", "group": "finance", "hint": ["48/2024/QH15"]}
+{"id": "q-0088", "question": "Thuế VAT phổ thông tính mấy phần trăm và hàng nào được áp mức thấp hơn?", "type": "lookup", "group": "finance", "hint": ["48/2024/QH15"]}
+{"id": "q-0089", "question": "Tiền ăn trưa công ty hỗ trợ mỗi tháng có bị tính thuế thu nhập cá nhân không?", "type": "lookup", "group": "finance", "hint": ["109/2025/QH15"]}
+{"id": "q-0090", "question": "Cho thuê nhà riêng thì thu nhập có phải nộp thuế thu nhập cá nhân không?", "type": "lookup", "group": "finance", "hint": ["109/2025/QH15"]}
+{"id": "q-0091", "question": "Tiền thưởng cuối năm có tính vào thu nhập chịu thuế không?", "type": "lookup", "group": "finance", "hint": ["109/2025/QH15"]}
+{"id": "q-0092", "question": "Nộp thuế trễ thì bị tính tiền chậm nộp bao nhiêu phần trăm mỗi ngày?", "type": "lookup", "group": "finance", "hint": ["108/2025/QH15"]}
+{"id": "q-0093", "question": "Cơ quan thuế đến kiểm tra thì công ty có quyền yêu cầu những gì?", "type": "lookup", "group": "finance", "hint": ["108/2025/QH15"]}
+{"id": "q-0094", "question": "Mã số thuế cá nhân đăng ký ở đâu, khi nào phải đăng ký?", "type": "lookup", "group": "finance", "hint": ["108/2025/QH15"]}
+{"id": "q-0095", "question": "Công ty khai thuế thiếu rồi tự nhận ra thì được sửa lại bằng cách nào, trong bao lâu?", "type": "lookup", "group": "finance", "hint": ["108/2025/QH15"]}
+{"id": "q-0096", "question": "Muốn mở công ty cổ phần thì cần tối thiểu mấy cổ đông?", "type": "lookup", "group": "legal", "hint": ["59/2020/QH14"]}
+{"id": "q-0097", "question": "Mở công ty TNHH một thành viên thì chủ sở hữu phải góp đủ vốn trong bao lâu?", "type": "lookup", "group": "legal", "hint": ["59/2020/QH14"]}
+{"id": "q-0098", "question": "Giám đốc công ty có được tự ký hợp đồng cho chính mình hoặc người thân vay mượn của công ty không?", "type": "lookup", "group": "legal", "hint": ["59/2020/QH14"]}
+{"id": "q-0099", "question": "Cổ đông muốn xem sổ sách của công ty thì có quyền không, cần sở hữu bao nhiêu phần trăm?", "type": "lookup", "group": "legal", "hint": ["59/2020/QH14"]}
+{"id": "q-0100", "question": "Công ty đổi địa chỉ trụ sở thì phải làm thủ tục gì?", "type": "lookup", "group": "legal", "hint": ["59/2020/QH14"]}
+{"id": "q-0101", "question": "Bản quyền một bài viết hoặc bức ảnh được bảo hộ trong bao nhiêu năm?", "type": "lookup", "group": "legal", "hint": ["50/2005/QH11"]}
+{"id": "q-0102", "question": "Đăng ký nhãn hiệu có hiệu lực mấy năm và gia hạn được không?", "type": "lookup", "group": "legal", "hint": ["50/2005/QH11"]}
+{"id": "q-0103", "question": "Dùng ảnh tải trên mạng để làm slide họp nội bộ có phải xin phép tác giả không?", "type": "lookup", "group": "legal", "hint": ["50/2005/QH11"]}
+{"id": "q-0104", "question": "Mình có sáng chế làm ra khi đang đi làm thì ai là chủ sở hữu?", "type": "lookup", "group": "legal", "hint": ["50/2005/QH11"]}
+{"id": "q-0105", "question": "Kiểu dáng cái hộp sản phẩm mình thiết kế thì đăng ký bảo hộ được bao lâu?", "type": "lookup", "group": "legal", "hint": ["50/2005/QH11"]}
+{"id": "q-0106", "question": "Người có chức vụ phải kê khai tài sản vào thời điểm nào?", "type": "lookup", "group": "legal", "hint": ["36/2018/QH14"]}
+{"id": "q-0107", "question": "Công ty tư nhân có phải xây dựng quy tắc ứng xử để phòng chống tham nhũng không?", "type": "lookup", "group": "legal", "hint": ["36/2018/QH14"]}
+{"id": "q-0108", "question": "Nhân viên mua hàng chọn công ty của người nhà làm nhà cung cấp thì có sao không, thế nào là xung đột lợi ích?", "type": "lookup", "group": "legal", "hint": ["36/2018/QH14"]}
+{"id": "q-0109", "question": "Mình tự xin nghỉ việc thì phải báo trước bao nhiêu ngày, và có được trợ cấp thôi việc không?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14"]}
+{"id": "q-0110", "question": "Công ty cho mình nghỉ việc vì cắt giảm nhân sự thì mình được hưởng những khoản gì?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14"]}
+{"id": "q-0111", "question": "Bị sa thải trái luật thì công ty phải làm gì, và theo luật những lý do nào công ty mới được sa thải?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14"]}
+{"id": "q-0112", "question": "Mình có bầu sáu tháng thì được nghỉ sinh bao lâu, ai trả tiền trong thời gian nghỉ, và công ty có được cho nghỉ việc lúc đó không?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14", "41/2024/QH15"]}
+{"id": "q-0113", "question": "Công ty muốn cho thôi việc một cán bộ công đoàn thì phải làm những gì?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14", "50/2024/QH15"]}
+{"id": "q-0114", "question": "Bị tai nạn trên đường đi làm về thì có được hưởng chế độ gì, ai chi trả?", "type": "synthesis", "group": "hr", "hint": ["84/2015/QH13", "41/2024/QH15"]}
+{"id": "q-0115", "question": "Mất việc thì mình được nhận những khoản hỗ trợ nào, từ đâu, trong bao lâu?", "type": "synthesis", "group": "hr", "hint": ["74/2025/QH15", "41/2024/QH15"]}
+{"id": "q-0116", "question": "Công ty phải cắt giảm hàng loạt người vì thay đổi cơ cấu thì có nghĩa vụ gì với người lao động và với cơ quan nhà nước?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14", "74/2025/QH15"]}
+{"id": "q-0117", "question": "Bị sếp quấy rối tình dục ở chỗ làm thì mình có thể làm gì và công ty phải chịu trách nhiệm gì?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14", "73/2006/QH11"]}
+{"id": "q-0118", "question": "Lao động nữ được những chế độ riêng nào như nghỉ hành kinh, nuôi con nhỏ, mang thai?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14", "73/2006/QH11"]}
+{"id": "q-0119", "question": "Tiền làm thêm giờ được tính ra sao, và phần tiền đó có bị đánh thuế thu nhập cá nhân không?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14", "109/2025/QH15"]}
+{"id": "q-0120", "question": "Lương hưu mình nhận hằng tháng có bị tính thuế thu nhập cá nhân không?", "type": "synthesis", "group": "hr", "hint": ["41/2024/QH15", "109/2025/QH15"]}
+{"id": "q-0121", "question": "Làm việc nặng nhọc độc hại thì thời giờ làm việc, nghỉ ngơi và chế độ bồi dưỡng khác công việc thường thế nào?", "type": "synthesis", "group": "hr", "hint": ["84/2015/QH13", "45/2019/QH14"]}
+{"id": "q-0122", "question": "Công ty muốn thay đổi nội quy lao động hoặc cho làm thêm giờ thì có phải hỏi ý kiến công đoàn không?", "type": "synthesis", "group": "hr", "hint": ["50/2024/QH15", "45/2019/QH14"]}
+{"id": "q-0123", "question": "Mình hết tuổi lao động rồi mà công ty vẫn muốn giữ lại làm thì ký hợp đồng thế nào, và có đóng bảo hiểm xã hội nữa không?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14", "41/2024/QH15"]}
+{"id": "q-0124", "question": "Mình đóng bảo hiểm xã hội gián đoạn, có lúc nghỉ rồi đóng tự nguyện, thì thời gian đó có được cộng dồn để tính hưởng lương hưu không?", "type": "synthesis", "group": "hr", "hint": ["41/2024/QH15"]}
+{"id": "q-0125", "question": "Nhân viên nghỉ việc mang theo bí mật kinh doanh sang công ty đối thủ thì công ty làm được gì?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14", "50/2005/QH11"]}
+{"id": "q-0126", "question": "Dữ liệu khách hàng của công ty bị lộ thì công ty phải báo cho ai, trong bao lâu, và bị xử lý thế nào?", "type": "synthesis", "group": "it", "hint": ["91/2025/QH15", "116/2025/QH15"]}
+{"id": "q-0127", "question": "Công ty bị tấn công mạng thì ai chịu trách nhiệm bảo vệ hệ thống, và công ty phải báo cáo gì?", "type": "synthesis", "group": "it", "hint": ["86/2015/QH13", "116/2025/QH15"]}
+{"id": "q-0128", "question": "Dữ liệu cá nhân của khách hàng khác gì dữ liệu của doanh nghiệp, và ai chịu trách nhiệm khi chia sẻ chúng với bên thứ ba?", "type": "synthesis", "group": "it", "hint": ["60/2024/QH15", "91/2025/QH15"]}
+{"id": "q-0129", "question": "Họp cổ đông trực tuyến và biểu quyết bằng phương tiện điện tử có hợp lệ không?", "type": "synthesis", "group": "it", "hint": ["20/2023/QH15", "59/2020/QH14"]}
+{"id": "q-0130", "question": "Nộp tờ khai thuế qua mạng có giá trị như nộp giấy không, chữ ký số thay con dấu được không?", "type": "synthesis", "group": "it", "hint": ["20/2023/QH15", "108/2025/QH15"]}
+{"id": "q-0131", "question": "Cuối năm quyết toán thuế thu nhập cá nhân thì ai phải làm, công ty nộp thay được không, và nộp trễ thì bị gì?", "type": "synthesis", "group": "finance", "hint": ["109/2025/QH15", "108/2025/QH15"]}
+{"id": "q-0132", "question": "Khoản chi không có hóa đơn chứng từ đầy đủ thì có được trừ khi tính thuế thu nhập doanh nghiệp không?", "type": "synthesis", "group": "finance", "hint": ["67/2025/QH15", "88/2015/QH13"]}
+{"id": "q-0133", "question": "Công ty kê khai thuế giá trị gia tăng thiếu thì bị xử lý thế nào và phải nộp thêm những khoản gì?", "type": "synthesis", "group": "finance", "hint": ["108/2025/QH15", "48/2024/QH15"]}
+{"id": "q-0134", "question": "Giám đốc công ty cổ phần nhận tiền hoa hồng riêng từ nhà cung cấp thì vi phạm những gì?", "type": "synthesis", "group": "legal", "hint": ["59/2020/QH14", "36/2018/QH14"]}
+{"id": "q-0135", "question": "Công ty có phải công khai báo cáo tài chính không, và phải lưu giữ hồ sơ sổ sách bao lâu?", "type": "synthesis", "group": "legal", "hint": ["59/2020/QH14", "88/2015/QH13"]}
+{"id": "q-0136", "question": "Công ty giải thể thì phải xử lý nợ lương người lao động và các khoản nợ thuế theo thứ tự nào?", "type": "synthesis", "group": "legal", "hint": ["59/2020/QH14", "45/2019/QH14"]}
+{"id": "q-0137", "question": "Cài phần mềm lậu cho cả phòng dùng thì công ty bị coi là xâm phạm quyền gì và chịu trách nhiệm ra sao?", "type": "synthesis", "group": "legal", "hint": ["50/2005/QH11"]}
+{"id": "q-0138", "question": "Nhân viên tố cáo sai phạm của sếp thì công ty có được kỷ luật hay cho thôi việc người đó không?", "type": "synthesis", "group": "legal", "hint": ["36/2018/QH14", "45/2019/QH14"]}
+{"id": "q-0139", "question": "Thất nghiệp thì khoản trợ cấp thất nghiệp khác trợ cấp mất việc ở điểm nào và có nhận được cả hai không?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14", "74/2025/QH15"]}
+{"id": "q-0140", "question": "Người lao động bị ốm dài ngày thì công ty có được cho thôi việc không và mình được hưởng chế độ gì từ bảo hiểm?", "type": "synthesis", "group": "hr", "hint": ["45/2019/QH14", "41/2024/QH15"]}
+{"id": "q-0141", "question": "Đi xuất khẩu lao động Nhật qua công ty môi giới thì phải nộp tiền đặt cọc tối đa bao nhiêu?", "type": "unanswerable", "group": "hr", "hint": ["hr"]}
+{"id": "q-0142", "question": "Mua bảo hiểm y tế cho cả gia đình thì mỗi người đóng bao nhiêu và được thanh toán những thuốc nào?", "type": "unanswerable", "group": "hr", "hint": ["hr"]}
+{"id": "q-0143", "question": "Lương tối thiểu vùng 1 hiện nay là bao nhiêu tiền một tháng?", "type": "unanswerable", "group": "hr", "hint": ["hr"]}
+{"id": "q-0144", "question": "Công ty trả lương chậm thì bị phạt hành chính bao nhiêu tiền?", "type": "unanswerable", "group": "hr", "hint": ["hr"]}
+{"id": "q-0145", "question": "Bố mẹ mình bệnh nặng nằm viện thì mình xin nghỉ có lương chăm sóc được mấy ngày?", "type": "unanswerable", "group": "hr", "hint": ["hr"]}
+{"id": "q-0146", "question": "Đăng ký tên miền .vn cho công ty ở đâu và mất bao nhiêu phí?", "type": "unanswerable", "group": "it", "hint": ["it"]}
+{"id": "q-0147", "question": "Mình livestream bán hàng trên mạng thì có phải đăng ký với Bộ Công Thương không?", "type": "unanswerable", "group": "it", "hint": ["it"]}
+{"id": "q-0148", "question": "Công ty lắp camera trong phòng làm việc thì có cần báo trước cho nhân viên không?", "type": "unanswerable", "group": "it", "hint": ["it"]}
+{"id": "q-0149", "question": "Gửi tin nhắn quảng cáo rác đến điện thoại khách thì bị phạt bao nhiêu tiền?", "type": "unanswerable", "group": "it", "hint": ["it"]}
+{"id": "q-0150", "question": "Dùng chatbot AI bên ngoài để soạn hợp đồng cho khách mà sai thì ai chịu trách nhiệm pháp lý?", "type": "unanswerable", "group": "it", "hint": ["it"]}
+{"id": "q-0151", "question": "Thuế môn bài của công ty mới thành lập năm nay là bao nhiêu tiền?", "type": "unanswerable", "group": "finance", "hint": ["finance"]}
+{"id": "q-0152", "question": "Nhập hàng từ Trung Quốc về bán thì thuế nhập khẩu tính bao nhiêu phần trăm?", "type": "unanswerable", "group": "finance", "hint": ["finance"]}
+{"id": "q-0153", "question": "Bia và nước ngọt có chịu thuế tiêu thụ đặc biệt bao nhiêu phần trăm?", "type": "unanswerable", "group": "finance", "hint": ["finance"]}
+{"id": "q-0154", "question": "Vay ngân hàng mua xe cho công ty thì lãi suất tối đa pháp luật cho phép là bao nhiêu?", "type": "unanswerable", "group": "finance", "hint": ["finance"]}
+{"id": "q-0155", "question": "Mua nhà thì lệ phí trước bạ phải đóng bao nhiêu phần trăm giá trị?", "type": "unanswerable", "group": "finance", "hint": ["finance"]}
+{"id": "q-0156", "question": "Cho bạn vay hai trăm triệu không giấy tờ, giờ bạn không trả thì kiện được không?", "type": "unanswerable", "group": "legal", "hint": ["legal"]}
+{"id": "q-0157", "question": "Công ty nợ tiền hàng của đối tác quá hạn thì bên kia được phạt hợp đồng tối đa bao nhiêu phần trăm?", "type": "unanswerable", "group": "legal", "hint": ["legal"]}
+{"id": "q-0158", "question": "Ông bà mất không để lại di chúc thì nhà đất chia cho con cháu như thế nào?", "type": "unanswerable", "group": "legal", "hint": ["legal"]}
+{"id": "q-0159", "question": "Ly hôn thuận tình cần chuẩn bị những giấy tờ gì và nộp ở tòa nào?", "type": "unanswerable", "group": "legal", "hint": ["legal"]}
+{"id": "q-0160", "question": "Công ty bị nhân viên kiện ra tòa thì thời gian xử sơ thẩm thường mất bao lâu?", "type": "unanswerable", "group": "legal", "hint": ["legal"]}
+{"id": "q-0161", "question": "Mua sắm thiết bị văn phòng của công ty nhà nước có bắt buộc phải đấu thầu không?", "type": "unanswerable", "group": "legal", "hint": ["legal"]}
+{"id": "q-0162", "question": "Thuê nhà làm văn phòng thì đặt cọc tối đa bao nhiêu tháng tiền thuê là hợp pháp?", "type": "unanswerable", "group": "legal", "hint": ["legal"]}
+{"id": "q-0163", "question": "Đăng ký sim chính chủ bằng khuôn mặt là bắt buộc từ khi nào?", "type": "unanswerable", "group": "it", "hint": ["it"]}

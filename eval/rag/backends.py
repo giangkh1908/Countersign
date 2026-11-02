@@ -8,18 +8,26 @@ số của cấu hình khác.
 
 from __future__ import annotations
 
+import inspect
 import os
 from pathlib import Path
 
+from acme_common.mcp import CallerContext
 from acme_common.ports import Principal
-from mcp_docs.factory import build_article_reader, build_embedder, build_retriever
+from mcp_docs.factory import (
+    build_article_reader,
+    build_embedder,
+    build_reranker,
+    build_retriever,
+)
 from mcp_docs.ports import ArticleReader, DocumentRetriever, SearchResult
 from mcp_docs.services.acl import AclPolicy
 from mcp_docs.services.article_pin import ArticlePinner
+from mcp_docs.services.document_service import DocumentService
 from mcp_docs.services.normalize import normalize_query
 from mcp_docs.settings import Settings
 
-from .fakes import CorpusFakeRetriever
+from .fakes import CorpusFakeRetriever, eval_principal
 from .runner import CONFIGS, RetrieverFactory
 
 Override = dict[str, bool | str | int | float]
@@ -48,9 +56,13 @@ SUFFIXES: dict[str, Override] = {
     "stop": {"docs_fts_stopwords": True},  # bỏ từ dừng phía truy vấn FTS
     "rank": {"docs_fts_rank": "rank"},  # ts_rank thay ts_rank_cd
     "title": {"docs_fts_title": True},  # tiêu đề văn bản trọng số A, ghép lúc truy vấn
-    "nc250": {"docs_n_cand": 250},  # đúng giá trị eval đang dùng (5*pool); dùng khi chẩn đoán
-    "nc50": {"docs_n_cand": 50},  # số ứng viên mỗi nhánh (mặc định eval: 5*pool = 250)
-    "nc70": {"docs_n_cand": 70},  # giá trị docs-mcp thực dùng: max(50, 5*14)
+    # Chỉ để thử độ nhạy. `run` KHÔNG ghi đè docs_n_cand: số ứng viên do adapter tự suy ra từ `k`
+    # mà DocumentService thật truyền xuống (xem `service_retrieval_k`), đúng như docs-mcp.
+    "nc250": {"docs_n_cand": 250},  # giá trị eval từng dùng nhầm (5 * 50); `diagnose` còn dùng
+    "nc50": {"docs_n_cand": 50},
+    "nc70": {
+        "docs_n_cand": 70
+    },  # trùng giá trị thật ở cấu hình mặc định; giữ để so khi đổi mặc định
 }
 
 # Nhóm cấu hình cho --configs
@@ -159,6 +171,46 @@ def real_factory(settings: Settings, configs: tuple[str, ...] = CONFIGS) -> Retr
         return retriever
 
     return build
+
+
+class _ProbeRetriever(DocumentRetriever):
+    """Ghi lại `k` mà service gọi xuống; không trả chunk nào."""
+
+    def __init__(self) -> None:
+        self.k: int | None = None
+
+    async def search(
+        self,
+        query: str,
+        principal: Principal,
+        k: int,
+        department_filter: str | None = None,
+    ) -> SearchResult:
+        self.k = k
+        return SearchResult([], "probe")
+
+
+async def service_retrieval_k(settings: Settings) -> int:
+    """`k` mà docs-mcp thật truyền xuống retriever cho một lần `search` mặc định.
+
+    Không chép số từ `packages/`: dựng `DocumentService` thật (cùng `max_per_doc` của Settings),
+    gọi `search` với `top_k` mặc định của chính hàm đó rồi đọc `k` mà retriever nhận được. Nhờ vậy
+    công thức (`top_k * max_per_doc + 4`, trần 60) và `n_cand` của adapter (suy ra từ `k` khi
+    `docs_n_cand` là None) đổi ở đâu thì eval đổi theo ở đó.
+    """
+    probe = _ProbeRetriever()
+    service = DocumentService(
+        probe,
+        build_reranker(settings.docs_rerank, settings),
+        redis=None,
+        max_per_doc=settings.docs_max_per_doc,
+    )
+    ctx = CallerContext(principal=eval_principal(), request_id="eval-k-probe")
+    default_top_k = inspect.signature(DocumentService.search).parameters["top_k"].default
+    await service.search(ctx, "probe", default_top_k)
+    if probe.k is None:  # pragma: no cover - service luôn gọi retriever
+        raise RuntimeError("DocumentService không gọi retriever")
+    return probe.k
 
 
 async def resolve_embed_model(settings: Settings) -> str:

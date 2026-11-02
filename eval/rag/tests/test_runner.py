@@ -28,10 +28,12 @@ class ScriptedRetriever(DocumentRetriever):
     def __init__(self, script: dict[str, list[tuple[str, str]]]) -> None:
         self.script = script
         self.closed = False
+        self.ks: list[int] = []
 
     async def search(
         self, query: str, principal: Principal, k: int, department_filter: str | None = None
     ) -> SearchResult:
+        self.ks.append(k)
         keys = self.script.get(query, [])
         return SearchResult([_chunk(d, a, i) for i, (d, a) in enumerate(keys)][:k])
 
@@ -189,3 +191,76 @@ async def test_pinning_retriever_ghim_dieu_nen_trong_cau_hoi():
     # không nêu Điều thì giữ nguyên kết quả của retriever bên trong
     plain = await r.search("nghỉ phép năm", eval_principal(), 3)
     assert [c.chunk_id for c in plain.chunks] == [1, 2]
+
+
+async def test_run_all_truyen_k_xuong_retriever():
+    r = ScriptedRetriever({"hỏi 1": [("d", "1")]})
+    await runner.run_all(lambda name: r, QS[:1], eval_principal(), ("hybrid",), k=14)
+    assert r.ks == [14]
+
+
+async def test_service_retrieval_k_di_qua_document_service_that():
+    """k lấy từ DocumentService thật nên đổi theo `docs_max_per_doc`; không chép số từ packages/."""
+    from mcp_docs.settings import Settings
+
+    k1 = await backends.service_retrieval_k(Settings(docs_max_per_doc=1))
+    k2 = await backends.service_retrieval_k(Settings(docs_max_per_doc=2))
+    assert 0 < k1 < k2
+    assert k2 < runner.FAKE_K  # nhỏ hơn pool 50 mà harness từng dùng (kéo theo n_cand 250)
+
+
+def test_khong_ghi_de_n_cand_trong_cau_hinh_goc():
+    """Cấu hình gốc không đặt docs_n_cand: để adapter tự suy ra từ k như docs-mcp thật."""
+    for name in runner.CONFIGS:
+        assert "docs_n_cand" not in backends.config_overrides(name)
+
+
+def _suite_hai_split(write_suite, tmp_path: Path) -> Path:
+    return write_suite(
+        tmp_path / "s.jsonl",
+        [
+            {"id": "q1", "question": "nghỉ phép năm bao nhiêu ngày", "split": "dev",
+             "gold": [{"doc_num": "45/2019/QH14", "article": "113"}]},
+            {"id": "q2", "question": "chữ ký số có giá trị như chữ ký tay không", "split": "test",
+             "gold": [{"doc_num": "20/2023/QH15", "article": "23"}]},
+            {"id": "q3", "question": "việc không có trong luật", "split": "test",
+             "type": "unanswerable", "answerable": False, "gold": []},
+        ],
+    )  # fmt: skip
+
+
+def _report(out: Path) -> dict:
+    [path] = list(out.glob("*/report.json"))
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_cli_run_mac_dinh_chi_chay_dev(raw: Path, tmp_path: Path, write_suite):
+    suite = _suite_hai_split(write_suite, tmp_path)
+    out = tmp_path / "out"
+    args = ["run", "--fake", "--suite", str(suite), "--raw-dir", str(raw), "--out", str(out)]
+    assert cli.main(args) == 0
+    rep = _report(out)
+    assert rep["dataset"]["split"] == "dev" and rep["dataset"]["n"] == 1
+    ids = [x["id"] for x in rep["configs"]["hybrid"]["per_question"]]
+    assert ids == ["q1"]  # câu test không bị chạm khi không chỉ định
+
+
+def test_cli_run_test_chi_dinh_ro_va_bao_cau_khong_dap_an_rieng(
+    raw: Path, tmp_path: Path, write_suite, capsys
+):
+    suite = _suite_hai_split(write_suite, tmp_path)
+    out = tmp_path / "out"
+    code = cli.main(
+        ["run", "--fake", "--split", "test", "--suite", str(suite), "--raw-dir", str(raw),
+         "--out", str(out)]
+    )  # fmt: skip
+    assert code == 0
+    ds = _report(out)["dataset"]
+    assert ds["split"] == "test" and ds["n"] == 2
+    assert ds["n_scored"] == 1 and ds["n_unanswerable"] == 1  # q3 không tính recall
+    assert "không dùng kết quả này để chỉnh cấu hình" in capsys.readouterr().out
+
+
+def test_cli_split_khong_hop_le():
+    with pytest.raises(SystemExit):
+        cli.main(["run", "--fake", "--split", "all"])

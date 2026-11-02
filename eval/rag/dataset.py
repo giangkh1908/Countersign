@@ -1,8 +1,17 @@
 """Bộ câu hỏi có nhãn (`*.jsonl`) và trình kiểm nhãn so với corpus thô `data/raw/vbpl`.
 
 Mỗi dòng JSON: `id`, `question`, `gold` = [{"doc_num", "article"}, ...] (+ `type`, `group`,
-`answerable`, `names_article`). Trình kiểm không đoán gì: mỗi `(doc_num, article)` phải có thật
-trong file `<số hiệu>.json` của corpus, `id` không trùng, câu hỏi không rỗng.
+`answerable`, `names_article`, `split`, `authoring`). Trình kiểm không đoán gì: mỗi
+`(doc_num, article)` phải có thật trong file `<số hiệu>.json` của corpus, `id` không trùng, câu
+hỏi không rỗng.
+
+`gold` là mọi Điều tự trả lời được câu hỏi; `lookup` có thể có nhiều Điều thay thế nhau (mỗi Điều
+đủ trả lời), `synthesis` cần từ 2 Điều bổ sung nhau, `unanswerable` có `gold` rỗng và không tính
+vào recall (báo riêng).
+
+`split`: `dev` để chỉnh cấu hình, `test` chỉ chạy một lần ở cuối. `authoring`: `read_first` là câu
+viết sau khi đã đọc Điều đúng (từ vựng sát luật nên số đo lạc quan); `blind` là câu viết trước khi
+mở nội dung corpus rồi mới gán nhãn.
 """
 
 from __future__ import annotations
@@ -18,6 +27,8 @@ DEFAULT_RAW_DIR = "data/raw/vbpl"
 RAW_DIR_ENV = "VBPL_RAW_DIR"
 SUITE_DIR = Path(__file__).parent
 TYPES = ("lookup", "synthesis", "unanswerable")
+SPLITS = ("dev", "test")
+AUTHORING = ("read_first", "blind")
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +40,8 @@ class Question:
     group: str | None = None
     answerable: bool = True
     names_article: bool = False
+    split: str = "dev"
+    authoring: str = "read_first"
 
 
 class DatasetError(Exception):
@@ -69,6 +82,8 @@ def load_questions(path: str | os.PathLike[str]) -> list[Question]:
                         group=row.get("group"),
                         answerable=bool(row.get("answerable", True)),
                         names_article=bool(row.get("names_article", False)),
+                        split=str(row.get("split", "dev")),
+                        authoring=str(row.get("authoring", "read_first")),
                     )
                 )
             except (KeyError, TypeError, ValueError) as e:
@@ -108,6 +123,12 @@ def validate_questions(questions: list[Question], raw: Path) -> list[str]:
             errors.append(f"{q.id}: câu hỏi rỗng")
         if q.type not in TYPES:
             errors.append(f"{q.id}: type {q.type!r} không thuộc {TYPES}")
+        if q.split not in SPLITS:
+            errors.append(f"{q.id}: split {q.split!r} không thuộc {SPLITS}")
+        if q.authoring not in AUTHORING:
+            errors.append(f"{q.id}: authoring {q.authoring!r} không thuộc {AUTHORING}")
+        if (q.type == "unanswerable") == q.answerable:
+            errors.append(f"{q.id}: type {q.type!r} không khớp answerable={q.answerable}")
         if q.answerable and not q.gold:
             errors.append(f"{q.id}: câu có đáp án nhưng gold rỗng")
         if not q.answerable and q.gold:
@@ -124,8 +145,20 @@ def validate_questions(questions: list[Question], raw: Path) -> list[str]:
     return errors
 
 
+def select_split(questions: list[Question], split: str) -> list[Question]:
+    """Câu thuộc `split` (`dev` hoặc `test`); tên khác là lỗi, không đoán."""
+    if split not in SPLITS:
+        raise DatasetError(f"split {split!r} không thuộc {SPLITS}")
+    return [q for q in questions if q.split == split]
+
+
 def distribution(questions: list[Question]) -> dict[str, dict[str, int]]:
-    """Số câu theo văn bản (tính mỗi gold) và theo loại, để báo cáo."""
+    """Số câu theo văn bản (tính mỗi gold), loại, nhóm, split và cách viết, để báo cáo."""
     by_doc = Counter(d for q in questions for d, _ in q.gold)
-    by_type = Counter(q.type for q in questions)
-    return {"doc_num": dict(sorted(by_doc.items())), "type": dict(by_type)}
+    return {
+        "doc_num": dict(sorted(by_doc.items())),
+        "type": dict(Counter(q.type for q in questions)),
+        "group": dict(sorted(Counter(q.group or "-" for q in questions).items())),
+        "split": dict(sorted(Counter(q.split for q in questions).items())),
+        "authoring": dict(sorted(Counter(q.authoring for q in questions).items())),
+    }

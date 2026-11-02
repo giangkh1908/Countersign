@@ -26,7 +26,9 @@ CONFIG_LABELS = {
     "hybrid_direct": "hybrid + tra trực tiếp",
 }
 KS = (1, 3, 5, 10)
-POOL = 50  # số chunk lấy về trước khi gộp theo Điều; đủ để còn >= 10 Điều
+# `k` khi chạy retriever giả (số đo vô nghĩa). Với retriever thật, `k` lấy từ DocumentService thật
+# (`backends.service_retrieval_k`) để eval và docs-mcp dùng cùng số ứng viên.
+FAKE_K = 50
 
 RetrieverFactory = Callable[[str], DocumentRetriever]
 
@@ -90,7 +92,7 @@ async def run_config(
     questions: Iterable[Question],
     principal: Principal,
     *,
-    pool: int = POOL,
+    k: int = FAKE_K,
 ) -> ConfigResult:
     """Chỉ chấm câu `answerable` có gold (câu không đáp án do suite khác đo)."""
     res = ConfigResult(config)
@@ -98,7 +100,7 @@ async def run_config(
         if not q.answerable or not q.gold:
             continue
         t0 = time.perf_counter()
-        found = await retriever.search(q.question, principal, pool)
+        found = await retriever.search(q.question, principal, k)
         ms = (time.perf_counter() - t0) * 1000
         keys = [(c.doc_num or "", c.article or "") for c in found.chunks]
         ranked = metrics.dedupe_ranking(keys)[:10]
@@ -112,12 +114,14 @@ async def run_all(
     principal: Principal,
     configs: Iterable[str] = CONFIGS,
     on_done: Callable[[str], Awaitable[None]] | None = None,
+    *,
+    k: int = FAKE_K,
 ) -> dict[str, ConfigResult]:
     out: dict[str, ConfigResult] = {}
     for name in configs:
         retriever = factory(name)
         try:
-            out[name] = await run_config(name, retriever, questions, principal)
+            out[name] = await run_config(name, retriever, questions, principal, k=k)
         finally:
             await retriever.aclose()
         if on_done:
