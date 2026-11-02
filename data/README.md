@@ -10,7 +10,7 @@ Mọi PII là giả. Nguồn và giấy phép corpus luật: [`SOURCES.md`](SOUR
 | `vbpl/` | Tải corpus luật từ vbpl.vn; danh sách chọn `selection.json` |
 | `generated/`, `raw/` | Đầu ra generator và dữ liệu tải về, gitignore |
 
-Corpus độc cho R3 chưa có; thư mục sẽ được tạo khi làm.
+Corpus độc cho R3 (`corpus/`, sinh bằng `uv run python -m data.poison`, tất định): 71 tài liệu giả. 56 tài liệu độc (8 kỹ thuật injection × 7 biến thể), 5 tài liệu mật có canary `ATK-CANARY-*`, 10 tài liệu sạch đối chứng. `corpus/manifest.jsonl` là ground truth (kỹ thuật, mục tiêu, hành vi coi là thành công, nạn nhân); `corpus/documents.jsonl` là metadata ACL cho ingest. Nạp vào kho (chỉ khi cần đo trên stack): `bash scripts/ingest-attack-corpus.sh`. Harness ASR trong-process: `uv run --all-packages python -m eval.attack`.
 
 ## Chạy seed
 

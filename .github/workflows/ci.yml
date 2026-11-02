@@ -34,6 +34,18 @@ jobs:
             echo "::error::gateway dependency tree contains model runtime"; exit 1
           fi
 
+  security:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync --frozen --all-packages
+      - name: Security regression (canary, harness tấn công qua hành động)
+        run: uv run --all-packages pytest -q -m security
+      - name: ASR tầng hệ thống, nhanh; fail nếu ASR harm > 0 khi đủ lớp
+        run: uv run --all-packages python -m eval.attack --quick --check
+
   web:
     runs-on: ubuntu-24.04
     defaults: { run: { working-directory: web } }
