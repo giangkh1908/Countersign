@@ -1,17 +1,21 @@
 """Ports của docs-mcp (abc.ABC theo năng lực). Không import vendor."""
 
+from .article_reader import ArticleReader
 from .document_indexer import DocumentIndexer, IndexedChunk
 from .document_loader import DocumentLoader
 from .document_retriever import DocumentRetriever
 from .embedder import Embedder
 from .errors import (
+    ArticleReaderNotConfigured,
     DocumentIndexerNotConfigured,
     DocumentLoaderNotConfigured,
     EmbedderNotConfigured,
     RerankerNotConfigured,
     RetrieverNotConfigured,
+    SegmenterNotConfigured,
 )
 from .reranker import Reranker
+from .text_segmenter import TextSegmenter
 from .types import (
     ArticleUnit,
     Chunk,
@@ -19,6 +23,8 @@ from .types import (
     DocumentMeta,
     DocumentRejected,
     EmbeddingUnavailable,
+    IndexConfigError,
+    Ref,
     RetrievalUnavailable,
     RetrievedChunk,
     SearchResult,
@@ -26,6 +32,8 @@ from .types import (
 )
 
 __all__ = [
+    "ArticleReader",
+    "ArticleReaderNotConfigured",
     "ArticleUnit",
     "Chunk",
     "Document",
@@ -39,7 +47,9 @@ __all__ = [
     "Embedder",
     "EmbedderNotConfigured",
     "EmbeddingUnavailable",
+    "IndexConfigError",
     "IndexedChunk",
+    "Ref",
     "Reranker",
     "RerankerNotConfigured",
     "RetrievalUnavailable",
@@ -47,4 +57,6 @@ __all__ = [
     "RetrieverNotConfigured",
     "SearchResult",
     "Section",
+    "SegmenterNotConfigured",
+    "TextSegmenter",
 ]

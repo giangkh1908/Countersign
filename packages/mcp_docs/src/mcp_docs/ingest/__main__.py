@@ -8,8 +8,13 @@ import logging
 import sys
 from pathlib import Path
 
-from ..factory import build_embedder, build_indexer, build_loader
-from ..ports import DocumentRejected, EmbeddingUnavailable, RetrievalUnavailable
+from ..factory import build_embedder, build_indexer, build_loader, build_segmenter
+from ..ports import (
+    DocumentRejected,
+    EmbeddingUnavailable,
+    IndexConfigError,
+    RetrievalUnavailable,
+)
 from ..settings import Settings
 from .job import run_ingest
 
@@ -26,8 +31,10 @@ async def _main(args: argparse.Namespace) -> int:
             indexer=indexer,
             force=args.force,
             article_max_tokens=s.docs_article_max_tokens,
+            segmenter=build_segmenter(s.docs_segmenter, s),
+            embed_model=s.docs_embed_model,
         )
-    except (DocumentRejected, EmbeddingUnavailable, RetrievalUnavailable) as e:
+    except (DocumentRejected, EmbeddingUnavailable, RetrievalUnavailable, IndexConfigError) as e:
         print(f"ingest FAILED: {e}", file=sys.stderr)
         return 1
     finally:

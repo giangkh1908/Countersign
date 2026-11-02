@@ -301,7 +301,13 @@ services:
       MCP_DATABASE_URL_FILE: /run/secrets/docs_database_url   # role kn_app (SELECT)
       MCP_AUDIT_DATABASE_URL_FILE: /run/secrets/docs_audit_database_url
       MCP_REDIS_URL_FILE: /run/secrets/docs_redis_url
-      DOCS_GATEWAY_URL: http://gateway:8000/v1                 # embedding qua gateway (alias acme-embed: chưa phục vụ)
+      DOCS_GATEWAY_URL: http://gateway:8000/v1                 # embedding qua gateway (alias acme-embed)
+      DOCS_EMBEDDER: ${DOCS_EMBEDDER:-gateway_http}
+      DOCS_USE_VECTOR: ${DOCS_USE_VECTOR:-true}
+      DOCS_USE_FTS: ${DOCS_USE_FTS:-true}                      # nhánh Postgres FTS (không phải BM25)
+      DOCS_FTS_MODE: ${DOCS_FTS_MODE:-unaccent}                # unaccent | segmented
+      DOCS_RRF_K: ${DOCS_RRF_K:-60}
+      DOCS_DIRECT_LOOKUP: ${DOCS_DIRECT_LOOKUP:-off}           # off | pin
       DOCS_GATEWAY_KEY_FILE: /run/secrets/docs_gateway_key     # key owner_type=service
       MCP_HOST: ${MCP_HOST:-mcp_sdk}
       MCP_PORT: "8101"

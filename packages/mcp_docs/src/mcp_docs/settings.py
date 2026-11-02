@@ -22,9 +22,19 @@ class Settings(CommonSettings):
     docs_rerank: str = "none"
     docs_retriever: str = "pgvector_hybrid"
     docs_indexer: str = "pgvector_hybrid"
-    docs_embedder: str = "fake_hash"  # gateway chưa có /v1/embeddings (R1); "gateway_http" khi có
+    docs_embedder: str = "fake_hash"  # dev/test; compose đặt "gateway_http"
     docs_embed_model: str = "acme-embed"
-    docs_embed_dim: int = 1024  # khớp chunks.embedding vector(1024)
+    docs_embed_dim: int = (
+        1024  # khớp chunks.embedding vector(EMBED_DIM); verify_schema kiểm lúc khởi động
+    )
+    docs_use_vector: bool = True  # tắt => chỉ Postgres FTS
+    docs_use_fts: bool = True  # tắt => chỉ vector
+    docs_fts_mode: str = "unaccent"  # unaccent (cột tsv) | segmented (cột tsv_seg)
+    docs_segmenter: str = (
+        "syllable_bigram"  # tách từ khi ingest (fts_text) và khi truy vấn segmented
+    )
+    docs_direct_lookup: str = "off"  # off | pin: ghim chunk của "Điều N <văn bản>" lên đầu
+    docs_strict_index_meta: bool = False  # true: lệch embed_model với index_meta => dừng khởi động
     docs_rrf_k: int = 60
     docs_n_cand: int | None = None  # None => max(50, 5*top_k)
     docs_ingest_database_url: str | None = None  # role kn_ingest (chỉ job ingest)

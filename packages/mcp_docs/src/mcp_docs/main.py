@@ -6,7 +6,9 @@ AuthMiddleware, cộng endpoint `/internal/taint/forget`. Test truyền fake qua
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 from acme_common.factory import (
@@ -28,12 +30,26 @@ from acme_common.ports import (
 from .api.forget import PATH as FORGET_PATH
 from .api.forget import TaintForgetEndpoint
 from .api.tools import search_handler, search_spec
-from .factory import build_embedder, build_reranker, build_retriever
-from .ports import DocumentRetriever, Reranker
+from .factory import build_article_reader, build_embedder, build_reranker, build_retriever
+from .ports import (
+    ArticleReader,
+    DocumentRetriever,
+    Embedder,
+    EmbeddingUnavailable,
+    IndexConfigError,
+    Reranker,
+    RetrievalUnavailable,
+)
 from .services.document_service import DocumentService
+from .services.index_checks import probe_embedder
 from .settings import Settings
 
 SERVER = "docs-mcp"
+log = logging.getLogger("acme.docs")
+
+
+async def _noop() -> None:
+    return None
 
 
 @dataclass
@@ -43,6 +59,8 @@ class Runtime:
     invoker: ToolInvoker
     service: DocumentService
     app: Any  # ASGI
+    # kiểm cấu hình lúc khởi động (schema, số chiều, embedder); sai => IndexConfigError, dừng dịch vụ
+    startup_check: Callable[[], Awaitable[None]] = field(default=_noop)
 
 
 class _Router:
@@ -71,6 +89,7 @@ def build_runtime(
     forget_verifier: TokenVerifier | None = None,
     retriever: DocumentRetriever | None = None,
     reranker: Reranker | None = None,
+    article_reader: ArticleReader | None = None,
     redis: Any | None = None,
     audit: EventSink | None = None,
     limiter: RateLimiter | None = None,
@@ -81,9 +100,12 @@ def build_runtime(
         from redis.asyncio import Redis
 
         redis = Redis.from_url(s.mcp_redis_url)
+    embedder: Embedder | None = None
     if retriever is None:
         embedder = build_embedder(s.docs_embedder, s)
         retriever = build_retriever(s.docs_retriever, s, embedder=embedder)
+    if article_reader is None and s.docs_direct_lookup != "off":
+        article_reader = build_article_reader(s.docs_retriever, s)
     reranker = reranker or build_reranker(s.docs_rerank, s)
     verifier = verifier or build_token_verifier("oidc_jwks", s, clock=clock)
     # token của job retention không mang dept/clearance => verifier riêng chỉ đòi `sub`
@@ -100,6 +122,8 @@ def build_runtime(
         recent_ttl_s=s.taint_recent_ttl_s,
         retention_s=s.agent_thread_retention_days * 86400,
         max_per_doc=s.docs_max_per_doc,
+        article_reader=article_reader,
+        direct_lookup=s.docs_direct_lookup,
     )
     invoker = ToolInvoker(
         server=SERVER,
@@ -132,19 +156,55 @@ def build_runtime(
         clock=clock,
         allowed_azp=frozenset(x for x in s.forget_allowed_azp.replace(" ", ",").split(",") if x),
     )
-    return Runtime(s, host, invoker, service, _Router(mcp_app, forget))
+    checked_retriever, checked_embedder = retriever, embedder
+
+    async def startup_check() -> None:
+        await checked_retriever.verify_schema(
+            s.docs_embed_dim, embed_model=s.docs_embed_model, strict_meta=s.docs_strict_index_meta
+        )
+        if checked_embedder is not None and s.docs_use_vector:
+            await probe_embedder(checked_embedder, s.docs_embed_dim)
+
+    return Runtime(s, host, invoker, service, _Router(mcp_app, forget), startup_check)
 
 
 class _LazyApp:
-    """Dựng runtime ở lần gọi đầu (import module không đòi env/DB)."""
+    """Dựng runtime ở lần gọi đầu (import module không đòi env/DB).
+
+    Ở scope `lifespan`, kiểm cấu hình trước khi báo startup xong: sai số chiều thì báo
+    `lifespan.startup.failed` để uvicorn dừng với thông báo rõ, thay vì chạy sai.
+    """
 
     def __init__(self) -> None:
-        self._app: Any = None
+        self._rt: Runtime | None = None
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
-        if self._app is None:
-            self._app = build_runtime().app
-        await self._app(scope, receive, send)
+        if scope["type"] == "lifespan":
+            first = await receive()
+            if first["type"] == "lifespan.startup":
+                try:
+                    rt = self._rt = self._rt or build_runtime()
+                    await rt.startup_check()
+                except IndexConfigError as e:
+                    log.error("docs-mcp startup check failed: %s", e)
+                    await send({"type": "lifespan.startup.failed", "message": str(e)})
+                    return
+                except (RetrievalUnavailable, EmbeddingUnavailable) as e:
+                    # kho/gateway chưa sẵn sàng không phải cấu hình sai: truy vấn tự suy giảm
+                    log.warning("docs-mcp startup check skipped: %s", e)
+            replay = [first]
+
+            async def replay_receive() -> Any:
+                return replay.pop() if replay else await receive()
+
+            await self._rt_app()(scope, replay_receive, send)
+            return
+        await self._rt_app()(scope, receive, send)
+
+    def _rt_app(self) -> Any:
+        if self._rt is None:
+            self._rt = build_runtime()
+        return self._rt.app
 
 
 app = _LazyApp()

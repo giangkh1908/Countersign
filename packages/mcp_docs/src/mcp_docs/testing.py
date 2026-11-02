@@ -5,15 +5,19 @@ from __future__ import annotations
 from acme_common.ports import Principal
 
 from .ports import (
+    ArticleReader,
     DocumentIndexer,
     DocumentMeta,
     DocumentRetriever,
     Embedder,
     EmbeddingUnavailable,
     IndexedChunk,
+    Ref,
+    RetrievalUnavailable,
     RetrievedChunk,
     SearchResult,
 )
+from .refs import fold
 from .services.acl import AclPolicy
 
 
@@ -50,20 +54,67 @@ class FakeRetriever(DocumentRetriever):
 class FakeIndexer(DocumentIndexer):
     def __init__(self) -> None:
         self.docs: dict[str, tuple[DocumentMeta, list[IndexedChunk]]] = {}
+        self.sigs: dict[str, str] = {}
+        self.index_meta: dict[str, str] = {}
+        self.verified_dim: int | None = None
 
-    async def is_current(self, meta: DocumentMeta) -> bool:
+    async def verify_schema(self, expected_dim: int) -> None:
+        self.verified_dim = expected_dim
+
+    async def record_index_meta(self, values: dict[str, str]) -> None:
+        self.index_meta.update(values)
+
+    async def is_current(self, meta: DocumentMeta, index_sig: str = "") -> bool:
         cur = self.docs.get(meta.id)
         return bool(
             cur
             and cur[1]
+            and self.sigs.get(meta.id, "") == index_sig
             and cur[0].sha256 == meta.sha256
             and cur[0].department == meta.department
             and cur[0].classification == meta.classification
             and cur[0].allowed_roles == meta.allowed_roles
         )
 
-    async def replace(self, meta: DocumentMeta, chunks: list[IndexedChunk]) -> None:
+    async def replace(
+        self, meta: DocumentMeta, chunks: list[IndexedChunk], index_sig: str = ""
+    ) -> None:
         self.docs[meta.id] = (meta, chunks)
+        self.sigs[meta.id] = index_sig
+
+
+class FakeArticleReader(ArticleReader):
+    """Tra trực tiếp trong bộ nhớ, vẫn lọc theo quyền (như adapter thật)."""
+
+    def __init__(self, chunks: list[RetrievedChunk], *, fail: bool = False) -> None:
+        self.chunks = chunks
+        self.fail = fail
+        self.reads: list[list[Ref]] = []
+
+    async def read(self, refs: list[Ref], principal: Principal) -> list[RetrievedChunk]:
+        if self.fail:
+            raise RetrievalUnavailable("test")
+        self.reads.append(refs)
+        return [
+            c
+            for r in refs
+            for c in self.chunks
+            if r.doc_num == c.doc_num
+            and r.article == c.article
+            and AclPolicy.can_read(principal, c.department, c.classification, c.allowed_roles)
+        ]
+
+    async def find_documents(self, hint: str, principal: Principal) -> list[tuple[str, str]]:
+        key = hint.lower()
+        seen: dict[str, str] = {}
+        for c in self.chunks:
+            if (
+                c.doc_num
+                and fold(key) in fold(c.title)
+                and AclPolicy.can_read(principal, c.department, c.classification, c.allowed_roles)
+            ):
+                seen[c.doc_num] = c.title
+        return list(seen.items())
 
 
 class FailingEmbedder(Embedder):

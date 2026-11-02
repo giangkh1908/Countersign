@@ -14,11 +14,14 @@ from acme_common.mcp import CallerContext, ToolError
 from acme_common.services.taint import raise_taint
 
 from ..ports import (
+    ArticleReader,
     DocumentRetriever,
+    Ref,
     Reranker,
     RetrievalUnavailable,
     RetrievedChunk,
 )
+from ..refs import clause_matches, parse_refs
 from . import spotlight
 from .acl import AclPolicy
 from .normalize import normalize_query
@@ -36,6 +39,8 @@ class DocumentService:
         recent_ttl_s: int = 86400,
         retention_s: int = 30 * 86400,
         max_per_doc: int = 2,
+        article_reader: ArticleReader | None = None,
+        direct_lookup: str = "off",
     ) -> None:
         self._retriever = retriever
         self._reranker = reranker
@@ -43,6 +48,8 @@ class DocumentService:
         self._recent_ttl_s = recent_ttl_s
         self._retention_s = retention_s
         self._max_per_doc = max_per_doc
+        self._reader = article_reader
+        self._direct = direct_lookup == "pin" and article_reader is not None
         self.taint_write_failures = 0  # => metric docs_taint_write_fail_total
 
     async def search(
@@ -62,13 +69,18 @@ class DocumentService:
         except RetrievalUnavailable:
             raise ToolError("upstream_unavailable", "document store unavailable") from None
         chunks = await self._reranker.rerank(q, res.chunks)
+        pinned, unresolved = await self._direct_lookup(q, p)
+        if pinned:
+            ids = {c.chunk_id for c in pinned}
+            chunks = [*pinned, *(c for c in chunks if c.chunk_id not in ids)]
         # kiểm lại ACL độc lập adapter (loại bỏ, không báo lý do)
         chunks = [
             c
             for c in chunks
             if AclPolicy.can_read(p, c.department, c.classification, c.allowed_roles)
         ]
-        chunks = self._limit_per_doc(chunks)[:top_k]
+        pin_ids = {c.chunk_id for c in pinned}
+        chunks = self._limit_per_doc(chunks, pinned_ids=pin_ids)[:top_k]
 
         mode = res.mode
         if chunks:
@@ -81,6 +93,7 @@ class DocumentService:
             elif not ok:
                 self.taint_write_failures += 1  # class 0: best-effort
 
+        n_direct = sum(1 for c in chunks if c.chunk_id in pin_ids)
         sp = spotlight.new_spotlight()
         results = [
             {
@@ -103,6 +116,7 @@ class DocumentService:
             "query": q,
             "mode": mode,
             "reranked": False,
+            "direct": n_direct,
             "notice": spotlight.notice(sp),
             "spotlight": {
                 "delimiter_begin": sp.delimiter_begin,
@@ -116,16 +130,61 @@ class DocumentService:
             "rows_returned": len(results),
             "tables_read": ["chunks", "documents"],
             "mode": mode,
+            "direct": n_direct,
+            "refs_unresolved": unresolved,
             "max_class": max((c.classification for c in chunks), default=0),
         }
         return out, audit
 
-    def _limit_per_doc(self, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    async def _direct_lookup(self, query: str, principal: Any) -> tuple[list[RetrievedChunk], int]:
+        """Chunk của "Điều N <văn bản>" nêu trong câu hỏi (đã qua ACL ở adapter) và số tham chiếu chưa giải được.
+
+        Chỉ chạy khi `DOCS_DIRECT_LOOKUP=pin` và câu hỏi nêu Điều. Lỗi kho thì bỏ qua nhánh này
+        (truy xuất chính vẫn chạy); không bao giờ nới quyền.
+        """
+        if not self._direct or self._reader is None:
+            return [], 0
+        refs = parse_refs(query)
+        if not refs:
+            return [], 0
+        try:
+            resolved: list[Ref] = []
+            hints: dict[str, str | None] = {}
+            for r in refs:
+                if r.doc_num is None and r.doc_hint:
+                    if r.doc_hint not in hints:
+                        found = await self._reader.find_documents(r.doc_hint, principal)
+                        hints[r.doc_hint] = found[0][0] if len(found) == 1 else None
+                    r = Ref(r.article, r.clause, hints[r.doc_hint], r.doc_hint)
+                resolved.append(r)
+            ok = [r for r in resolved if r.doc_num and r.article]
+            found_chunks = await self._reader.read(ok, principal) if ok else []
+        except RetrievalUnavailable:
+            log.warning("direct lookup unavailable; continuing with retrieval only")
+            return [], len(refs)
+        pinned: list[RetrievedChunk] = []
+        seen: set[int] = set()
+        for r in ok:
+            mine = [c for c in found_chunks if c.doc_num == r.doc_num and c.article == r.article]
+            if r.clause:  # chunk chứa khoản được hỏi đứng trước
+                hit = [c for c in mine if clause_matches(c.clause, r.clause)]
+                mine = hit + [c for c in mine if c not in hit]
+            for c in mine:
+                if c.chunk_id not in seen:
+                    seen.add(c.chunk_id)
+                    pinned.append(c)
+        return pinned, len(refs) - len(ok)
+
+    def _limit_per_doc(
+        self, chunks: list[RetrievedChunk], pinned_ids: set[int] | None = None
+    ) -> list[RetrievedChunk]:
+        """Tối đa `max_per_doc` chunk mỗi tài liệu; chunk ghim luôn được giữ và tính vào hạn mức."""
+        pinned_ids = pinned_ids or set()
         seen: Counter[str] = Counter()
         out: list[RetrievedChunk] = []
         for c in chunks:
             seen[c.doc_id] += 1
-            if seen[c.doc_id] <= self._max_per_doc:
+            if c.chunk_id in pinned_ids or seen[c.doc_id] <= self._max_per_doc:
                 out.append(c)
         return out
 

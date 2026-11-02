@@ -23,5 +23,13 @@ class DocumentRetriever(abc.ABC):
         Lỗi hạ tầng => `RetrievalUnavailable`.
         """
 
+    async def verify_schema(  # noqa: B027 - hook tuỳ chọn
+        self, expected_dim: int, *, embed_model: str | None = None, strict_meta: bool = False
+    ) -> None:
+        """Kiểm kho khớp cấu hình lúc khởi động. Sai số chiều => `IndexConfigError`.
+
+        `embed_model` lệch model đã ghi lúc ingest: cảnh báo, hoặc `IndexConfigError` khi `strict_meta`.
+        """
+
     async def aclose(self) -> None:  # noqa: B027 - hook tuỳ chọn
         """Giải phóng tài nguyên."""

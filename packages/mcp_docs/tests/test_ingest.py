@@ -112,3 +112,36 @@ async def test_embedding_failure_stops_without_partial_write(tmp_path: Path) -> 
 def test_load_metadata_requires_file(tmp_path: Path) -> None:
     with pytest.raises(DocumentRejected):
         load_metadata(tmp_path)
+
+
+async def test_index_sig_change_triggers_reingest_and_fts_text_is_stored(tmp_path: Path) -> None:
+    from mcp_docs.adapters.segmenter_none import NoSegmenter
+    from mcp_docs.adapters.segmenter_syllable_bigram import SyllableBigramSegmenter
+
+    corpus, idx = make_corpus(tmp_path), FakeIndexer()
+    base = {"segmenter": SyllableBigramSegmenter(), "embed_model": "m1"}
+    assert (await ingest(corpus, idx, **base)).ingested
+    chunks = next(iter(idx.docs.values()))[1]
+    assert all(c.fts_text and c.fts_text.split()[0].islower() for c in chunks)
+    assert (await ingest(corpus, idx, **base)).ingested == []
+    for kw in ({"embed_model": "m2"}, {"segmenter": NoSegmenter()}, {"article_max_tokens": 300}):
+        assert (await ingest(corpus, idx, **(base | kw))).ingested, kw
+        assert (await ingest(corpus, idx, **base)).ingested  # đổi lại cũng nạp lại
+    assert idx.index_meta["embed_model"] == "m1" and idx.index_meta["embed_dim"] == "1024"
+
+
+class _LyingEmbedder(FakeHashEmbedder):
+    """Khai báo 1024 chiều nhưng trả vector 8 chiều (gateway cấu hình lệch)."""
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] * 8 for _ in texts]
+
+
+async def test_ingest_verifies_schema_and_probes_embedder(tmp_path: Path) -> None:
+    from mcp_docs.ports import IndexConfigError
+
+    idx = FakeIndexer()
+    await ingest(make_corpus(tmp_path), idx)
+    assert idx.verified_dim == 1024
+    with pytest.raises(IndexConfigError, match="DOCS_EMBED_DIM"):
+        await ingest(make_corpus(tmp_path / "b"), FakeIndexer(), embedder=_LyingEmbedder())

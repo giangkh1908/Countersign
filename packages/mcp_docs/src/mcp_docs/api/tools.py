@@ -51,8 +51,9 @@ SEARCH_OUTPUT_SCHEMA: dict[str, Any] = {
     "required": ["query", "mode", "notice", "spotlight", "results", "truncated"],
     "properties": {
         "query": {"type": "string"},
-        "mode": {"enum": ["hybrid", "fts_only", "taint_unavailable"]},
+        "mode": {"enum": ["hybrid", "vector_only", "fts_only", "taint_unavailable"]},
         "reranked": {"type": "boolean"},
+        "direct": {"type": "integer", "minimum": 0},
         "notice": {"type": "string"},
         "spotlight": _SPOT,
         "results": {

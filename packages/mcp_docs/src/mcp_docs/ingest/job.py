@@ -23,8 +23,10 @@ from ..ports import (
     DocumentRejected,
     Embedder,
     IndexedChunk,
+    TextSegmenter,
 )
-from ..services.chunking import ARTICLE_MAX_TOKENS, embed_text, split
+from ..services.chunking import ARTICLE_MAX_TOKENS, CHUNKER_VERSION, embed_text, split
+from ..services.index_checks import compute_index_sig, probe_embedder
 from ..services.normalize import normalize_text
 
 log = logging.getLogger("acme.docs.ingest")
@@ -98,8 +100,24 @@ async def run_ingest(
     indexer: DocumentIndexer,
     force: bool = False,
     article_max_tokens: int = ARTICLE_MAX_TOKENS,
+    segmenter: TextSegmenter | None = None,
+    embed_model: str = "",
+    verify: bool = True,
 ) -> IngestReport:
+    """`verify`: kiểm cột embedding và thăm dò embedder trước khi ghi (sai chiều => `IndexConfigError`)."""
     metas = load_metadata(corpus_dir)
+    dim = embedder.dim
+    if verify:
+        await indexer.verify_schema(dim)
+        await probe_embedder(embedder, dim)
+    seg_name = segmenter.name if segmenter else "-"
+    index_sig = compute_index_sig(
+        chunker_version=CHUNKER_VERSION,
+        embed_model=embed_model,
+        embed_dim=dim,
+        article_max_tokens=article_max_tokens,
+        segmenter=seg_name,
+    )
     # kiểm tra mọi file trước khi ghi: fail sớm, không ghi dở
     files: dict[str, Path] = {}
     root = corpus_dir.resolve()  # noqa: ASYNC240 - đọc đĩa một lần lúc khởi động job
@@ -114,7 +132,7 @@ async def run_ingest(
         f = files[m.id]
         actual = hashlib.sha256(f.read_bytes()).hexdigest()
         meta = m if actual == m.sha256 else _with_sha(m, actual)
-        if not force and await indexer.is_current(meta):
+        if not force and await indexer.is_current(meta, index_sig):
             report.skipped.append(meta.source_path)
             continue
         doc = loader_for(f).load(f, source_path=meta.source_path)
@@ -126,11 +144,25 @@ async def run_ingest(
         title = doc.title if doc.kind == "article" else None
         vectors = await embedder.embed([embed_text(c, title) for c in chunks])
         await indexer.replace(
-            meta, [IndexedChunk(c, v) for c, v in zip(chunks, vectors, strict=True)]
+            meta,
+            [
+                IndexedChunk(c, v, segmenter.segment(c.content) if segmenter else None)
+                for c, v in zip(chunks, vectors, strict=True)
+            ],
+            index_sig,
         )
         report.ingested.append(meta.source_path)
         report.chunks += len(chunks)
         log.info("ingested %s (%d chunks)", meta.source_path, len(chunks))
+    if report.ingested:
+        await indexer.record_index_meta(
+            {
+                "embed_model": embed_model,
+                "embed_dim": str(dim),
+                "chunker_version": CHUNKER_VERSION,
+                "segmenter": seg_name,
+            }
+        )
     return report
 
 

@@ -1,6 +1,7 @@
 """Adapter `DocumentIndexer`: ghi `documents` + `chunks` bằng role `kn_ingest` (INSERT/UPDATE/DELETE).
 
-Một transaction cho mỗi tài liệu. `tsv` do Postgres sinh tự động. Idempotent theo `sha256`.
+Một transaction cho mỗi tài liệu. `tsv` và `tsv_seg` do Postgres sinh tự động (từ `content` và
+`fts_text`). Idempotent theo `sha256` + ACL + `index_sig`.
 """
 
 from __future__ import annotations
@@ -8,8 +9,8 @@ from __future__ import annotations
 import psycopg
 
 from ..ports.document_indexer import DocumentIndexer, IndexedChunk
-from ..ports.types import DocumentMeta, RetrievalUnavailable
-from ._pg import connect, vec_literal
+from ..ports.types import DocumentMeta, IndexConfigError, RetrievalUnavailable
+from ._pg import connect, embedding_dim, vec_literal
 
 
 class PgVectorIndexer(DocumentIndexer):
@@ -17,11 +18,36 @@ class PgVectorIndexer(DocumentIndexer):
         self._dsn = dsn
         self._dim = dim
 
-    async def is_current(self, meta: DocumentMeta) -> bool:
+    async def verify_schema(self, expected_dim: int) -> None:
+        try:
+            async with await connect(self._dsn) as conn:
+                dim = await embedding_dim(conn)
+        except (psycopg.Error, OSError, TimeoutError):
+            raise RetrievalUnavailable("database") from None
+        if dim != expected_dim:
+            raise IndexConfigError(
+                f"chunks.embedding là vector({dim}) nhưng DOCS_EMBED_DIM={expected_dim}; "
+                "đồng bộ EMBED_DIM và chạy lại knowledge-migrate"
+            )
+
+    async def record_index_meta(self, values: dict[str, str]) -> None:
+        try:
+            async with await connect(self._dsn) as conn, conn.transaction():
+                for k, v in values.items():
+                    await conn.execute(
+                        "INSERT INTO index_meta (key, value) VALUES (%s, %s)"
+                        " ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                        (k, v),
+                    )
+        except (psycopg.Error, OSError, TimeoutError):
+            raise RetrievalUnavailable("database") from None
+
+    async def is_current(self, meta: DocumentMeta, index_sig: str = "") -> bool:
         try:
             async with await connect(self._dsn) as conn:
                 cur = await conn.execute(
                     "SELECT d.sha256, d.department, d.classification, d.allowed_roles,"
+                    " d.index_sig,"
                     " (SELECT count(*) FROM chunks c WHERE c.document_id = d.id)"
                     " FROM documents d WHERE d.id = %s",
                     (meta.id,),
@@ -35,10 +61,13 @@ class PgVectorIndexer(DocumentIndexer):
             and row[1] == meta.department
             and row[2] == meta.classification
             and sorted(row[3]) == sorted(meta.allowed_roles)
-            and row[4] > 0
+            and row[4] == index_sig
+            and row[5] > 0
         )
 
-    async def replace(self, meta: DocumentMeta, chunks: list[IndexedChunk]) -> None:
+    async def replace(
+        self, meta: DocumentMeta, chunks: list[IndexedChunk], index_sig: str = ""
+    ) -> None:
         for c in chunks:
             if len(c.embedding) != self._dim:
                 raise ValueError("embedding dimension mismatch")
@@ -52,13 +81,15 @@ class PgVectorIndexer(DocumentIndexer):
                 version = (old[1] + (1 if old[0].strip() != meta.sha256 else 0)) if old else 1
                 await conn.execute(
                     "INSERT INTO documents (id, title, source_path, sha256, department,"
-                    " classification, allowed_roles, owner_sub, version, ingested_at)"
-                    " VALUES (%s,%s,%s,%s,%s,%s,%s::text[],%s,%s, now())"
+                    " classification, allowed_roles, owner_sub, version, doc_num, index_sig,"
+                    " ingested_at)"
+                    " VALUES (%s,%s,%s,%s,%s,%s,%s::text[],%s,%s,%s,%s, now())"
                     " ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title,"
                     " source_path=EXCLUDED.source_path, sha256=EXCLUDED.sha256,"
                     " department=EXCLUDED.department, classification=EXCLUDED.classification,"
                     " allowed_roles=EXCLUDED.allowed_roles, owner_sub=EXCLUDED.owner_sub,"
-                    " version=EXCLUDED.version, ingested_at=now()",
+                    " version=EXCLUDED.version, doc_num=EXCLUDED.doc_num,"
+                    " index_sig=EXCLUDED.index_sig, ingested_at=now()",
                     (
                         meta.id,
                         meta.title,
@@ -69,14 +100,17 @@ class PgVectorIndexer(DocumentIndexer):
                         roles,
                         meta.owner_sub,
                         version,
+                        meta.doc_num,
+                        index_sig,
                     ),
                 )
                 await conn.execute("DELETE FROM chunks WHERE document_id = %s", (meta.id,))
                 async with conn.cursor() as cur2:
                     await cur2.executemany(
                         "INSERT INTO chunks (document_id, ord, heading, content, n_tokens,"
-                        " department, classification, allowed_roles, embedding)"
-                        " VALUES (%s,%s,%s,%s,%s,%s,%s,%s::text[],%s::vector)",
+                        " department, classification, allowed_roles, embedding, article, clause,"
+                        " chapter, char_start, char_end, fts_text)"
+                        " VALUES (%s,%s,%s,%s,%s,%s,%s,%s::text[],%s::vector,%s,%s,%s,%s,%s,%s)",
                         [
                             (
                                 meta.id,
@@ -88,6 +122,12 @@ class PgVectorIndexer(DocumentIndexer):
                                 meta.classification,
                                 roles,
                                 vec_literal(c.embedding),
+                                c.chunk.article,
+                                c.chunk.clause,
+                                c.chunk.chapter,
+                                c.chunk.char_start,
+                                c.chunk.char_end,
+                                c.fts_text,
                             )
                             for c in chunks
                         ],
