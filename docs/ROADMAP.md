@@ -2,7 +2,7 @@
 
 > Phiên bản 2.1, 2026-11-01. Phạm vi theo [ADR-006](adr/ADR-006-scope-rag-citations.md) và [ADR-007](adr/ADR-007-actions-cache-observability.md). Lộ trình v1.3 (gateway đầy đủ, analytics, admin, hardening) xem git tag `backup/pre-prune-20261101`.
 > Mỗi milestone kết thúc bằng bản chạy được, test xanh, đạt DoD đo được. Ký hiệu: **R** = reader, **W** = worker, **O** = orchestrator.
-> Quy tắc vận hành: mỗi lúc một worker, phạm vi hẹp; review và merge xong mới giao việc tiếp; backup trước mọi thay đổi trạng thái.
+> Quy tắc vận hành: mặc định mỗi lúc một worker, phạm vi hẹp; chỉ chạy song song khi được yêu cầu và file không chồng nhau; review và merge xong mới giao việc phụ thuộc; backup trước mọi thay đổi trạng thái.
 
 ## Tổng quan
 
@@ -35,7 +35,7 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 | ✅ (345f304) Đưa tickets-mcp + approval-signer vào profile `tickets`; agent chạy được khi không có ticket (router chỉ docs/direct) | W | `docker compose up` mặc định không có 2 service này; smoke xanh; `--profile tickets` + E2E đóng ticket vẫn xanh |
 | ✅ Gỡ `depends_on` của agent → tickets-mcp và bff → approval-signer; xoá analytics-mcp, policy-sidecar, `GW_FEATURES`, `GW_SIDECAR_URL`, spikes, bench (dọn dẹp 2026-11-01) | W | Stack mặc định khoẻ khi không có tickets |
 | Đo RAM/CPU lúc rảnh ✅ 1,2 GiB (bảng trong README); còn đo khi chạy 20 câu hỏi, làm cùng R1 khi có truy xuất thật | W | Bảng số đo thật; mục tiêu < 2,5 GB lúc rảnh |
-| Tắt `directAccessGrants` của client `admin-cli` trong realm `acme` | W | Test realm: không client nào cho password grant |
+| ✅ Tắt `directAccessGrants` của client `admin-cli` trong realm `acme` (Keycloak tự tạo client này với grant bật; đã kiểm trên Keycloak thật) | W | Test realm: không client nào cho password grant |
 | Cập nhật CLAUDE.md, SOLUTION theo ADR-006 | O | Xong (2026-10-30) |
 
 **DoD R0:** compose mặc định chỉ gồm postgres, redis, keycloak, gateway, mock-provider, docs-mcp, agent, bff; smoke xanh; profile `tickets` vẫn xanh; bảng tài nguyên trong README.
