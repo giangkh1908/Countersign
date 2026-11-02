@@ -1,8 +1,17 @@
 # Alias model của gateway (contracts §8). Model id lấy từ đây, không hardcode trong code.
 # Đối chiếu id chính xác với docs của provider trước khi chạy thật.
 # Chỉ dùng phần tử đầu của `chain` (chưa có fallback).
-# Chỉ giữ alias có provider thật; `acme-embed` sẽ thêm lại khi làm embedding qua gateway (R1).
 default_max_output: 4096          # Anthropic bắt buộc max_tokens; dùng khi client không gửi
 aliases:
   acme-fast:  { chain: [anthropic/claude-haiku-5-5], timeout_s: 30 }
   acme-smart: { chain: [anthropic/claude-sonnet-5-5], timeout_s: 90 }
+  # Alias embedding theo block: đổi provider thật chỉ cần sửa block này (và GW_EMBEDDING_API_KEY).
+  # dim phải khớp schema pgvector (1024). Ví dụ provider thật (chuẩn OpenAI-compatible):
+  #   adapter: openai_compatible
+  #   base_url: https://<host>/v1
+  #   model: <id model của provider>
+  acme-embed:
+    kind: embedding
+    adapter: mock_hash
+    model: mock-hash-1024
+    dim: 1024

@@ -23,7 +23,7 @@ from mock_provider.settings import Settings as MockSettings
 PEPPER = "test-pepper-" + "x" * 32
 METRICS_TOKEN = "metrics-secret"
 MODELS_YAML = Path(__file__).resolve().parents[1] / "config" / "models.yaml"
-ALL_ALIASES = ("acme-fast", "acme-smart")
+ALL_ALIASES = ("acme-fast", "acme-smart", "acme-embed")
 
 
 def make_settings(**kw: object) -> Settings:

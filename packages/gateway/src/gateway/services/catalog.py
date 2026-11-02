@@ -26,6 +26,17 @@ class Resolved:
     default_max_output: int
 
 
+@dataclass(frozen=True, slots=True)
+class EmbeddingSpec:
+    """Block `kind: embedding` của một alias: adapter, id model, số chiều và tuỳ chọn riêng adapter."""
+
+    alias: str
+    adapter: str
+    model: str
+    dim: int
+    options: dict[str, Any]  # phần còn lại của block (vd base_url); adapter tự chọn phần cần
+
+
 class ModelCatalog:
     def __init__(self, data: dict[str, Any], provider_override: str | None = None) -> None:
         self._aliases: dict[str, dict[str, Any]] = dict(data.get("aliases") or {})
@@ -39,6 +50,19 @@ class ModelCatalog:
 
     def aliases(self) -> list[str]:
         return sorted(self._aliases)
+
+    def embedding(self, requested: str) -> EmbeddingSpec:
+        spec = self._aliases.get(requested)
+        if spec is None or spec.get("kind") != "embedding":
+            raise GatewayError("invalid_request", f"Unknown embedding model '{requested}'.")
+        reserved = {"kind", "adapter", "model", "dim"}
+        return EmbeddingSpec(
+            alias=requested,
+            adapter=str(spec.get("adapter", "")),
+            model=str(spec.get("model", "")),
+            dim=int(spec.get("dim", 1024)),
+            options={k: v for k, v in spec.items() if k not in reserved},
+        )
 
     def resolve(self, requested: str) -> Resolved:
         alias = requested
