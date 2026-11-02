@@ -20,6 +20,9 @@ class Settings(CommonSettings):
     gw_mock_base_url: str = "http://mock-provider:8900"  # adapter `mock`
     gw_anthropic_base_url: str | None = None  # None = endpoint công khai của SDK
     gw_provider_timeout_s: float = 60.0  # trần timeout HTTP tới provider
+    gw_embedding_api_key: str | None = (
+        None  # adapter `openai_compatible`; GW_EMBEDDING_API_KEY[_FILE]
+    )
     gw_max_body_bytes: int = 4 * 1024 * 1024
     gw_sink_flush_interval_s: float = 2.0  # chu kỳ đẩy buffer EventSink (usage_events)
 

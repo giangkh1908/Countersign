@@ -7,9 +7,18 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 
 from .ports.chat_provider import ChatProvider
+from .ports.embedding_provider import EmbeddingProvider
 from .ports.errors import KeyAlreadyExists, KeyNotFound
 from .ports.key_store import KeyStore
-from .ports.types import ChatChunk, ChatRequest, ChatResponse, KeyRecord, NewKey, ProviderError
+from .ports.types import (
+    ChatChunk,
+    ChatRequest,
+    ChatResponse,
+    EmbeddingResult,
+    KeyRecord,
+    NewKey,
+    ProviderError,
+)
 
 
 class FakeKeyStore(KeyStore):
@@ -83,6 +92,25 @@ class FakeChatProvider(ChatProvider):
             yield ch
 
 
+class FakeEmbeddingProvider(EmbeddingProvider):
+    """Trả vector dựng sẵn hoặc raise `ProviderError`; ghi lại lời gọi."""
+
+    name = "fake"
+
+    def __init__(
+        self, vectors: list[list[float]] | None = None, error: ProviderError | None = None
+    ) -> None:
+        self.vectors, self.error = vectors, error
+        self.calls: list[tuple[str, list[str]]] = []
+
+    async def embed(self, model: str, texts: list[str]) -> EmbeddingResult:
+        self.calls.append((model, texts))
+        if self.error:
+            raise self.error
+        assert self.vectors is not None
+        return EmbeddingResult(self.vectors, len(texts))
+
+
 def provider_lookup(**providers: ChatProvider) -> Callable[[str], ChatProvider]:
     from .ports.errors import ProviderNotConfigured
 
@@ -95,4 +123,4 @@ def provider_lookup(**providers: ChatProvider) -> Callable[[str], ChatProvider]:
     return get
 
 
-__all__ = ["FakeChatProvider", "FakeKeyStore", "provider_lookup"]
+__all__ = ["FakeChatProvider", "FakeEmbeddingProvider", "FakeKeyStore", "provider_lookup"]

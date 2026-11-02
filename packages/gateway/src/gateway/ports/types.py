@@ -24,6 +24,14 @@ class Usage:
 
 
 @dataclass(slots=True)
+class EmbeddingResult:
+    """Kết quả embed: `vectors[i]` ứng với `texts[i]`; `prompt_tokens` là số token đầu vào."""
+
+    vectors: list[list[float]]
+    prompt_tokens: int
+
+
+@dataclass(slots=True)
 class ChatRequest:
     """Form OpenAI đã chuẩn hoá. `model` là id model của provider (đã resolve từ alias)."""
 

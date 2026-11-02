@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .api.chat import router as chat_router
+from .api.embeddings import router as embeddings_router
 from .api.middleware import RequestIdMiddleware
 from .container import Container, build_container
 from .services.errors import GatewayError
@@ -58,6 +59,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         app.state.container = container
     app.add_middleware(RequestIdMiddleware)
     app.include_router(chat_router)
+    app.include_router(embeddings_router)
 
     @app.exception_handler(GatewayError)
     async def _gateway_error(_: Request, exc: GatewayError) -> JSONResponse:

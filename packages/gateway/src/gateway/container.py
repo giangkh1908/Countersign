@@ -10,12 +10,14 @@ from pathlib import Path
 from acme_common.factory import build_clock, build_event_sink, build_token_verifier
 from acme_common.ports import Clock, EventSink, TokenVerifier
 
-from .factory import ProviderPool, build_key_store
+from .factory import EmbeddingPool, ProviderPool, build_key_store
 from .ports.chat_provider import ChatProvider
+from .ports.embedding_provider import EmbeddingProvider
 from .ports.key_store import KeyStore
 from .services.auth import AuthService
-from .services.catalog import ModelCatalog
+from .services.catalog import EmbeddingSpec, ModelCatalog
 from .services.chat import ChatService
+from .services.embeddings import EmbeddingService
 from .services.metrics import Metrics
 from .settings import Settings
 
@@ -26,6 +28,7 @@ log = logging.getLogger("gateway")
 class Container:
     auth: AuthService
     chat: ChatService
+    embeddings: EmbeddingService
     metrics: Metrics
     sink: EventSink
     closers: list  # list[Callable[[], Awaitable[None]]]
@@ -48,6 +51,7 @@ def build_container(
     verifier: TokenVerifier | None = None,
     sink: EventSink | None = None,
     providers: Callable[[str], ChatProvider] | None = None,
+    embedders: Callable[[EmbeddingSpec], EmbeddingProvider] | None = None,
 ) -> Container:
     clock = clock or build_clock(settings.clock_adapter, settings)
     keys = keys or build_key_store(settings.gw_keystore_adapter, settings, clock=clock)
@@ -63,11 +67,16 @@ def build_container(
     catalog = ModelCatalog.from_file(models_config_path(settings), settings.gw_provider_override)
     pool = ProviderPool(settings)
     providers = providers or pool.get
+    embed_pool = EmbeddingPool(settings)
+    embedders = embedders or (
+        lambda spec: embed_pool.get(spec.alias, spec.adapter, {**spec.options, "dim": spec.dim})
+    )
     metrics = Metrics()
     return Container(
         auth=AuthService(keys, verifier, clock, settings.key_pepper, settings.key_pepper_prev),
         chat=ChatService(catalog, providers, sink, clock, metrics),
+        embeddings=EmbeddingService(catalog, embedders, sink, clock, metrics),
         metrics=metrics,
         sink=sink,
-        closers=[pool.aclose, keys.aclose],
+        closers=[pool.aclose, embed_pool.aclose, keys.aclose],
     )

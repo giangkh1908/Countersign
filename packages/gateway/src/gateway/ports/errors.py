@@ -7,6 +7,10 @@ class ProviderNotConfigured(NotConfigured):
     pass
 
 
+class EmbeddingNotConfigured(NotConfigured):
+    pass
+
+
 class KeyStoreNotConfigured(NotConfigured):
     pass
 

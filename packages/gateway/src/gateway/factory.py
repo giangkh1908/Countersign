@@ -7,13 +7,14 @@ import lười (`from .adapters.<vendor> import ...` nằm TRONG hàm). Tên l�
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from acme_common.ports import Clock
 
 from .ports.chat_provider import ChatProvider
-from .ports.errors import KeyStoreNotConfigured, ProviderNotConfigured
+from .ports.embedding_provider import EmbeddingProvider
+from .ports.errors import EmbeddingNotConfigured, KeyStoreNotConfigured, ProviderNotConfigured
 from .ports.key_store import KeyStore
 from .settings import Settings
 
@@ -52,6 +53,66 @@ def build_provider(name: str, settings: Settings) -> ChatProvider:
             f"unknown provider {name!r}; known: {sorted(_PROVIDERS)}"
         ) from None
     return loader(settings)
+
+
+# --- EmbeddingProvider ---
+
+
+def _load_mock_hash(settings: Settings, options: Mapping[str, Any]) -> EmbeddingProvider:
+    from .adapters.mock_hash import MockHashEmbeddingProvider
+
+    return MockHashEmbeddingProvider(int(options.get("dim", 1024)))
+
+
+def _load_openai_compatible(settings: Settings, options: Mapping[str, Any]) -> EmbeddingProvider:
+    from acme_common.http import RetryingHttpClient
+
+    from .adapters.openai_compatible import OpenAICompatibleEmbeddingProvider
+
+    base_url = options.get("base_url")
+    if not base_url:
+        raise EmbeddingNotConfigured("embedding adapter 'openai_compatible' requires 'base_url'")
+    http = RetryingHttpClient(timeout_s=float(options.get("timeout_s", 30)))
+    return OpenAICompatibleEmbeddingProvider(
+        base_url=str(base_url), api_key=settings.gw_embedding_api_key, http=http
+    )
+
+
+_EMBEDDINGS: dict[str, Callable[[Settings, Mapping[str, Any]], EmbeddingProvider]] = {
+    "mock_hash": _load_mock_hash,
+    "openai_compatible": _load_openai_compatible,
+}
+
+
+def build_embedding_provider(
+    name: str, settings: Settings, options: Mapping[str, Any] | None = None
+) -> EmbeddingProvider:
+    """`options`: phần block alias trong models.yaml (dim, base_url, timeout_s...)."""
+    try:
+        loader = _EMBEDDINGS[name]
+    except KeyError:
+        raise EmbeddingNotConfigured(
+            f"unknown embedding provider {name!r}; known: {sorted(_EMBEDDINGS)}"
+        ) from None
+    return loader(settings, options or {})
+
+
+class EmbeddingPool:
+    """Cache một instance `EmbeddingProvider` cho mỗi alias embedding."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._items: dict[str, EmbeddingProvider] = {}
+
+    def get(self, alias: str, adapter: str, options: Mapping[str, Any]) -> EmbeddingProvider:
+        if alias not in self._items:
+            self._items[alias] = build_embedding_provider(adapter, self._settings, {**options})
+        return self._items[alias]
+
+    async def aclose(self) -> None:
+        for p in self._items.values():
+            await p.aclose()
+        self._items.clear()
 
 
 # --- KeyStore ---
