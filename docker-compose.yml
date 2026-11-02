@@ -220,9 +220,11 @@ services:
       EVENT_SINK_DATABASE_URL_FILE: /run/secrets/gw_database_url  # role gw_app (INSERT usage_events, audit_log)
       GW_KEY_PEPPER_FILE: /run/secrets/gw_key_pepper
       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      GW_MODELS_CONFIG: ${GW_MODELS_CONFIG:-/app/packages/gateway/config/models.yaml}   # models.ollama.yaml: embedding local, xem README
       GW_PROVIDER_OVERRIDE: ${GW_PROVIDER_OVERRIDE:-mock}      # mặc định mock (chưa có khoá provider thật); factory chọn adapter `mock` (contracts §9.1 mục 5)
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key          # khoá ngoài DB
       AUDIT_HMAC_KEY_ID: ${AUDIT_HMAC_KEY_ID:-1}
+    extra_hosts: ["host.docker.internal:host-gateway"]   # tới runtime embedding trên host (chỉ dùng khi GW_MODELS_CONFIG trỏ models.ollama.yaml)
     secrets: [gw_app_password, gw_database_url, gw_key_pepper, anthropic_api_key, audit_hmac_key, metrics_token]
     ports: ["8000:8000"]                      # dev; publish được vì gateway có mặt ở network egress (non-internal)
     networks: [core, egress]
@@ -303,6 +305,7 @@ services:
       MCP_REDIS_URL_FILE: /run/secrets/docs_redis_url
       DOCS_GATEWAY_URL: http://gateway:8000/v1                 # embedding qua gateway (alias acme-embed)
       DOCS_EMBEDDER: ${DOCS_EMBEDDER:-gateway_http}
+      DOCS_EMBED_TIMEOUT_S: ${DOCS_EMBED_TIMEOUT_S:-240}      # > timeout_s của gateway để lỗi gateway tới trước
       DOCS_USE_VECTOR: ${DOCS_USE_VECTOR:-true}
       DOCS_USE_FTS: ${DOCS_USE_FTS:-true}                      # nhánh Postgres FTS (không phải BM25)
       DOCS_FTS_MODE: ${DOCS_FTS_MODE:-unaccent}                # unaccent | segmented

@@ -72,7 +72,12 @@ def _load_openai_compatible(settings: Settings, options: Mapping[str, Any]) -> E
     base_url = options.get("base_url")
     if not base_url:
         raise EmbeddingNotConfigured("embedding adapter 'openai_compatible' requires 'base_url'")
-    http = RetryingHttpClient(timeout_s=float(options.get("timeout_s", 30)))
+    http = RetryingHttpClient(
+        timeout_s=float(options.get("timeout_s", 30)),
+        max_attempts=int(
+            options.get("max_attempts", 3)
+        ),  # runtime chậm: đặt 1 để timeout không nhân tải
+    )
     return OpenAICompatibleEmbeddingProvider(
         base_url=str(base_url), api_key=settings.gw_embedding_api_key, http=http
     )

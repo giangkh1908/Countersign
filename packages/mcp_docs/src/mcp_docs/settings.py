@@ -24,6 +24,12 @@ class Settings(CommonSettings):
     docs_indexer: str = "pgvector_hybrid"
     docs_embedder: str = "fake_hash"  # dev/test; compose đặt "gateway_http"
     docs_embed_model: str = "acme-embed"
+    docs_embed_timeout_s: float = (
+        240.0  # > timeout_s embedding của gateway; lô 32 chunk trên GPU yếu mất hàng chục giây
+    )
+    docs_embed_max_attempts: int = (
+        1  # thử lại khi timeout nhân đôi tải lên GPU: mặc định không thử lại
+    )
     docs_embed_dim: int = (
         1024  # khớp chunks.embedding vector(EMBED_DIM); verify_schema kiểm lúc khởi động
     )

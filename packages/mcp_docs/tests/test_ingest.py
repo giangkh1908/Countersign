@@ -114,17 +114,42 @@ def test_load_metadata_requires_file(tmp_path: Path) -> None:
         load_metadata(tmp_path)
 
 
+class _NamedEmbedder(FakeHashEmbedder):
+    """Embedder tất định mang id model tuỳ ý (mô phỏng gateway đổi model sau cùng một alias)."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__()
+        self._name = name
+
+    @property
+    def model_id(self) -> str:
+        return self._name
+
+
+async def test_model_change_behind_same_alias_reingests_without_force(tmp_path: Path) -> None:
+    corpus, idx = make_corpus(tmp_path), FakeIndexer()
+    assert (await ingest(corpus, idx, embedder=_NamedEmbedder("mock-hash-1024"))).ingested
+    assert (await ingest(corpus, idx, embedder=_NamedEmbedder("mock-hash-1024"))).ingested == []
+    rep = await ingest(corpus, idx, embedder=_NamedEmbedder("bge-m3"))  # không force
+    assert rep.ingested and rep.chunks >= 1
+    assert idx.index_meta["embed_model"] == "bge-m3"
+
+
 async def test_index_sig_change_triggers_reingest_and_fts_text_is_stored(tmp_path: Path) -> None:
     from mcp_docs.adapters.segmenter_none import NoSegmenter
     from mcp_docs.adapters.segmenter_syllable_bigram import SyllableBigramSegmenter
 
     corpus, idx = make_corpus(tmp_path), FakeIndexer()
-    base = {"segmenter": SyllableBigramSegmenter(), "embed_model": "m1"}
+    base = {"segmenter": SyllableBigramSegmenter(), "embedder": _NamedEmbedder("m1")}
     assert (await ingest(corpus, idx, **base)).ingested
     chunks = next(iter(idx.docs.values()))[1]
     assert all(c.fts_text and c.fts_text.split()[0].islower() for c in chunks)
     assert (await ingest(corpus, idx, **base)).ingested == []
-    for kw in ({"embed_model": "m2"}, {"segmenter": NoSegmenter()}, {"article_max_tokens": 300}):
+    for kw in (
+        {"embedder": _NamedEmbedder("m2")},
+        {"segmenter": NoSegmenter()},
+        {"article_max_tokens": 300},
+    ):
         assert (await ingest(corpus, idx, **(base | kw))).ingested, kw
         assert (await ingest(corpus, idx, **base)).ingested  # đổi lại cũng nạp lại
     assert idx.index_meta["embed_model"] == "m1" and idx.index_meta["embed_dim"] == "1024"

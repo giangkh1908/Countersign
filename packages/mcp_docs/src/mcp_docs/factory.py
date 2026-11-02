@@ -10,7 +10,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from acme_common.factory import build_http_client, lookup
+from acme_common.factory import lookup
+from acme_common.http import RetryingHttpClient
 
 from .ports import (
     ArticleReader,
@@ -44,7 +45,9 @@ def _load_gateway_http(s: Settings) -> Embedder:
     return GatewayHttpEmbedder(
         base_url=s.docs_gateway_url,
         api_key=s.docs_gateway_key,
-        http=build_http_client(s),
+        http=RetryingHttpClient(
+            timeout_s=s.docs_embed_timeout_s, max_attempts=s.docs_embed_max_attempts
+        ),
         model=s.docs_embed_model,
         dim=s.docs_embed_dim,
     )

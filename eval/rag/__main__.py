@@ -66,6 +66,7 @@ async def _run(args: argparse.Namespace) -> int:
     factory = backends.fake_factory(raw) if args.fake else backends.real_factory(settings)
     results = await runner.run_all(factory, questions, eval_principal())
 
+    embed_model = None if args.fake else await backends.resolve_embed_model(settings)
     now = datetime.now(UTC)
     run_id = now.strftime("%Y%m%dT%H%M%S")
     report = runner.build_report(
@@ -79,7 +80,9 @@ async def _run(args: argparse.Namespace) -> int:
             "n": len(questions),
             "distribution": distribution(questions),
         },
-        versions=backends.index_versions(settings, fake=args.fake, index_sig=args.index_sig),
+        versions=backends.index_versions(
+            settings, fake=args.fake, index_sig=args.index_sig, embed_model=embed_model
+        ),
         fake=args.fake,
     )
     out_dir = Path(args.out) / run_id

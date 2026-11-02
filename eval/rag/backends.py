@@ -104,12 +104,24 @@ def real_factory(settings: Settings) -> RetrieverFactory:
     return build
 
 
-def index_versions(settings: Settings, *, fake: bool, index_sig: str | None) -> dict[str, object]:
+async def resolve_embed_model(settings: Settings) -> str:
+    """Id model thật của embedder đang cấu hình (gọi thăm dò một lần để gateway báo id)."""
+    embedder = build_embedder(settings.docs_embedder, settings)
+    try:
+        await embedder.embed(["probe"])
+        return embedder.model_id
+    finally:
+        await embedder.aclose()
+
+
+def index_versions(
+    settings: Settings, *, fake: bool, index_sig: str | None, embed_model: str | None = None
+) -> dict[str, object]:
     """Phiên bản index ghi vào báo cáo. `index_sig` thật do người chạy truyền (CLI/env)."""
     if fake:
         return {"embed_model": "fake_hash", "embed_dim": 256, "index_sig": "fake"}
     return {
-        "embed_model": settings.docs_embed_model,
+        "embed_model": embed_model or settings.docs_embed_model,
         "embed_dim": settings.docs_embed_dim,
         "embedder": settings.docs_embedder,
         "index_sig": index_sig or os.environ.get("DOCS_INDEX_SIG") or "unknown",
