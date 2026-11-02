@@ -28,15 +28,16 @@ Bật ticket: `docker compose --profile tickets up -d`. Dừng: `make down`. Log
 
 ### Tài nguyên
 
-Đo 2026-11-02 trên Docker Desktop (WSL2), tổng `docker stats` các container, dùng `mock-provider`, chưa có dữ liệu RAG thật:
+Đo 2026-11-02 trên Docker Desktop (WSL2), tổng `docker stats` các container (lấy mẫu mỗi 2 giây), dùng `mock-provider`:
 
 | Trạng thái | RAM |
 |---|---|
 | Stack mặc định, rảnh | 1,2 GiB |
 | Thêm profile `tickets`, rảnh | 1,3 GiB |
 | Đỉnh khi chạy E2E đóng ticket | 1,4 GiB |
+| Đỉnh khi chạy 20 câu hỏi qua luồng agent thật (kho đã ingest 2.072 chunk, embedding `mock_hash` qua gateway) | 1,26 GiB (trung bình 1,24) |
 
-Keycloak chiếm khoảng 630 MiB. Số trên chưa tính Docker engine và cache của hệ điều hành.
+Keycloak chiếm khoảng 550 đến 630 MiB. Trong lượt 20 câu hỏi, CPU trung bình mỗi container dưới 10% và đỉnh cao nhất 48% (một lõi): bff 47%, keycloak 48%, docs-mcp 28%, agent 26%, gateway 26% (bff và agent gồm cả tiến trình `docker exec` của script đo). Câu hỏi đi qua `search_documents` thật (agent, docs-mcp, gateway, Postgres) nhưng LLM là `mock-provider` được kịch bản hoá để gọi công cụ tìm kiếm, nên số này không gồm chi phí của LLM thật. Số trên chưa tính Docker engine và cache của hệ điều hành.
 
 ### Ingest cho docs-mcp
 
@@ -46,7 +47,7 @@ Sau bước 5, nạp tài liệu vào kho tri thức:
 uv run python -m mcp_docs.ingest [--corpus-dir data/generated] [--force]
 ```
 
-Cần `DOCS_INGEST_DATABASE_URL` (role `kn_ingest`) trong môi trường. Ingest và truy vấn phải dùng cùng embedder (`DOCS_EMBEDDER`, hiện mặc định `fake_hash`); khác embedder thì vector không so sánh được, phải ingest lại với `--force`.
+Cần `DOCS_INGEST_DATABASE_URL` (role `kn_ingest`) trong môi trường. Ingest và truy vấn phải dùng cùng embedder (`DOCS_EMBEDDER`: mặc định ngoài compose là `fake_hash`, compose đặt `gateway_http`); khác embedder thì vector không so sánh được, phải ingest lại với `--force`.
 
 ## Tải corpus luật
 
@@ -54,7 +55,16 @@ Cần `DOCS_INGEST_DATABASE_URL` (role `kn_ingest`) trong môi trường. Ingest
 uv run --with beautifulsoup4 python -m data.vbpl
 ```
 
-Ghi vào `data/raw/` (gitignore), khoảng 1 phút. Danh sách chọn: `data/vbpl/selection.json`. Loader nạp luật vào kho là việc của R1, chưa có.
+Ghi vào `data/raw/` (gitignore), khoảng 1 phút. Danh sách chọn: `data/vbpl/selection.json`.
+
+Nạp luật vào kho: sinh metadata ACL rồi ingest thư mục đó (loader `vbpl_articles`, Điều dài cắt theo khoản):
+
+```
+uv run python -m data.vbpl.metadata            # ghi data/raw/vbpl/documents.jsonl
+uv run python -m mcp_docs.ingest --corpus-dir data/raw/vbpl
+```
+
+Đo 2026-11-02: 19 văn bản, 2.003 chunk, khoảng 11 giây với `gateway_http` + `acme-embed` (mock_hash); ingest lần hai bỏ qua cả 19 văn bản. Bộ 30 tài liệu ACME nạp riêng bằng `--corpus-dir data/generated` (69 chunk, 3 giây).
 
 ## Kiểm thử
 

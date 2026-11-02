@@ -70,7 +70,7 @@ async def test_run_all_dong_retriever_va_goi_du_4_cau_hinh():
 
     out = await runner.run_all(factory, QS[:1], eval_principal())
     assert list(out) == list(runner.CONFIGS)
-    assert len(built) == 4 and all(r.closed for r in built)
+    assert len(built) == len(runner.CONFIGS) and all(r.closed for r in built)
     assert all(r.aggregate()["recall@5"] == 1.0 for r in out.values())
 
 
@@ -156,3 +156,36 @@ def test_cli_validate(raw: Path, tmp_path: Path, capsys, write_suite):
     )
     assert cli.main(["validate", "--suite", str(suite), "--raw-dir", str(raw)]) == 0
     assert "OK: 1 câu" in capsys.readouterr().out
+
+
+def test_overrides_tao_duoc_settings_hop_le():
+    """Hồi quy: `docs_direct_lookup` là str off|pin; bool từng làm Settings ném ValidationError."""
+    from mcp_docs.settings import Settings
+
+    for name in runner.CONFIGS:
+        s = Settings(**{**Settings().model_dump(), **backends.OVERRIDES[name]})
+        assert s.docs_direct_lookup == ("pin" if name == "hybrid_direct" else "off")
+    assert Settings(**backends.OVERRIDES["fts_segmented"]).docs_fts_mode == "segmented"
+
+
+async def test_pinning_retriever_ghim_dieu_nen_trong_cau_hoi():
+    from dataclasses import replace
+
+    from mcp_docs.testing import FakeArticleReader, FakeRetriever, make_chunk
+
+    def law(i: int, article: str):
+        return replace(
+            make_chunk(i, "ALL", 0),
+            title="Bộ luật Lao động",
+            doc_num="45/2019/QH14",
+            article=article,
+        )
+
+    target = law(10, "38")
+    inner = FakeRetriever([make_chunk(1, "ALL", 0), make_chunk(2, "ALL", 0)])
+    r = backends.PinningRetriever(inner, FakeArticleReader([target, law(11, "5")]))
+    found = await r.search("Điều 38 Bộ luật Lao động quy định gì", eval_principal(), 3)
+    assert [c.chunk_id for c in found.chunks] == [10, 1, 2]
+    # không nêu Điều thì giữ nguyên kết quả của retriever bên trong
+    plain = await r.search("nghỉ phép năm", eval_principal(), 3)
+    assert [c.chunk_id for c in plain.chunks] == [1, 2]

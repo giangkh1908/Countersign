@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 import uuid
 from pathlib import Path
 
@@ -65,6 +66,8 @@ def build_metadata(raw_dir: Path, selection: list[dict] | None = None) -> list[d
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):  # console Windows mặc định cp1252
+        sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default="data/raw/vbpl")
     args = ap.parse_args()

@@ -34,7 +34,7 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 |---|---|---|
 | ✅ (345f304) Đưa tickets-mcp + approval-signer vào profile `tickets`; agent chạy được khi không có ticket (router chỉ docs/direct) | W | `docker compose up` mặc định không có 2 service này; smoke xanh; `--profile tickets` + E2E đóng ticket vẫn xanh |
 | ✅ Gỡ `depends_on` của agent → tickets-mcp và bff → approval-signer; xoá analytics-mcp, policy-sidecar, `GW_FEATURES`, `GW_SIDECAR_URL`, spikes, bench (dọn dẹp 2026-11-01) | W | Stack mặc định khoẻ khi không có tickets |
-| Đo RAM/CPU lúc rảnh ✅ 1,2 GiB (bảng trong README); còn đo khi chạy 20 câu hỏi, làm cùng R1 khi có truy xuất thật | W | Bảng số đo thật; mục tiêu < 2,5 GB lúc rảnh |
+| ✅ Đo RAM/CPU: rảnh 1,2 GiB; khi chạy 20 câu hỏi qua luồng agent thật (có `search_documents`, kho đã ingest) đỉnh 1,26 GiB (bảng trong README) | W | Bảng số đo thật; mục tiêu < 2,5 GB lúc rảnh |
 | ✅ Tắt `directAccessGrants` của client `admin-cli` trong realm `acme` (Keycloak tự tạo client này với grant bật; đã kiểm trên Keycloak thật) | W | Test realm: không client nào cho password grant |
 | Cập nhật CLAUDE.md, SOLUTION theo ADR-006 | O | Xong (2026-10-30) |
 
@@ -44,18 +44,30 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| Gateway `/v1/embeddings` (OpenAI-compatible), thêm alias `acme-embed` vào `models.yaml` (hiện chỉ có `acme-fast`, `acme-smart`), port `EmbeddingProvider`, adapter provider thật + mock tất định; ghi `usage_events` | W | Test hợp đồng bằng SDK `openai`; leak-grep rỗng |
-| Chọn model embedding; migration `chunks` theo đúng số chiều (bỏ cứng `vector(1024)`), thêm cột `article`, `clause`, `char_start`, `char_end` | W | Migration lên/xuống được; kiểm số chiều khi khởi động |
-| docs-mcp: loader `vbpl_articles` (JSON Điều từ `data/vbpl`, cắt Điều dài theo khoản), gán `department`/`classification` theo nhóm như `data/SOURCES.md` | W | 19 văn bản / 1.557 Điều nạp đủ; nạp lại ra cùng số chunk |
-| docs-mcp: embedder thật qua gateway (bỏ `fake_hash` khỏi đường mặc định); ingest corpus luật + 30 tài liệu ACME tổng hợp | W | Ingest lặp lại được; số chunk khớp |
-| Bộ câu hỏi có nhãn ~150 câu trên corpus luật: LLM sinh nháp từ từng Điều, người kiểm; nhãn vàng (văn bản, Điều, khoản); loại câu (tra cứu, tổng hợp nhiều Điều/luật, không có câu trả lời); câu hỏi viết theo giọng nhân viên, không chép lời luật | W + O duyệt mẫu | Kiểm tay 100% nhãn; phân bố theo nhóm và loại câu ghi trong manifest |
+| ✅ (adapter provider thật chưa có, chạy bằng mock tất định `mock_hash`) Gateway `/v1/embeddings` (OpenAI-compatible), thêm alias `acme-embed` vào `models.yaml` (hiện chỉ có `acme-fast`, `acme-smart`), port `EmbeddingProvider`, adapter provider thật + mock tất định; ghi `usage_events` | W | Test hợp đồng bằng SDK `openai`; leak-grep rỗng |
+| Migration `chunks` theo đúng số chiều (bỏ cứng `vector(1024)`), thêm cột `article`, `clause`, `char_start`, `char_end` ✅ (đã thử: đổi `EMBED_DIM` khi có dữ liệu thì migrate dừng, trả về 1024 thì chạy lại được, dữ liệu nguyên vẹn). **Chọn model embedding thật: chưa làm** | W | Migration lên/xuống được; kiểm số chiều khi khởi động |
+| ✅ docs-mcp: loader `vbpl_articles` (JSON Điều từ `data/vbpl`, cắt Điều dài theo khoản), gán `department`/`classification` theo nhóm như `data/SOURCES.md` (`python -m data.vbpl.metadata` sinh `documents.jsonl`) | W | 19 văn bản / 1.557 Điều nạp đủ; nạp lại ra cùng số chunk |
+| ✅ (với embedding giả `mock_hash`) docs-mcp: embedder qua gateway (`gateway_http`, compose mặc định); ingest 19 văn bản luật (2.003 chunk) + 30 tài liệu ACME (69 chunk); ingest lần hai bỏ qua hết; offset khớp trên cả 2.003 chunk luật. **Ingest lại bằng embedding thật: chờ model thật** | W | Ingest lặp lại được; số chunk khớp |
+| (40/150 câu, trong đó 10 câu nêu số Điều) Bộ câu hỏi có nhãn ~150 câu trên corpus luật: LLM sinh nháp từ từng Điều, người kiểm; nhãn vàng (văn bản, Điều, khoản); loại câu (tra cứu, tổng hợp nhiều Điều/luật, không có câu trả lời); câu hỏi viết theo giọng nhân viên, không chép lời luật | W + O duyệt mẫu | Kiểm tay 100% nhãn; phân bố theo nhóm và loại câu ghi trong manifest |
 | (Phụ) Chạy cùng script đánh giá trên Zalo legal (corpus riêng) làm benchmark ngoài | W | Có số recall@k để so với công bố khác |
-| Hybrid search: pgvector + Postgres full-text (tiếng Việt bỏ dấu/không bỏ dấu), trộn RRF; rerank tuỳ chọn qua gateway; tra trực tiếp khi câu hỏi nêu số Điều/số hiệu | W | Bật/tắt từng thành phần bằng config |
-| Script đánh giá truy xuất: recall@k, MRR, nDCG theo loại câu; so 4 cấu hình (vector, BM25, hybrid, hybrid+rerank) | W | Bảng kết quả có seed, phiên bản, chi phí |
+| ✅ trừ rerank: Hybrid search: pgvector + Postgres full-text (tiếng Việt bỏ dấu/không bỏ dấu), trộn RRF; rerank tuỳ chọn qua gateway; tra trực tiếp khi câu hỏi nêu số Điều/số hiệu | W | Bật/tắt từng thành phần bằng config |
+| ✅ trừ rerank (đã chạy thật 5 cấu hình trên 40 câu, xem dưới): Script đánh giá truy xuất: recall@k, MRR, nDCG theo loại câu; so 4 cấu hình (vector, BM25, hybrid, hybrid+rerank) | W | Bảng kết quả có seed, phiên bản, chi phí |
 
 **DoD R1:** có bảng recall@5/@10 và MRR cho 4 cấu hình trên ~150 câu. Cấu hình mặc định được chọn theo số đo, không theo cảm tính. Toàn bộ chạy lại được bằng một lệnh.
 
-**Khung đánh giá truy xuất (xong khung, chưa có số thật):** `eval/rag/` có chỉ số (recall@k, hit@k, MRR, nDCG@10; hàm thuần, có test), định dạng `vbpl-v1.jsonl` kèm trình kiểm nhãn so với `data/raw/vbpl`, và script chạy 4 cấu hình (vector, FTS, hybrid, hybrid + tra trực tiếp) qua port `DocumentRetriever`. Mới có 30/150 câu (đều loại tra cứu, đủ 19 văn bản); 120 câu còn lại, các câu tổng hợp và câu không có đáp án làm ở đợt sau. Cấu hình `hybrid_rerank` và khoảng tin cậy bootstrap chưa làm. Báo cáo JSON ghi `index_sig`, model, chiều embedding vào `eval/results/rag/<run_id>/report.json` (đã gitignore).
+**Khung đánh giá truy xuất (đã chạy thật trên index mock_hash):** `eval/rag/` có chỉ số (recall@k, hit@k, MRR, nDCG@10; hàm thuần, có test), định dạng `vbpl-v1.jsonl` kèm trình kiểm nhãn so với `data/raw/vbpl`, và script chạy 5 cấu hình (vector, FTS `unaccent`, FTS tách từ `segmented`, hybrid, hybrid + tra trực tiếp) qua port `DocumentRetriever`. Cấu hình `hybrid_direct` dùng chung `ArticlePinner` với `DocumentService`. Mới có 40/150 câu (đều loại tra cứu, đủ 19 văn bản; 10 câu nêu số Điều); các câu tổng hợp và câu không có đáp án làm ở đợt sau. Cấu hình `hybrid_rerank` và khoảng tin cậy bootstrap chưa làm. Báo cáo JSON ghi `index_sig`, model, chiều embedding vào `eval/results/rag/<run_id>/report.json` (đã gitignore).
+
+**Kết quả lần chạy 2026-11-02 (40 câu, Điều là đơn vị chấm, index 2.003 chunk luật + 69 chunk ACME):**
+
+| Cấu hình | recall@5 | recall@10 | hit@5 | MRR | nDCG@10 | p50 ms |
+|---|---|---|---|---|---|---|
+| chỉ vector (mock_hash) | 0,637 | 0,762 | 0,650 | 0,478 | 0,538 | 45 |
+| chỉ FTS (`unaccent`) | 0,287 | 0,438 | 0,300 | 0,184 | 0,242 | 121 |
+| chỉ FTS (tách từ, `segmented`) | 0,312 | 0,362 | 0,325 | 0,203 | 0,238 | 265 |
+| hybrid (RRF, mock_hash) | 0,438 | 0,562 | 0,450 | 0,324 | 0,373 | 142 |
+| hybrid + tra trực tiếp (mock_hash) | 0,562 | 0,688 | 0,575 | 0,500 | 0,536 | 153 |
+
+**Cách đọc (không phải kết quả nghiên cứu cho các hàng có vector):** vector là `mock_hash` (băm từ và n-gram ký tự, không có ngữ nghĩa), nên các hàng vector, hybrid và hybrid + tra trực tiếp chỉ chứng minh luồng chạy thông suốt; **chỉ hai hàng FTS là số thật**. Khi chưa có embedding thật, không rút ra được kết luận về hybrid so với vector, và chưa chọn cấu hình mặc định. Điều quan sát được: FTS đang yếu (truy vấn OR các từ của câu hỏi, `ts_rank_cd`, không loại từ dừng) và kéo hybrid xuống dưới vector; `segmented` hơn `unaccent` ở recall@5 nhưng kém ở recall@10, mẫu 40 câu chưa đủ để kết luận. Tra trực tiếp có tác dụng đúng thiết kế: trên 10 câu nêu số Điều, recall@5 của hybrid + tra trực tiếp là 1,000 so với 0,500 của hybrid; trên 30 câu còn lại hai cấu hình bằng nhau (0,417). Việc còn chờ embedding thật: chọn model, ingest lại, chạy lại bảng này, chọn cấu hình mặc định, rerank.
 
 Lệnh (máy không có `make` thì chạy dòng `uv run` tương đương; corpus thô ở `data/raw/vbpl` hoặc đặt `VBPL_RAW_DIR`):
 
@@ -63,9 +75,9 @@ Lệnh (máy không có `make` thì chạy dòng `uv run` tương đương; corp
 |---|---|---|
 | Kiểm nhãn | `make eval-rag-validate` | `uv run --all-packages python -m eval.rag validate --suite vbpl-v1` |
 | Chạy với retriever giả (kiểm mạch, số vô nghĩa) | `make eval-rag-fake` | `uv run --all-packages python -m eval.rag run --suite vbpl-v1 --fake` |
-| Chạy thật (cần hybrid trong docs-mcp, Postgres đã ingest) | `make eval-rag` | `uv run --all-packages python -m eval.rag run --suite vbpl-v1 --index-sig <sig>` |
+| Chạy thật (cần Postgres đã ingest; chạy từ máy có thể nối tới Postgres và gateway) | `make eval-rag` | `uv run --all-packages python -m eval.rag run --suite vbpl-v1 --index-sig <sig>` |
 
-Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_FTS`, `DOCS_DIRECT_LOOKUP`; thiếu thì script dừng và báo rõ, không chạy nhầm cấu hình.
+Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_FTS`, `DOCS_DIRECT_LOOKUP` (`off|pin`), `DOCS_FTS_MODE`; thiếu thì script dừng và báo rõ, không chạy nhầm cấu hình. Eval đi qua cùng ACL với một `Principal` đọc được toàn bộ corpus luật (`eval_principal()` trong `eval/rag/fakes.py`, chỉ dùng cho đánh giá).
 
 ## R2 — Câu trả lời có trích dẫn kiểm chứng được
 
