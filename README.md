@@ -35,7 +35,7 @@ Bật ticket: `docker compose --profile tickets up -d`. Dừng: `make down`. Log
 | Stack mặc định, rảnh | 1,2 GiB |
 | Thêm profile `tickets`, rảnh | 1,3 GiB |
 | Đỉnh khi chạy E2E đóng ticket | 1,4 GiB |
-| Đỉnh khi chạy 20 câu hỏi qua luồng agent thật (kho đã ingest 2.072 chunk, embedding `mock_hash` qua gateway) | 1,26 GiB (trung bình 1,24) |
+| Đỉnh khi chạy 20 câu hỏi qua luồng agent thật (kho đã ingest 2.072 chunk; số này đo với embedding `mock_hash`, chưa đo lại với Ollama) | 1,26 GiB (trung bình 1,24) |
 
 Keycloak chiếm khoảng 550 đến 630 MiB. Trong lượt 20 câu hỏi, CPU trung bình mỗi container dưới 10% và đỉnh cao nhất 48% (một lõi): bff 47%, keycloak 48%, docs-mcp 28%, agent 26%, gateway 26% (bff và agent gồm cả tiến trình `docker exec` của script đo). Câu hỏi đi qua `search_documents` thật (agent, docs-mcp, gateway, Postgres) nhưng LLM là `mock-provider` được kịch bản hoá để gọi công cụ tìm kiếm, nên số này không gồm chi phí của LLM thật. Số trên chưa tính Docker engine và cache của hệ điều hành.
 
@@ -47,7 +47,19 @@ Sau bước 5, nạp tài liệu vào kho tri thức:
 uv run python -m mcp_docs.ingest [--corpus-dir data/generated] [--force]
 ```
 
-Cần `DOCS_INGEST_DATABASE_URL` (role `kn_ingest`) trong môi trường. Ingest và truy vấn phải dùng cùng embedder (`DOCS_EMBEDDER`: mặc định ngoài compose là `fake_hash`, compose đặt `gateway_http`); khác embedder thì vector không so sánh được, phải ingest lại với `--force`.
+Cần `DOCS_INGEST_DATABASE_URL` (role `kn_ingest`) trong môi trường. Ingest và truy vấn phải dùng cùng embedder (`DOCS_EMBEDDER`: mặc định ngoài compose là `fake_hash`, compose đặt `gateway_http`); khác embedder thì vector không so sánh được; đổi model thì ingest lại tự nạp lại (không cần `--force`), chỉ đổi cách chunk hoặc ACL mới cần ép.
+
+### Embedding thật bằng Ollama (tuỳ chọn)
+
+Mặc định gateway dùng `mock_hash` (không cần GPU, CI dùng cấu hình này). Để dùng embedding thật chạy trên máy host:
+
+```
+ollama pull bge-m3                       # 1024 chiều, giữ EMBED_DIM=1024
+# .env:  GW_MODELS_CONFIG=/app/packages/gateway/config/models.ollama.yaml
+docker compose up -d --build gateway docs-mcp
+```
+
+Gateway trong container tới Ollama qua `host.docker.internal:11434` (`extra_hosts` trong compose). Ollama mặc định chỉ nghe `127.0.0.1`; nếu gateway không tới được, đó là quyết định mở `OLLAMA_HOST` của bạn, repo không tự đổi. Sau khi đổi model, chạy lại ingest **không cần `--force`**: `index_sig` và `index_meta.embed_model` dùng id model thật (header `x-acme-model` gateway trả về), nên tài liệu tự nạp lại. Trên GTX 1650 4 GB, lô 32 chunk mất hàng chục giây; `timeout_s` và `max_attempts: 1` nằm trong `models.ollama.yaml`, phía docs-mcp là `DOCS_EMBED_TIMEOUT_S`.
 
 ## Tải corpus luật
 
@@ -64,7 +76,7 @@ uv run python -m data.vbpl.metadata            # ghi data/raw/vbpl/documents.jso
 uv run python -m mcp_docs.ingest --corpus-dir data/raw/vbpl
 ```
 
-Đo 2026-11-02: 19 văn bản, 2.003 chunk, khoảng 11 giây với `gateway_http` + `acme-embed` (mock_hash); ingest lần hai bỏ qua cả 19 văn bản. Bộ 30 tài liệu ACME nạp riêng bằng `--corpus-dir data/generated` (69 chunk, 3 giây).
+Đo 2026-11-02: 19 văn bản, 2.003 chunk; `mock_hash` khoảng 11 giây, `bge-m3` qua Ollama trên GTX 1650 4 GB khoảng 20 phút (1.216 giây, không timeout); ingest lần hai bỏ qua cả 19 văn bản. Bộ 30 tài liệu ACME nạp riêng bằng `--corpus-dir data/generated` (69 chunk; 22 giây với `bge-m3`).
 
 ## Kiểm thử
 

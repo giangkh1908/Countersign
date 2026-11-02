@@ -159,11 +159,13 @@ def build_runtime(
     checked_retriever, checked_embedder = retriever, embedder
 
     async def startup_check() -> None:
-        await checked_retriever.verify_schema(
-            s.docs_embed_dim, embed_model=s.docs_embed_model, strict_meta=s.docs_strict_index_meta
-        )
+        model: str | None = None
         if checked_embedder is not None and s.docs_use_vector:
             await probe_embedder(checked_embedder, s.docs_embed_dim)
+            model = checked_embedder.model_id  # id thật sau lần gọi thăm dò
+        await checked_retriever.verify_schema(
+            s.docs_embed_dim, embed_model=model, strict_meta=s.docs_strict_index_meta
+        )
 
     return Runtime(s, host, invoker, service, _Router(mcp_app, forget), startup_check)
 

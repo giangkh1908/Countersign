@@ -101,15 +101,19 @@ async def run_ingest(
     force: bool = False,
     article_max_tokens: int = ARTICLE_MAX_TOKENS,
     segmenter: TextSegmenter | None = None,
-    embed_model: str = "",
     verify: bool = True,
 ) -> IngestReport:
-    """`verify`: kiểm cột embedding và thăm dò embedder trước khi ghi (sai chiều => `IndexConfigError`)."""
+    """`verify`: kiểm cột embedding và thăm dò embedder trước khi ghi (sai chiều => `IndexConfigError`).
+
+    `index_sig`/`index_meta` dùng `embedder.model_id` (id model thật). Với `verify=False` embedder
+    chưa được gọi nên id có thể mới là alias cấu hình.
+    """
     metas = load_metadata(corpus_dir)
     dim = embedder.dim
     if verify:
         await indexer.verify_schema(dim)
         await probe_embedder(embedder, dim)
+    embed_model = embedder.model_id  # sau probe: id model thật, không phải alias
     seg_name = segmenter.name if segmenter else "-"
     index_sig = compute_index_sig(
         chunker_version=CHUNKER_VERSION,

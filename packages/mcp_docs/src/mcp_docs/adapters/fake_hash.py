@@ -30,6 +30,10 @@ class FakeHashEmbedder(Embedder):
     def dim(self) -> int:
         return self._dim
 
+    @property
+    def model_id(self) -> str:
+        return "fake_hash"
+
     def _features(self, text: str) -> list[str]:
         feats: list[str] = []
         for w in _WORD.findall(_fold(text)):

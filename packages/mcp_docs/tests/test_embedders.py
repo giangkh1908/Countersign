@@ -123,3 +123,22 @@ async def test_gateway_http_retries_5xx_then_fails_without_leaking_key() -> None
     with pytest.raises(EmbeddingUnavailable) as ei:
         await _embedder(handler).embed(["x"])
     assert n == 2 and "k-secret" not in str(ei.value)
+
+
+async def test_gateway_http_model_id_from_response_header() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        n = len(json.loads(req.content)["input"])
+        return httpx.Response(
+            200,
+            headers={"x-acme-model": "bge-m3"},
+            json={"data": [{"index": i, "embedding": [1, 0, 0, 0]} for i in range(n)]},
+        )
+
+    e = _embedder(handler)
+    assert e.model_id == "acme-embed"  # chưa gọi: trả alias cấu hình
+    await e.embed(["a"])
+    assert e.model_id == "bge-m3"
+
+
+async def test_fake_hash_has_own_model_id() -> None:
+    assert FakeHashEmbedder().model_id == "fake_hash"

@@ -1,6 +1,6 @@
 """Adapter `Embedder` gọi LLM Gateway: `POST {base}/embeddings`, alias `acme-embed` (OpenAI-compatible).
 
-Plumbing HTTP dùng `RetryingHttpClient` bằng composition. Gateway chuyển tiếp tới runtime embedding
+Plumbing HTTP dùng `RetryingHttpClient` bằng composition. Id model thật lấy từ header `x-acme-model`. Gateway chuyển tiếp tới runtime embedding
 duy nhất; ingest và query dùng cùng adapter này. Lỗi mọi loại -> `EmbeddingUnavailable(kind)`
 (message không chứa URL, key hay nội dung).
 """
@@ -33,10 +33,16 @@ class GatewayHttpEmbedder(Embedder):
         self._http = http
         self._model = model
         self._dim = dim
+        self._real_model: str | None = None  # id model thật, đọc từ header phản hồi của gateway
 
     @property
     def dim(self) -> int:
         return self._dim
+
+    @property
+    def model_id(self) -> str:
+        """Id model thật gateway đã dùng (header `x-acme-model`); chưa gọi lần nào thì trả alias."""
+        return self._real_model or self._model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         out: list[list[float]] = []
@@ -55,6 +61,9 @@ class GatewayHttpEmbedder(Embedder):
             raise EmbeddingUnavailable(e.kind) from None
         if resp.status_code != 200:
             raise EmbeddingUnavailable(f"http_{resp.status_code}")
+        real = resp.headers.get("x-acme-model")
+        if real:
+            self._real_model = real
         try:
             data: list[dict[str, Any]] = sorted(resp.json()["data"], key=lambda d: d["index"])
             vecs = [[float(x) for x in d["embedding"]] for d in data]

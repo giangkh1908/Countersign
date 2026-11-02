@@ -122,6 +122,10 @@ class FailingEmbedder(Embedder):
     def dim(self) -> int:
         return 1024
 
+    @property
+    def model_id(self) -> str:
+        return "failing"
+
     async def embed(self, texts: list[str]) -> list[list[float]]:
         raise EmbeddingUnavailable("test")
 

@@ -32,7 +32,6 @@ async def _main(args: argparse.Namespace) -> int:
             force=args.force,
             article_max_tokens=s.docs_article_max_tokens,
             segmenter=build_segmenter(s.docs_segmenter, s),
-            embed_model=s.docs_embed_model,
         )
     except (DocumentRejected, EmbeddingUnavailable, RetrievalUnavailable, IndexConfigError) as e:
         print(f"ingest FAILED: {e}", file=sys.stderr)

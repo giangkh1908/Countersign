@@ -7,7 +7,7 @@
 BEGIN;
 -- chunk giả (vector 1024 chiều toàn 0) cho 1 doc confidential HR, ROLLBACK ở cuối: không để lại dữ liệu
 INSERT INTO chunks (document_id, ord, content, n_tokens, department, classification, allowed_roles, embedding)
-SELECT id, 0, 'canary', 1, department, classification, allowed_roles, array_fill(0, ARRAY[1024])::vector
+SELECT id, 99999, 'canary', 1, department, classification, allowed_roles, array_fill(0, ARRAY[1024])::vector
 FROM documents WHERE department = 'HR' AND classification = 2 LIMIT 1;
 
 SET LOCAL ROLE kn_app;

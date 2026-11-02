@@ -44,10 +44,10 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 
 | Việc | Agent | Tiêu chí xong |
 |---|---|---|
-| ✅ (adapter provider thật chưa có, chạy bằng mock tất định `mock_hash`) Gateway `/v1/embeddings` (OpenAI-compatible), thêm alias `acme-embed` vào `models.yaml` (hiện chỉ có `acme-fast`, `acme-smart`), port `EmbeddingProvider`, adapter provider thật + mock tất định; ghi `usage_events` | W | Test hợp đồng bằng SDK `openai`; leak-grep rỗng |
+| ✅ (mặc định mock tất định `mock_hash`; embedding thật qua adapter `openai_compatible`, xem `models.ollama.yaml`) Gateway `/v1/embeddings` (OpenAI-compatible), thêm alias `acme-embed` vào `models.yaml` (hiện chỉ có `acme-fast`, `acme-smart`), port `EmbeddingProvider`, adapter provider thật + mock tất định; ghi `usage_events` | W | Test hợp đồng bằng SDK `openai`; leak-grep rỗng |
 | Migration `chunks` theo đúng số chiều (bỏ cứng `vector(1024)`), thêm cột `article`, `clause`, `char_start`, `char_end` ✅ (đã thử: đổi `EMBED_DIM` khi có dữ liệu thì migrate dừng, trả về 1024 thì chạy lại được, dữ liệu nguyên vẹn). **Chọn model embedding thật: chưa làm** | W | Migration lên/xuống được; kiểm số chiều khi khởi động |
 | ✅ docs-mcp: loader `vbpl_articles` (JSON Điều từ `data/vbpl`, cắt Điều dài theo khoản), gán `department`/`classification` theo nhóm như `data/SOURCES.md` (`python -m data.vbpl.metadata` sinh `documents.jsonl`) | W | 19 văn bản / 1.557 Điều nạp đủ; nạp lại ra cùng số chunk |
-| ✅ (với embedding giả `mock_hash`) docs-mcp: embedder qua gateway (`gateway_http`, compose mặc định); ingest 19 văn bản luật (2.003 chunk) + 30 tài liệu ACME (69 chunk); ingest lần hai bỏ qua hết; offset khớp trên cả 2.003 chunk luật. **Ingest lại bằng embedding thật: chờ model thật** | W | Ingest lặp lại được; số chunk khớp |
+| ✅ docs-mcp: embedder qua gateway (`gateway_http`, compose mặc định); ingest 19 văn bản luật (2.003 chunk) + 30 tài liệu ACME (69 chunk); ingest lần hai bỏ qua hết; offset khớp trên cả 2.003 chunk luật. Đã ingest lại bằng `bge-m3` chạy local (Ollama) không dùng `--force`: 2.072 chunk, ~20 phút trên GTX 1650 4 GB, ingest lần hai bỏ qua hết; `index_sig` và `index_meta.embed_model` dùng id model thật | W | Ingest lặp lại được; số chunk khớp |
 | (40/150 câu, trong đó 10 câu nêu số Điều) Bộ câu hỏi có nhãn ~150 câu trên corpus luật: LLM sinh nháp từ từng Điều, người kiểm; nhãn vàng (văn bản, Điều, khoản); loại câu (tra cứu, tổng hợp nhiều Điều/luật, không có câu trả lời); câu hỏi viết theo giọng nhân viên, không chép lời luật | W + O duyệt mẫu | Kiểm tay 100% nhãn; phân bố theo nhóm và loại câu ghi trong manifest |
 | (Phụ) Chạy cùng script đánh giá trên Zalo legal (corpus riêng) làm benchmark ngoài | W | Có số recall@k để so với công bố khác |
 | ✅ trừ rerank: Hybrid search: pgvector + Postgres full-text (tiếng Việt bỏ dấu/không bỏ dấu), trộn RRF; rerank tuỳ chọn qua gateway; tra trực tiếp khi câu hỏi nêu số Điều/số hiệu | W | Bật/tắt từng thành phần bằng config |
@@ -55,19 +55,19 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 
 **DoD R1:** có bảng recall@5/@10 và MRR cho 4 cấu hình trên ~150 câu. Cấu hình mặc định được chọn theo số đo, không theo cảm tính. Toàn bộ chạy lại được bằng một lệnh.
 
-**Khung đánh giá truy xuất (đã chạy thật trên index mock_hash):** `eval/rag/` có chỉ số (recall@k, hit@k, MRR, nDCG@10; hàm thuần, có test), định dạng `vbpl-v1.jsonl` kèm trình kiểm nhãn so với `data/raw/vbpl`, và script chạy 5 cấu hình (vector, FTS `unaccent`, FTS tách từ `segmented`, hybrid, hybrid + tra trực tiếp) qua port `DocumentRetriever`. Cấu hình `hybrid_direct` dùng chung `ArticlePinner` với `DocumentService`. Mới có 40/150 câu (đều loại tra cứu, đủ 19 văn bản; 10 câu nêu số Điều); các câu tổng hợp và câu không có đáp án làm ở đợt sau. Cấu hình `hybrid_rerank` và khoảng tin cậy bootstrap chưa làm. Báo cáo JSON ghi `index_sig`, model, chiều embedding vào `eval/results/rag/<run_id>/report.json` (đã gitignore).
+**Khung đánh giá truy xuất (đã chạy thật trên index bge-m3, 40 câu):** `eval/rag/` có chỉ số (recall@k, hit@k, MRR, nDCG@10; hàm thuần, có test), định dạng `vbpl-v1.jsonl` kèm trình kiểm nhãn so với `data/raw/vbpl`, và script chạy 5 cấu hình (vector, FTS `unaccent`, FTS tách từ `segmented`, hybrid, hybrid + tra trực tiếp) qua port `DocumentRetriever`. Cấu hình `hybrid_direct` dùng chung `ArticlePinner` với `DocumentService`. Mới có 40/150 câu (đều loại tra cứu, đủ 19 văn bản; 10 câu nêu số Điều); các câu tổng hợp và câu không có đáp án làm ở đợt sau. Cấu hình `hybrid_rerank` và khoảng tin cậy bootstrap chưa làm. Báo cáo JSON ghi `index_sig`, model, chiều embedding vào `eval/results/rag/<run_id>/report.json` (đã gitignore).
 
-**Kết quả lần chạy 2026-11-02 (40 câu, Điều là đơn vị chấm, index 2.003 chunk luật + 69 chunk ACME):**
+**Kết quả lần chạy 2026-11-02 với embedding thật (40 câu, Điều là đơn vị chấm, index 2.003 chunk luật + 69 chunk ACME, `embed_model` = `bge-m3` 1024 chiều chạy local):**
 
 | Cấu hình | recall@5 | recall@10 | hit@5 | MRR | nDCG@10 | p50 ms |
 |---|---|---|---|---|---|---|
-| chỉ vector (mock_hash) | 0,637 | 0,762 | 0,650 | 0,478 | 0,538 | 45 |
-| chỉ FTS (`unaccent`) | 0,287 | 0,438 | 0,300 | 0,184 | 0,242 | 121 |
-| chỉ FTS (tách từ, `segmented`) | 0,312 | 0,362 | 0,325 | 0,203 | 0,238 | 265 |
-| hybrid (RRF, mock_hash) | 0,438 | 0,562 | 0,450 | 0,324 | 0,373 | 142 |
-| hybrid + tra trực tiếp (mock_hash) | 0,562 | 0,688 | 0,575 | 0,500 | 0,536 | 153 |
+| chỉ vector (bge-m3) | 0,975 | 0,988 | 0,975 | 0,924 | 0,940 | 200 |
+| chỉ FTS (`unaccent`) | 0,287 | 0,438 | 0,300 | 0,184 | 0,242 | 119 |
+| chỉ FTS (tách từ, `segmented`) | 0,312 | 0,362 | 0,325 | 0,203 | 0,238 | 260 |
+| hybrid (RRF, bge-m3) | 0,537 | 0,688 | 0,550 | 0,516 | 0,552 | 307 |
+| hybrid + tra trực tiếp (bge-m3) | 0,637 | 0,762 | 0,650 | 0,613 | 0,645 | 310 |
 
-**Cách đọc (không phải kết quả nghiên cứu cho các hàng có vector):** vector là `mock_hash` (băm từ và n-gram ký tự, không có ngữ nghĩa), nên các hàng vector, hybrid và hybrid + tra trực tiếp chỉ chứng minh luồng chạy thông suốt; **chỉ hai hàng FTS là số thật**. Khi chưa có embedding thật, không rút ra được kết luận về hybrid so với vector, và chưa chọn cấu hình mặc định. Điều quan sát được: FTS đang yếu (truy vấn OR các từ của câu hỏi, `ts_rank_cd`, không loại từ dừng) và kéo hybrid xuống dưới vector; `segmented` hơn `unaccent` ở recall@5 nhưng kém ở recall@10, mẫu 40 câu chưa đủ để kết luận. Tra trực tiếp có tác dụng đúng thiết kế: trên 10 câu nêu số Điều, recall@5 của hybrid + tra trực tiếp là 1,000 so với 0,500 của hybrid; trên 30 câu còn lại hai cấu hình bằng nhau (0,417). Việc còn chờ embedding thật: chọn model, ingest lại, chạy lại bảng này, chọn cấu hình mặc định, rerank.
+**Đây là số thật trên 40 câu (đều loại tra cứu), chưa phải bộ 150 câu; chưa có khoảng tin cậy, chưa có rerank, chưa chọn cấu hình mặc định.** Báo cáo JSON ghi `embed_model` thật (`bge-m3`); `index_sig` ghi `unknown` vì lần chạy không truyền `--index-sig`. Trước đó bảng này chạy trên vector `mock_hash` nên các hàng vector không có giá trị. Điều quan sát được: ở mẫu này vector đứng đầu và FTS kéo hybrid xuống thấp hơn vector (truy vấn OR các từ của câu hỏi, `ts_rank_cd`, không loại từ dừng; việc sửa nhánh FTS chưa làm). Tra trực tiếp: trên 10 câu nêu số Điều, recall@5 là 1,000 (hybrid + tra trực tiếp và vector) so với 0,600 của hybrid; trên 30 câu còn lại hybrid và hybrid + tra trực tiếp bằng nhau (0,517), vector 0,967. Mỗi hàng chỉ chênh vài câu nên chưa kết luận chắc về `segmented` so với `unaccent`. Việc còn lại: bộ 150 câu, khoảng tin cậy, sửa FTS, rerank, rồi mới chọn cấu hình mặc định.
 
 Lệnh (máy không có `make` thì chạy dòng `uv run` tương đương; corpus thô ở `data/raw/vbpl` hoặc đặt `VBPL_RAW_DIR`):
 
