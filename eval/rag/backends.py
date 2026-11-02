@@ -11,23 +11,67 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from mcp_docs.factory import build_embedder, build_retriever
-from mcp_docs.ports import DocumentRetriever
+from acme_common.ports import Principal
+from mcp_docs.factory import build_article_reader, build_embedder, build_retriever
+from mcp_docs.ports import ArticleReader, DocumentRetriever, SearchResult
+from mcp_docs.services.acl import AclPolicy
+from mcp_docs.services.article_pin import ArticlePinner
+from mcp_docs.services.normalize import normalize_query
 from mcp_docs.settings import Settings
 
 from .fakes import CorpusFakeRetriever
 from .runner import CONFIGS, RetrieverFactory
 
-OVERRIDES: dict[str, dict[str, bool]] = {
-    "vector": {"docs_use_vector": True, "docs_use_fts": False, "docs_direct_lookup": False},
-    "fts": {"docs_use_vector": False, "docs_use_fts": True, "docs_direct_lookup": False},
-    "hybrid": {"docs_use_vector": True, "docs_use_fts": True, "docs_direct_lookup": False},
-    "hybrid_direct": {"docs_use_vector": True, "docs_use_fts": True, "docs_direct_lookup": True},
+OVERRIDES: dict[str, dict[str, bool | str]] = {
+    "vector": {"docs_use_vector": True, "docs_use_fts": False, "docs_direct_lookup": "off"},
+    "fts": {"docs_use_vector": False, "docs_use_fts": True, "docs_direct_lookup": "off"},
+    "hybrid": {"docs_use_vector": True, "docs_use_fts": True, "docs_direct_lookup": "off"},
+    "hybrid_direct": {"docs_use_vector": True, "docs_use_fts": True, "docs_direct_lookup": "pin"},
+    # FTS với tách từ (DOCS_FTS_MODE=segmented) để so với FTS unaccent
+    "fts_segmented": {
+        "docs_use_vector": False,
+        "docs_use_fts": True,
+        "docs_direct_lookup": "off",
+        "docs_fts_mode": "segmented",
+    },
 }
 
 
 class UnsupportedConfig(Exception):
     """Settings của docs-mcp chưa có công tắc cần cho cấu hình này."""
+
+
+class PinningRetriever(DocumentRetriever):
+    """Decorator: ghim chunk của "Điều N <văn bản>" lên đầu, cùng `ArticlePinner` và ACL như service."""
+
+    def __init__(self, inner: DocumentRetriever, reader: ArticleReader) -> None:
+        self._inner = inner
+        self._reader = reader
+        self._pinner = ArticlePinner(reader)
+
+    async def search(
+        self,
+        query: str,
+        principal: Principal,
+        k: int,
+        department_filter: str | None = None,
+    ) -> SearchResult:
+        res = await self._inner.search(query, principal, k, department_filter)
+        pinned, _ = await self._pinner.pin(normalize_query(query), principal)
+        pinned = [
+            c
+            for c in pinned
+            if AclPolicy.can_read(principal, c.department, c.classification, c.allowed_roles)
+        ]
+        if not pinned:
+            return res
+        ids = {c.chunk_id for c in pinned}
+        chunks = [*pinned, *(c for c in res.chunks if c.chunk_id not in ids)]
+        return SearchResult(chunks[:k], res.mode)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+        await self._reader.aclose()
 
 
 def fake_factory(raw: Path) -> RetrieverFactory:
@@ -52,7 +96,10 @@ def real_factory(settings: Settings) -> RetrieverFactory:
     def build(config: str) -> DocumentRetriever:
         s = Settings(**{**settings.model_dump(), **OVERRIDES[config]})
         embedder = build_embedder(s.docs_embedder, s)
-        return build_retriever(s.docs_retriever, s, embedder=embedder)
+        retriever = build_retriever(s.docs_retriever, s, embedder=embedder)
+        if s.docs_direct_lookup == "pin":
+            retriever = PinningRetriever(retriever, build_article_reader(s.docs_retriever, s))
+        return retriever
 
     return build
 

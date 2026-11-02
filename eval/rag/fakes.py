@@ -44,7 +44,7 @@ def eval_principal() -> Principal:
         azp="eval-rag",
         scopes=frozenset(),
         expires_at=float("inf"),
-        dept=("ALL", "HR", "IT"),
+        dept=("ALL", "HR", "IT", "SALES"),
         clearance=3,
         roles=(),
     )
@@ -54,7 +54,7 @@ class CorpusFakeRetriever(DocumentRetriever):
     """Mỗi Điều là một chunk. `mode` thuộc CONFIGS của runner."""
 
     def __init__(self, raw: Path, mode: str) -> None:
-        if mode not in ("vector", "fts", "hybrid", "hybrid_direct"):
+        if mode not in ("vector", "fts", "fts_segmented", "hybrid", "hybrid_direct"):
             raise ValueError(f"mode lạ: {mode}")
         self.mode = mode
         self._embedder = FakeHashEmbedder(dim=_DIM)
@@ -127,7 +127,7 @@ class CorpusFakeRetriever(DocumentRetriever):
         pool = max(k, 100)
         if self.mode == "vector":
             order = self._rank_vector(query)[:pool]
-        elif self.mode == "fts":
+        elif self.mode in ("fts", "fts_segmented"):
             order = self._rank_fts(query)[:pool]
         else:
             fused: Counter[int] = Counter()

@@ -225,7 +225,7 @@ Bốn cấu hình của RQ1: `vector` (`USE_FTS=false`), `bm25` (`USE_VECTOR=fal
 - Vấn đề: tiếng Việt viết tách âm tiết, `to_tsvector('simple', ...)` coi mỗi âm tiết là một term nên "hợp đồng lao động" khớp rời rạc.
 - Port `TextSegmenter` **[MỚI]** (abc, `ports/`): `segment(text: str) -> str` (trả chuỗi dùng cho FTS). Lý do là port (§9.1.10): có ≥ 2 adapter thật và một adapter có thể kéo thư viện NLP bên thứ ba.
   - `none`: trả nguyên văn (tương đương hiện tại).
-  - `syllable_bigram`: ghép mọi cặp âm tiết liền kề thành term `a_b`, giữ cả âm tiết đơn; thuần Python, tất định, không phụ thuộc ngoài.
+  - `syllable_bigram`: ghép mọi cặp âm tiết liền kề thành một term bằng cách **nối trực tiếp** (`hợpđồng`, không dùng `_`), giữ cả âm tiết đơn; thuần Python, tất định, không phụ thuộc ngoài. Không dùng `_` vì `to_tsvector('simple', 'hợp_đồng')` coi `_` là dấu cách và tách lại thành hai term `hợp`, `đồng`, làm bigram mất tác dụng.
   - `underthesea` (tuỳ chọn, ứng viên): tách từ bằng thư viện bên thứ ba; chỉ nằm trong `adapters/`, import lười.
 - Ingest **luôn** tính `fts_text` bằng segmenter được cấu hình (`DOCS_SEGMENTER`, mặc định `syllable_bigram` để `tsv_seg` luôn có dữ liệu cho đánh giá), lưu vào `chunks.fts_text`; `tsv_seg` tự sinh. Truy vấn dùng `DOCS_FTS_MODE` để chọn cột. Khi đổi `DOCS_SEGMENTER`, `index_sig` đổi => nạp lại.
 - Vì sao hai cột: để bốn cấu hình + biến thể tách từ so sánh được trên **cùng một chỉ mục**, không phải nạp lại giữa các lượt chạy.

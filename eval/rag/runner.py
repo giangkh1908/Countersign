@@ -17,10 +17,11 @@ from mcp_docs.ports import DocumentRetriever
 from . import metrics
 from .dataset import Question
 
-CONFIGS = ("vector", "fts", "hybrid", "hybrid_direct")
+CONFIGS = ("vector", "fts", "fts_segmented", "hybrid", "hybrid_direct")
 CONFIG_LABELS = {
     "vector": "chỉ vector",
     "fts": "chỉ FTS",
+    "fts_segmented": "chỉ FTS (tách từ)",
     "hybrid": "hybrid (RRF)",
     "hybrid_direct": "hybrid + tra trực tiếp",
 }

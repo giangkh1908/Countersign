@@ -16,14 +16,13 @@ from acme_common.services.taint import raise_taint
 from ..ports import (
     ArticleReader,
     DocumentRetriever,
-    Ref,
     Reranker,
     RetrievalUnavailable,
     RetrievedChunk,
 )
-from ..refs import clause_matches, parse_refs
 from . import spotlight
 from .acl import AclPolicy
+from .article_pin import ArticlePinner
 from .normalize import normalize_query
 
 log = logging.getLogger("acme.docs")
@@ -48,8 +47,11 @@ class DocumentService:
         self._recent_ttl_s = recent_ttl_s
         self._retention_s = retention_s
         self._max_per_doc = max_per_doc
-        self._reader = article_reader
-        self._direct = direct_lookup == "pin" and article_reader is not None
+        self._pinner = (
+            ArticlePinner(article_reader)
+            if direct_lookup == "pin" and article_reader is not None
+            else None
+        )
         self.taint_write_failures = 0  # => metric docs_taint_write_fail_total
 
     async def search(
@@ -137,43 +139,10 @@ class DocumentService:
         return out, audit
 
     async def _direct_lookup(self, query: str, principal: Any) -> tuple[list[RetrievedChunk], int]:
-        """Chunk của "Điều N <văn bản>" nêu trong câu hỏi (đã qua ACL ở adapter) và số tham chiếu chưa giải được.
-
-        Chỉ chạy khi `DOCS_DIRECT_LOOKUP=pin` và câu hỏi nêu Điều. Lỗi kho thì bỏ qua nhánh này
-        (truy xuất chính vẫn chạy); không bao giờ nới quyền.
-        """
-        if not self._direct or self._reader is None:
+        """Ghim chunk của "Điều N <văn bản>" (logic ở `ArticlePinner`); chỉ chạy khi `DOCS_DIRECT_LOOKUP=pin`."""
+        if self._pinner is None:
             return [], 0
-        refs = parse_refs(query)
-        if not refs:
-            return [], 0
-        try:
-            resolved: list[Ref] = []
-            hints: dict[str, str | None] = {}
-            for r in refs:
-                if r.doc_num is None and r.doc_hint:
-                    if r.doc_hint not in hints:
-                        found = await self._reader.find_documents(r.doc_hint, principal)
-                        hints[r.doc_hint] = found[0][0] if len(found) == 1 else None
-                    r = Ref(r.article, r.clause, hints[r.doc_hint], r.doc_hint)
-                resolved.append(r)
-            ok = [r for r in resolved if r.doc_num and r.article]
-            found_chunks = await self._reader.read(ok, principal) if ok else []
-        except RetrievalUnavailable:
-            log.warning("direct lookup unavailable; continuing with retrieval only")
-            return [], len(refs)
-        pinned: list[RetrievedChunk] = []
-        seen: set[int] = set()
-        for r in ok:
-            mine = [c for c in found_chunks if c.doc_num == r.doc_num and c.article == r.article]
-            if r.clause:  # chunk chứa khoản được hỏi đứng trước
-                hit = [c for c in mine if clause_matches(c.clause, r.clause)]
-                mine = hit + [c for c in mine if c not in hit]
-            for c in mine:
-                if c.chunk_id not in seen:
-                    seen.add(c.chunk_id)
-                    pinned.append(c)
-        return pinned, len(refs) - len(ok)
+        return await self._pinner.pin(query, principal)
 
     def _limit_per_doc(
         self, chunks: list[RetrievedChunk], pinned_ids: set[int] | None = None
