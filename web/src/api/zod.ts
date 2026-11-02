@@ -28,11 +28,55 @@ export const InterruptRefSchema = z.object({
   expires_at: z.string(),
 });
 
+/** Kết luận kiểm chứng; giá trị lạ từ server coi là chưa kiểm chứng (không bao giờ coi là đã hỗ trợ). */
+export const VerdictSchema = z.enum(["supported", "partial", "unsupported", "unverified"]).catch("unverified");
+
+/** Một mục trích dẫn (rag-citations.md 5.4). Mọi trường mới đều tuỳ chọn để đọc được dữ liệu cũ. */
 export const CitationSchema = z.object({
+  n: z.number().int().positive().optional(),
   doc_id: z.string().optional(),
+  doc_num: z.string().nullish(),
   title: z.string().default(""),
+  article: z.string().nullish(),
+  clause: z.string().nullish(),
+  chapter: z.string().nullish(),
   heading: z.string().nullish(),
+  char_start: z.number().int().nullish(),
+  char_end: z.number().int().nullish(),
   snippet: z.string().nullish(),
+  passage: z.string().nullish(),
+  passage_truncated: z.boolean().nullish(),
+  evidence_start: z.number().int().nullish(),
+  evidence_end: z.number().int().nullish(),
+  verdict: VerdictSchema.optional(),
+  sentence_ids: z.array(z.number().int()).optional(),
+  score: z.number().nullish(),
+});
+
+/** Câu trong văn bản trả lời cuối; start/end là offset theo điểm mã Unicode. verdict null = câu không phải khẳng định. */
+export const SentenceSchema = z.object({
+  id: z.number().int(),
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+  cites: z.array(z.number().int()).default([]),
+  verdict: VerdictSchema.nullish(),
+});
+
+export const AnswerStatusSchema = z.enum(["answered", "partially_verified", "refused"]);
+
+export const VerifyInfoSchema = z.object({
+  enabled: z.boolean(),
+  pairs: z.number().optional(),
+  judge_calls: z.number().optional(),
+  ms: z.number().optional(),
+});
+
+/** Dữ liệu của sự kiện `citations`. */
+export const CitationsDataSchema = z.object({
+  items: z.array(CitationSchema),
+  sentences: z.array(SentenceSchema).optional(),
+  answer_status: AnswerStatusSchema.optional(),
+  verify: VerifyInfoSchema.optional(),
 });
 
 export const AgentEventSchema = z.discriminatedUnion("event", [
@@ -82,7 +126,7 @@ export const AgentEventSchema = z.discriminatedUnion("event", [
   z.object({ event: z.literal("approval"), data: z.object({ expires_at: z.string() }) }),
   z.object({
     event: z.literal("citations"),
-    data: z.object({ items: z.array(CitationSchema) }),
+    data: CitationsDataSchema,
   }),
   z.object({
     event: z.literal("cost"),
@@ -139,6 +183,9 @@ export const MessageSchema = z.object({
   role: z.string(),
   content: z.string().default(""),
   citations: z.array(CitationSchema).optional(),
+  sentences: z.array(SentenceSchema).optional(),
+  answer_status: AnswerStatusSchema.optional(),
+  verify: VerifyInfoSchema.optional(),
   cost_usd: z.number().nullish(),
 });
 

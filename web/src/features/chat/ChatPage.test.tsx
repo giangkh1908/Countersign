@@ -4,7 +4,7 @@ import { Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { FakeAgentStream } from "../../api/fakes/FakeAgentStream";
 import { FakeThreadApi } from "../../api/fakes/FakeThreadApi";
-import type { Api } from "../../api/types";
+import type { Api, Citation, Sentence } from "../../api/types";
 import { fakeApi, renderWithProviders } from "../../test/renderWithProviders";
 import { ChatPage } from "./ChatPage";
 
@@ -87,5 +87,46 @@ describe("ChatPage", () => {
     await ask("đóng ticket");
     expect(await screen.findByRole("group")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Từ chối" })).toBeInTheDocument();
+  });
+
+  it("citations có sentences: [n] mở đoạn nguồn, câu chưa kiểm chứng có nhãn", async () => {
+    const answer = "Có quyền nghỉ [1]. Bồi thường 3 tháng [2].";
+    const items: Citation[] = [
+      { n: 1, title: "Bộ luật Lao động", article: "35", passage: "Điều 35 nội dung", char_start: 0, evidence_start: 0, evidence_end: 7, verdict: "supported" },
+      { n: 2, title: "Nghị định", passage: "Không liên quan", verdict: "unsupported" },
+    ];
+    const sentences: Sentence[] = [
+      { id: 0, start: 0, end: 18, cites: [1], verdict: "supported" },
+      { id: 1, start: 19, end: Array.from(answer).length, cites: [2], verdict: "unsupported" },
+    ];
+    const agent = new FakeAgentStream([
+      { event: "thread", data: { thread_id: TID } },
+      { event: "token", data: { text: answer } },
+      {
+        event: "citations",
+        data: {
+          items,
+          sentences,
+          answer_status: "partially_verified",
+          verify: { enabled: true },
+        },
+      },
+      { event: "done", data: { status: "completed", message_id: "m1" } },
+    ]);
+    const threads = new FakeThreadApi([], {
+      [TID]: {
+        messages: [
+          { role: "user", content: "hỏi" },
+          { role: "assistant", content: answer, citations: items, sentences, answer_status: "partially_verified", verify: { enabled: true } },
+        ],
+        pending_interrupt: null,
+        cost: {},
+      },
+    });
+    renderChat(agent, { threads });
+    await ask("hỏi");
+    await userEvent.click((await screen.findAllByRole("button", { name: "Mở nguồn 1" }))[0]!);
+    expect(screen.getByTestId("evidence").textContent).toBe("Điều 35");
+    expect(screen.getAllByText("Không được nguồn hỗ trợ").length).toBeGreaterThan(0);
   });
 });

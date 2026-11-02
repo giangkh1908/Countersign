@@ -1,8 +1,7 @@
 import type { ChatMessage } from "../../api/types";
 import { t } from "../../i18n";
-import { SafeMarkdown } from "../../lib/markdown";
 import { SafeText } from "../../lib/SafeTextView";
-import { Citations } from "./Citations";
+import { CitedMessage } from "./CitedMessage";
 import { CostFooter } from "./CostFooter";
 import { ToolProgress } from "./ToolProgress";
 import type { StreamState } from "./streamReducer";
@@ -32,8 +31,16 @@ export function MessageList({
         ) : (
           <div key={i} className="p-2" data-role="assistant">
             <div className="text-xs font-semibold">{t("chat.assistant")}</div>
-            <SafeMarkdown text={m.content} linkHosts={linkHosts} />
-            <Citations items={m.citations ?? []} />
+            <CitedMessage
+              text={m.content}
+              linkHosts={linkHosts}
+              info={{
+                items: m.citations ?? [],
+                sentences: m.sentences,
+                answerStatus: m.answer_status,
+                verify: m.verify,
+              }}
+            />
           </div>
         ),
       )}
@@ -50,8 +57,16 @@ export function MessageList({
           <div className="p-2" data-role="assistant-live">
             <div className="text-xs font-semibold">{t("chat.assistant")}</div>
             <ToolProgress tools={live.tools} />
-            <SafeMarkdown text={live.text} linkHosts={linkHosts} />
-            <Citations items={live.citations} />
+            <CitedMessage
+              text={live.text}
+              linkHosts={linkHosts}
+              info={{
+                items: live.citations,
+                sentences: live.sentences,
+                answerStatus: live.answerStatus,
+                verify: live.verify,
+              }}
+            />
             {live.cost && <CostFooter turnUsd={live.cost.turnUsd} threadUsd={live.cost.threadUsd} />}
           </div>
         </>

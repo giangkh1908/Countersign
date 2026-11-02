@@ -24,4 +24,19 @@ describe("streamReducer", () => {
     const s = streamReducer({ ...initialStream, phase: "streaming" }, { event: "closed" });
     expect(s.error?.code).toBe("stream_closed");
   });
+  it("citations giữ sentences, answer_status và verify", () => {
+    const s = streamReducer(initialStream, {
+      event: "citations",
+      data: {
+        items: [{ title: "T", n: 1 }],
+        sentences: [{ id: 0, start: 0, end: 4, cites: [1], verdict: "partial" }],
+        answer_status: "partially_verified",
+        verify: { enabled: true },
+      },
+    });
+    expect(s.citations).toHaveLength(1);
+    expect(s.sentences?.[0]?.verdict).toBe("partial");
+    expect(s.answerStatus).toBe("partially_verified");
+    expect(s.verify?.enabled).toBe(true);
+  });
 });

@@ -1,5 +1,5 @@
 // Thuần túy, test được không cần React.
-import type { AgentEvent, Citation, InterruptRef } from "../../api/types";
+import type { AgentEvent, AnswerStatus, Citation, InterruptRef, Sentence, VerifyInfo } from "../../api/types";
 
 export interface ToolState {
   tool: string;
@@ -15,6 +15,9 @@ export interface StreamState {
   route?: string;
   tools: Record<string, ToolState>;
   citations: Citation[];
+  sentences?: Sentence[];
+  answerStatus?: AnswerStatus;
+  verify?: VerifyInfo;
   cost?: { turnUsd: number; threadUsd: number };
   interrupt?: InterruptRef;
   error?: { code: string; message: string; retryable: boolean };
@@ -70,7 +73,13 @@ export function streamReducer(s: StreamState, e: StreamAction): StreamState {
     case "approval":
       return { ...s, phase: "streaming" };
     case "citations":
-      return { ...s, citations: e.data.items };
+      return {
+        ...s,
+        citations: e.data.items,
+        sentences: e.data.sentences,
+        answerStatus: e.data.answer_status,
+        verify: e.data.verify,
+      };
     case "cost":
       return { ...s, cost: { turnUsd: e.data.turn_usd, threadUsd: e.data.thread_usd } };
     case "done":
