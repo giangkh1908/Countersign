@@ -53,7 +53,22 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 | ✅ trừ rerank: Hybrid search: pgvector + Postgres full-text (tiếng Việt bỏ dấu/không bỏ dấu), trộn RRF; rerank tuỳ chọn qua gateway; tra trực tiếp khi câu hỏi nêu số Điều/số hiệu | W | Bật/tắt từng thành phần bằng config |
 | ✅ trừ rerank (đã chạy thật 5 cấu hình trên 40 câu, xem dưới): Script đánh giá truy xuất: recall@k, MRR, nDCG theo loại câu; so 4 cấu hình (vector, BM25, hybrid, hybrid+rerank) | W | Bảng kết quả có seed, phiên bản, chi phí |
 
-**Cấu hình tạm trên compose (2026-11-02):** hybrid trọng số FTS 0,25 + ghim, recall@5 0,938 [0,863; 1,000] trên 40 câu. Chọn 0,25 thay vì 0,1 vì 0,1 nằm ở mép lưới và gần như chỉ còn vector. Số này đo bằng eval cũ dùng `n_cand` 250 còn docs-mcp thật dùng 70, nên chưa đo đúng cấu hình chạy thật; eval đã sửa (xem "Bộ 150 câu và quy tắc dev/test") và cần chạy lại trên dev. Chốt mặc định bằng dev của bộ 150 câu rồi chạy test đúng một lần.
+**Chốt cấu hình trên dev (2026-11-02, trước khi chạy test):** dev 81 câu có đáp án, `retrieval_k` 14, `n_cand` 70 như docs-mcp thật, bootstrap 95%, Δ theo cặp so với vector.
+
+| Cấu hình | recall@5 | Δ recall@5 | MRR | Δ MRR |
+|---|---|---|---|---|
+| vector | 0,891 [0,829; 0,947] | 0 | 0,843 | 0 |
+| hybrid w=1 | 0,545 | -0,346 [-0,451; -0,253] | 0,481 | -0,362 [-0,452; -0,263] |
+| hybrid w=0,25 | 0,774 | -0,117 [-0,191; -0,049] | 0,674 | -0,170 [-0,251; -0,087] |
+| hybrid w=0,1 | 0,897 | +0,006 [0,000; +0,019] | 0,776 | -0,067 [-0,125; -0,009] |
+| `ts_rank` + w=0,1 | 0,891 | 0,000 [-0,019; +0,019] | 0,733 | -0,111 [-0,169; -0,054] |
+| ghim + w=0,1 | 0,897 | +0,006 [0,000; +0,019] | 0,806 | -0,037 [-0,089; +0,014] |
+
+Đủ 17 cấu hình ở `eval/results/rag/20261102T071619/report.json`. Không cấu hình hybrid nào hơn vector một cách phân biệt được; mọi hybrid trừ ghim + w=0,1 có MRR thấp hơn vector rõ rệt. Chẩn đoán: 30 câu vector đúng mà hybrid w=1 sai, 16 do FTS xếp chunk đúng thấp, 14 do chunk sai có mặt ở cả hai nhánh nên được RRF cộng điểm.
+
+**Quyết định:** mặc định **vector thuần** (`DOCS_USE_FTS=false`, `DOCS_DIRECT_LOOKUP=off`): MRR cao nhất, nhanh nhất (p50 ~232 ms so với 245–330 ms), ít thành phần nhất. Hybrid và ghim giữ làm công tắc nghiên cứu. Cấu hình so sánh khi chạy test: `hybrid_direct@wfts0.1`. Test chạy một lần cho đúng hai cấu hình này, không chỉnh lại theo kết quả test.
+
+Hạn chế: dev có 40 câu `read_first` sát từ vựng luật; chỉ 10 câu nêu số Điều nên ghim chưa được đo đủ; w < 0,1 chưa đo.
 
 **DoD R1:** có bảng recall@5/@10 và MRR cho 4 cấu hình trên ~150 câu. Cấu hình mặc định được chọn theo số đo, không theo cảm tính. Toàn bộ chạy lại được bằng một lệnh.
 
