@@ -13,6 +13,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
+from acme_common.telemetry import span
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -27,6 +28,7 @@ from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError, model_validator
 
 from ..agents import AgentRegistry, AgentSpec
+from ..metrics import record_verification, verification_counts
 from ..ports.errors import ToolUnavailable
 from ..services.answer import build_answer, fit_frame, refusal
 from ..services.citation_verifier import CitationVerifier
@@ -296,15 +298,17 @@ def make_tools_node(spec: AgentSpec) -> NodeFn:
             )
             t0 = time.monotonic()
             ok, content = True, ""
-            try:
-                content = str(await by_name[name].ainvoke(args))
-            except ToolException as e:
-                ok, content = False, str(e)
-            except ToolUnavailable:
-                ok, content = (
-                    False,
-                    json.dumps({"error": {"code": "upstream_unavailable", "retryable": True}}),
-                )
+            with span(f"tool.{name}", tool=name) as tsp:
+                try:
+                    content = str(await by_name[name].ainvoke(args))
+                except ToolException as e:
+                    ok, content = False, str(e)
+                except ToolUnavailable:
+                    ok, content = (
+                        False,
+                        json.dumps({"error": {"code": "upstream_unavailable", "retryable": True}}),
+                    )
+                tsp.set_attribute("outcome", "ok" if ok else "error")
             try:
                 data: Any = json.loads(content)
             except ValueError:
@@ -610,10 +614,16 @@ async def _cited_answer(
             k: Passage.model_validate(v) for k, v in (state.get("retrieved") or {}).items()
         }
         verifier = CitationVerifier(ctx.make_judge(), ctx.verify_cfg) if verifying else None  # type: ignore[misc]
-        ans = await build_answer(_text_of(last), retrieved, verifier, ctx.verify_cfg)
+        with span("verification") as vsp:
+            ans = await build_answer(_text_of(last), retrieved, verifier, ctx.verify_cfg)
+            claims, verified, failed = verification_counts(ans)
+            vsp.set_attribute("claims", claims)
+            vsp.set_attribute("verified", verified)
+            vsp.set_attribute("failed", failed)
         msg_id = last.id
     else:
         return None
+    record_verification(ans)
     usd, _ = ctx.cost.drain()
     if ans.verify.get("enabled"):
         ans.verify["cost_usd"] = round(usd, 6)

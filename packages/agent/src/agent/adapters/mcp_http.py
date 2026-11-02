@@ -27,6 +27,8 @@ from ..ports.tool_provider import AgentAccess, ServerAccess, ToolProvider
 HttpClientFactory = Callable[[dict[str, str]], httpx2.AsyncClient]
 _DISCOVERY_TTL_S = 300.0
 MAX_OUTPUT_BYTES = 8192
+# Tool `prepare_*` mang intent_jws (chữ ký) nên cắt là hỏng chữ ký; chỉ các tool này được miễn.
+_NO_TRUNCATE = frozenset({"prepare_close_ticket", "prepare_create_ticket"})
 
 
 def _default_http(headers: dict[str, str]) -> httpx2.AsyncClient:
@@ -155,7 +157,7 @@ class McpHttpToolProvider(ToolProvider):
             text = json.dumps(data, ensure_ascii=False)
             if is_error:
                 raise ToolException(text)
-            if len(text.encode()) > MAX_OUTPUT_BYTES and name != "prepare_close_ticket":
+            if len(text.encode()) > MAX_OUTPUT_BYTES and name not in _NO_TRUNCATE:
                 text = text.encode()[:MAX_OUTPUT_BYTES].decode(errors="ignore") + " [...cắt]"
             return text
 

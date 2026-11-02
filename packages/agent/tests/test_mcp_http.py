@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -33,6 +34,11 @@ def make_server() -> MCPServer:
             "intent_jws": "j",
             "expires_at": "2099-01-01T00:00:00Z",
         }
+
+    @srv.tool()
+    def prepare_create_ticket(title: str, body: str) -> dict[str, Any]:
+        """Chuan bi tao ticket (intent_jws dai, khong duoc cat)."""
+        return {"ok": True, "intent_id": "i2", "intent_jws": "j" * 20000, "expires_at": "x"}
 
     @srv.tool()
     def commit_intent(intent_id: str, approval_token: str) -> dict[str, Any]:
@@ -80,10 +86,22 @@ async def test_tools_filtered_by_allowlist_and_callable() -> None:
     async with open_provider() as (prov, broker):
         tools = await prov.tools_for("ticket_agent", make_principal(), "ut", thread_id="t-1")
         names = {t.name for t in tools}
-        assert names == {"get_ticket", "prepare_close_ticket"}  # commit_intent không lộ cho LLM
+        assert names == {
+            "get_ticket",
+            "prepare_close_ticket",
+            "prepare_create_ticket",
+        }  # commit_intent không lộ cho LLM
         t = next(t for t in tools if t.name == "get_ticket")
         assert "TCK-000123" in await t.ainvoke({"code": "TCK-000123"})
         assert ("u1", "tickets-mcp", ("tickets:read",)) in broker.calls
+
+
+async def test_prepare_create_ticket_output_not_truncated() -> None:
+    async with open_provider() as (prov, _):
+        tools = await prov.tools_for("ticket_agent", make_principal(), "ut", thread_id="t-1")
+        t = next(t for t in tools if t.name == "prepare_create_ticket")
+        out = await t.ainvoke({"title": "abc", "body": "abc"})
+        assert json.loads(out)["intent_jws"] == "j" * 20000  # JSON nguyên vẹn, không bị cắt
 
 
 async def test_commit_sends_only_two_args() -> None:

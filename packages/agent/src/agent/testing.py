@@ -161,7 +161,12 @@ class FakeToolProvider(ToolProvider):
                 raise ToolException(str(r))
             return json.dumps(r)
 
-        return StructuredTool(name=name, description=name, args_schema=_AnyArgs, coroutine=run)
+        return StructuredTool(
+            name=name,
+            description=name,
+            args_schema={"type": "object", "additionalProperties": True},
+            coroutine=run,
+        )
 
     async def commit_intent(
         self,

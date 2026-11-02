@@ -170,3 +170,49 @@ async def test_unexpected_exception_yields_single_error(make_env):
     tid = await env.new_thread()
     events = await env.run(tid, "x")
     assert terminal(events) == ["error"] and events[-1][1]["code"] == "internal"
+
+
+CREATE_ARGS = {
+    "title": "May in tang 3 hong",
+    "body": "May in tang 3 khong in duoc tu sang nay.",
+    "category": "it",
+    "assignee_dept": "it",
+}
+
+
+async def test_create_ticket_full_flow_with_edit_and_commit(make_env):
+    n = {"i": 0}
+
+    def prepare(args):
+        n["i"] += 1
+        return {**PREPARED, "intent_id": f"int-{n['i']}", "op": "create_ticket"}
+
+    provider = FakeToolProvider(
+        {"prepare_create_ticket": prepare},
+        commit_result={"ok": True, "op": "create_ticket", "ticket": {"code": "TCK-000777"}},
+    )
+    env = make_env(
+        provider,
+        {"router": [route("ticket")], "agent": [tool_call("prepare_create_ticket", CREATE_ARGS)]},
+    )
+    tid = await env.new_thread()
+    events = await env.run(tid, "Tao ticket bao may in tang 3 hong cho IT")
+    iv = next(d for e, d in events if e == "interrupt")
+    assert iv["payload"]["op"] == "create_ticket" and provider.commits == []
+    # sửa title/priority được; trường ngoài danh sách (category) bị bỏ
+    ev2 = await env.resume(
+        tid,
+        iv["interrupt_id"],
+        {"type": "edit", "edits": {"title": "May in hong", "priority": "high", "category": "hr"}},
+    )
+    iv2 = next(d for e, d in ev2 if e == "interrupt")
+    assert iv2["payload"]["intent_id"] == "int-2"
+    last_args = provider.calls[-1][1]
+    assert last_args["title"] == "May in hong" and last_args["priority"] == "high"
+    assert last_args["category"] == "it"
+    ev3 = await env.resume(tid, iv2["interrupt_id"], {"type": "approve", "approval_token": "tok-1"})
+    assert provider.commits == [
+        {"agent": "ticket_agent", "intent_id": "int-2", "approval_token": "tok-1"}
+    ]
+    assert terminal(ev3) == ["done"] and ev3[-1][1]["status"] == "completed"
+    assert "TCK-000777" in "".join(d["text"] for e, d in ev3 if e == "token")

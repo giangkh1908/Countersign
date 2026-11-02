@@ -186,6 +186,16 @@ def span(name: str, **attributes: Any) -> Iterator[Any]:
             raise
 
 
+def start_span(name: str, **attributes: Any) -> Any:
+    """Span KHÔNG đặt làm span hiện tại, cho luồng sống qua `yield` (SSE) hoặc ngoài `with`.
+
+    Cha là span hiện tại lúc gọi. Người gọi phải `end()`. Thuộc tính ngoài allowlist bị bỏ ở bộ xử lý.
+    """
+    return trace.get_tracer("acme").start_span(
+        name, attributes=attributes, record_exception=False, set_status_on_exception=False
+    )
+
+
 def current_trace_id() -> str | None:
     """trace_id (32 hex) của span hiện tại, None nếu không có span hợp lệ."""
     ctx = trace.get_current_span().get_span_context()

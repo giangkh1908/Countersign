@@ -3,6 +3,7 @@
 - Mỗi dòng là một object JSON: `ts`, `level`, `logger`, `msg`, `service`, `request_id`, `trace_id` (khi có span), cùng các
   trường truyền qua `extra={"fields": {...}}`.
 - `request_id` lấy từ contextvar (`bind_request_id`), không cần truyền tay.
+- Exception chỉ ghi `exc_type` và `exc_at` (file:dòng); không ghi message hay traceback đầy đủ.
 - Không log payload: khoá nhạy cảm (token, authorization, password, secret, body...) bị che.
 """
 
@@ -12,8 +13,10 @@ import contextvars
 import json
 import logging
 import sys
+import traceback
 import uuid
 from datetime import UTC, datetime
+from types import TracebackType
 from typing import Any
 
 from .telemetry import current_trace_id
@@ -71,6 +74,13 @@ def _scrub(value: Any, key: str | None = None) -> Any:
     return value
 
 
+def _exc_locations(tb: TracebackType | None, limit: int = 12) -> list[str]:
+    """Vị trí `file:dòng in hàm` của các frame cuối. Không dùng `formatException`: nó ghi cả message
+    lỗi và dòng mã nguồn, mà message có thể chứa nội dung tài liệu hoặc câu hỏi."""
+    frames = traceback.extract_tb(tb)[-limit:]
+    return [f"{f.filename}:{f.lineno} in {f.name}" for f in frames]
+
+
 class JsonFormatter(logging.Formatter):
     def __init__(self, service: str = "") -> None:
         super().__init__()
@@ -96,7 +106,7 @@ class JsonFormatter(logging.Formatter):
             out.update({k: v for k, v in _scrub(fields).items() if k not in out})
         if record.exc_info and record.exc_info[0] is not None:
             out["exc_type"] = record.exc_info[0].__name__
-            out["traceback"] = self.formatException(record.exc_info)
+            out["exc_at"] = _exc_locations(record.exc_info[2])
         return json.dumps(out, ensure_ascii=False, default=str)
 
 
