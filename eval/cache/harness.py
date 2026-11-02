@@ -4,6 +4,10 @@ Harness chỉ nói chuyện qua `Sender` (port nhỏ của riêng eval): `HttpGa
 test dùng `Fake*Sender`. Không in prompt, token hay khoá API. Prompt có nonce của lần chạy nên
 entry cũ trong cache không làm sai số liệu.
 
+Hai chế độ: `plain` (một lượt user) và `agent` (phát lại hội thoại kiểu agent: system prompt tĩnh, có
+`tools`, lượt assistant gọi `search_documents` và lượt tool do script cố định giả lập kết quả tìm kiếm;
+đây là lời gọi cuối của agent, đại diện luồng thật vì agent luôn gửi tools).
+
 Định nghĩa:
 - lặp hợp lệ: cùng prompt do người CÙNG phạm vi đã hỏi trước đó (được phép trúng);
 - thăm dò chéo phạm vi: prompt mà chỉ phạm vi KHÁC đã hỏi (bắt buộc miss; trúng = rò rỉ);
@@ -32,6 +36,44 @@ class User:
     scope: str  # nhãn phạm vi (vd "IT|1|staff"); cùng nhãn = cùng khoá cache
 
 
+SEARCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "search_documents",
+        "description": "Tìm trong tài liệu nội bộ.",
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}, "top_k": {"type": "integer"}},
+            "required": ["query"],
+        },
+    },
+}
+AGENT_SYSTEM = "Bạn là trợ lý tra cứu tài liệu nội bộ. Trả lời ngắn gọn, trích dẫn bằng [#số]."
+
+
+def build_payload(
+    prompt: str, mode: str
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]] | None]:
+    """(messages, tools) của một lượt; `agent`: kết quả tool là hàm cố định của prompt."""
+    if mode == "plain":
+        return [{"role": "user", "content": prompt}], None
+    call = {
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": "search_documents", "arguments": json.dumps({"query": prompt})},
+    }
+    result = json.dumps({"results": [{"cite": "[#1]", "text": f"đoạn tài liệu cho: {prompt}"}]})
+    return (
+        [
+            {"role": "system", "content": AGENT_SYSTEM},
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": None, "tool_calls": [call]},
+            {"role": "tool", "tool_call_id": "call_1", "content": result},
+        ],
+        [SEARCH_TOOL],
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class Sample:
     latency_ms: float
@@ -42,7 +84,7 @@ class Sample:
 
 class Sender(ABC):
     @abstractmethod
-    async def send(self, user: User, prompt: str) -> Sample: ...
+    async def send(self, user: User, prompt: str, mode: str = "plain") -> Sample: ...
 
     async def aclose(self) -> None:  # noqa: B027
         """Giải phóng tài nguyên."""
@@ -55,7 +97,16 @@ class HttpGatewaySender(Sender):
         self._http = httpx.AsyncClient(base_url=base_url, timeout=120)
         self._key, self._tokens, self._model = api_key, tokens, model
 
-    async def send(self, user: User, prompt: str) -> Sample:
+    async def send(self, user: User, prompt: str, mode: str = "plain") -> Sample:
+        messages, tools = build_payload(prompt, mode)
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "temperature": 0,
+            "max_tokens": 64,
+            "messages": messages,
+        }
+        if tools:
+            payload["tools"] = tools
         t0 = time.perf_counter()
         r = await self._http.post(
             "/v1/chat/completions",
@@ -63,12 +114,7 @@ class HttpGatewaySender(Sender):
                 "authorization": f"Bearer {self._key}",
                 "x-acme-user-token": self._tokens[user.name],
             },
-            json={
-                "model": self._model,
-                "temperature": 0,
-                "max_tokens": 64,
-                "messages": [{"role": "user", "content": prompt}],
-            },
+            json=payload,
         )
         ms = (time.perf_counter() - t0) * 1000
         cache = r.headers.get("x-acme-cache")
@@ -124,6 +170,7 @@ async def run_level(
     n: int,
     seed: int,
     cross_probe: float = 0.1,
+    mode: str = "plain",
 ) -> LevelResult:
     """Một mức lặp: `repeat` = tỉ lệ request lặp hợp lệ; thêm `cross_probe` thăm dò chéo phạm vi."""
     rng = random.Random(seed)
@@ -147,7 +194,7 @@ async def run_level(
             prompt, cross = rng.choice(foreign), True
         if prompt in asked:
             evidence_hits += 1  # evidence-keyed sẽ trúng mọi prompt đã thấy, bất kể phạm vi
-        sample = await sender.send(user, prompt)
+        sample = await sender.send(user, prompt, mode)
         asked.setdefault(prompt, set()).add(user.scope)
         res.n += 1
         if sample.status != 200:
@@ -181,10 +228,11 @@ async def run_all(
     n: int,
     seed: int = 1,
     levels: tuple[float, ...] = REPEAT_LEVELS,
+    mode: str = "plain",
 ) -> Report:
     rep = Report(label)
     for k, lv in enumerate(levels):
-        rep.levels.append(await run_level(sender, users, repeat=lv, n=n, seed=seed + k))
+        rep.levels.append(await run_level(sender, users, repeat=lv, n=n, seed=seed + k, mode=mode))
     return rep
 
 

@@ -1,6 +1,7 @@
 """Chạy: `uv run python -m eval.cache run ...` rồi `uv run python -m eval.cache report a.json b.json`.
 
-run    gọi gateway đang chạy (cache tắt hoặc bật tuỳ cấu hình gateway), lưu JSON theo `--label`.
+run    gọi gateway đang chạy (cache tắt hoặc bật tuỳ cấu hình gateway); `--mode plain|agent|both`;
+       `--out X` ghi `X.plain.json`, `X.agent.json`.
 report in bảng so sánh các file JSON (vd cache-off và cache-on); thoát 1 nếu có trúng chéo phạm vi.
 
 `--users-file` là JSON `{"<tên>": {"token": "<user token aud=llm-gateway>", "scope": "<nhãn phạm vi>"}}`
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from .harness import (
     HttpGatewaySender,
+    Report,
     User,
     format_table,
     leaks,
@@ -34,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--users-file", required=True)
     r.add_argument("--model", default="acme-fast")
     r.add_argument("--label", required=True, help="vd cache-off, cache-on")
+    r.add_argument("--mode", choices=["plain", "agent", "both"], default="both")
     r.add_argument("--n", type=int, default=60, help="số request mỗi mức lặp")
     r.add_argument("--seed", type=int, default=1)
     r.add_argument("--out", help="ghi JSON ra file này")
@@ -61,17 +64,25 @@ def main(argv: list[str] | None = None) -> int:
         args.model,
     )
 
-    async def go():
+    modes = ["plain", "agent"] if args.mode == "both" else [args.mode]
+
+    async def go() -> list[Report]:
         try:
-            return await run_all(sender, users, label=args.label, n=args.n, seed=args.seed)
+            return [
+                await run_all(
+                    sender, users, label=f"{args.label}-{m}", n=args.n, seed=args.seed, mode=m
+                )
+                for m in modes
+            ]
         finally:
             await sender.aclose()
 
-    rep = asyncio.run(go())
-    print(format_table([rep]))
-    if args.out:
-        Path(args.out).write_text(rep.to_json(), encoding="utf-8")
-    return 1 if leaks([rep]) else 0
+    reps = asyncio.run(go())
+    print(format_table(reps))
+    if args.out:  # một file chứa các báo cáo theo chế độ: ghi mỗi chế độ một file <out>.<mode>.json
+        for m, rep in zip(modes, reps, strict=True):
+            Path(f"{args.out}.{m}.json").write_text(rep.to_json(), encoding="utf-8")
+    return 1 if leaks(reps) else 0
 
 
 if __name__ == "__main__":

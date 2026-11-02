@@ -171,12 +171,65 @@ async def test_no_user_token_bypasses_cache() -> None:
     assert not rig.cache.items and len(rig.provider.requests) == 2
 
 
-async def test_tools_request_never_reads_or_writes_cache() -> None:
+TOOLS = [{"type": "function", "function": {"name": "search_documents", "parameters": {}}}]
+TOOLS2 = [{"type": "function", "function": {"name": "create_ticket", "parameters": {}}}]
+TOOL_TURN = [
+    {"role": "user", "content": f"hoi {CANARY}"},
+    {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "search_documents"}}],
+    },
+    {"role": "tool", "tool_call_id": "c1", "content": "doan van [#1]"},
+]
+
+
+async def ask_agent(rig: Rig, token: str | None = "t-it", tools: Any = TOOLS) -> httpx.Response:
+    async with rig.client(token) as c:
+        return await c.post(
+            "/v1/chat/completions",
+            json={"model": "acme-fast", "messages": TOOL_TURN, "tools": tools},
+        )
+
+
+async def test_tool_call_response_with_tools_request_is_never_stored() -> None:
+    msg = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{"id": "1", "type": "function", "function": {"name": "create_ticket"}}],
+    }
+    rig = await make_rig(
+        provider=FakeChatProvider(
+            response=ChatResponse(msg, "tool_calls", Usage(1, 1), "m", "fake")
+        )
+    )
+    r1, r2 = await ask_agent(rig, tools=TOOLS2), await ask_agent(rig, tools=TOOLS2)
+    assert r1.headers["x-acme-cache"] == r2.headers["x-acme-cache"] == "miss"
+    assert not rig.cache.items and len(rig.provider.requests) == 2  # luôn gọi provider
+
+
+async def test_agent_final_answer_with_tools_and_tool_turn_is_cached() -> None:
     rig = await make_rig()
-    tools = [{"type": "function", "function": {"name": "create_ticket", "parameters": {}}}]
-    r = await ask(rig, tools=tools)
-    assert r.headers["x-acme-cache"] == "bypass"
-    assert not rig.cache.items and not rig.cache.gets
+    r1 = await ask_agent(rig)
+    r2 = await ask_agent(rig)
+    assert r1.headers["x-acme-cache"] == "miss" and r2.headers["x-acme-cache"] == "exact"
+    assert len(rig.provider.requests) == 1
+    assert "tool_calls" not in r2.json()["choices"][0]["message"]  # hit không phát lại tool call
+    assert r2.json()["choices"][0]["message"]["content"] == "Trả lời [#1]"
+    # khác phạm vi thì miss; khác danh sách tools thì miss
+    assert (await ask_agent(rig, "t-hr")).headers["x-acme-cache"] == "miss"
+    assert (await ask_agent(rig, tools=TOOLS2)).headers["x-acme-cache"] == "miss"
+    assert (await ask_agent(rig, "t-hr")).headers["x-acme-cache"] == "exact"
+    assert len(rig.provider.requests) == 3
+
+
+async def test_stored_entries_never_contain_tool_calls() -> None:
+    rig = await make_rig()
+    await ask_agent(rig)
+    assert rig.cache.items and all(
+        "tool_calls" not in v.content and v.finish_reason == "stop"
+        for v in rig.cache.items.values()
+    )
 
 
 async def test_non_stop_finish_is_not_stored() -> None:

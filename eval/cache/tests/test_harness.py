@@ -16,6 +16,7 @@ from eval.cache.harness import (
     Sample,
     Sender,
     User,
+    build_payload,
     format_table,
     leaks,
     load_report,
@@ -32,7 +33,8 @@ class KeyedSender(Sender):
         self.cache = FakeResponseCache()
         self.enabled, self.strict = enabled, strict
 
-    async def send(self, user: User, prompt: str) -> Sample:
+    async def send(self, user: User, prompt: str, mode: str = "plain") -> Sample:
+        messages, tools = build_payload(prompt, mode)
         dept, clr, roles = user.scope.split("|")
         p = Principal(
             "u", ("llm-gateway",), None, frozenset(), 2e9, None, (dept,), int(clr), (roles,)
@@ -41,9 +43,9 @@ class KeyedSender(Sender):
             user=p,
             provider="fake",
             model="m",
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             params={},
-            tools=None,
+            tools=tools,
             tool_choice=None,
             index_version="0",
             strict=self.strict,
@@ -89,3 +91,13 @@ async def test_report_roundtrip_and_cli(tmp_path: Path, capsys) -> None:
     g = tmp_path / "leaky.json"
     g.write_text(json.dumps(json.loads(leaky.to_json())), encoding="utf-8")
     assert main(["report", str(g)]) == 1
+
+
+async def test_agent_mode_replays_tool_conversation_and_still_isolates_scopes() -> None:
+    messages, tools = build_payload("hỏi A", "agent")
+    assert tools and [m["role"] for m in messages] == ["system", "user", "assistant", "tool"]
+    assert messages[2]["tool_calls"] and build_payload("hỏi A", "agent") == (messages, tools)
+    assert build_payload("hỏi A", "plain") == ([{"role": "user", "content": "hỏi A"}], None)
+    rep = await run_all(KeyedSender(True), USERS, label="on-agent", n=200, mode="agent")
+    assert rep.levels[0].hit_rate == 0.0 and rep.levels[2].hit_rate > 0.3
+    assert leaks([rep]) == 0
