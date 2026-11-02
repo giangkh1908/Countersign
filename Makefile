@@ -1,6 +1,6 @@
 # Trên Windows: chạy trong Git Bash hoặc WSL (Makefile dùng bash).
 SHELL := bash
-.PHONY: setup lint fmt test test-web leak-grep secrets up down logs backup clean
+.PHONY: setup lint fmt test test-web leak-grep eval-rag eval-rag-fake eval-rag-validate secrets up down logs backup clean
 
 setup:
 	uv sync --all-packages
@@ -22,6 +22,16 @@ test-web:
 
 leak-grep:
 	bash scripts/leak-grep.sh
+
+# Đánh giá truy xuất (R1). Cần corpus thô: data/raw/vbpl hoặc VBPL_RAW_DIR=<thư mục>.
+eval-rag-validate:
+	uv run --all-packages python -m eval.rag validate --suite vbpl-v1
+
+eval-rag-fake:
+	uv run --all-packages python -m eval.rag run --suite vbpl-v1 --fake
+
+eval-rag:
+	uv run --all-packages python -m eval.rag run --suite vbpl-v1
 
 secrets:
 	bash scripts/gen-secrets.sh

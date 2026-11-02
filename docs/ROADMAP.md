@@ -55,6 +55,18 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 
 **DoD R1:** có bảng recall@5/@10 và MRR cho 4 cấu hình trên ~150 câu. Cấu hình mặc định được chọn theo số đo, không theo cảm tính. Toàn bộ chạy lại được bằng một lệnh.
 
+**Khung đánh giá truy xuất (xong khung, chưa có số thật):** `eval/rag/` có chỉ số (recall@k, hit@k, MRR, nDCG@10; hàm thuần, có test), định dạng `vbpl-v1.jsonl` kèm trình kiểm nhãn so với `data/raw/vbpl`, và script chạy 4 cấu hình (vector, FTS, hybrid, hybrid + tra trực tiếp) qua port `DocumentRetriever`. Mới có 30/150 câu (đều loại tra cứu, đủ 19 văn bản); 120 câu còn lại, các câu tổng hợp và câu không có đáp án làm ở đợt sau. Cấu hình `hybrid_rerank` và khoảng tin cậy bootstrap chưa làm. Báo cáo JSON ghi `index_sig`, model, chiều embedding vào `eval/results/rag/<run_id>/report.json` (đã gitignore).
+
+Lệnh (máy không có `make` thì chạy dòng `uv run` tương đương; corpus thô ở `data/raw/vbpl` hoặc đặt `VBPL_RAW_DIR`):
+
+| Việc | `make` | Tương đương |
+|---|---|---|
+| Kiểm nhãn | `make eval-rag-validate` | `uv run --all-packages python -m eval.rag validate --suite vbpl-v1` |
+| Chạy với retriever giả (kiểm mạch, số vô nghĩa) | `make eval-rag-fake` | `uv run --all-packages python -m eval.rag run --suite vbpl-v1 --fake` |
+| Chạy thật (cần hybrid trong docs-mcp, Postgres đã ingest) | `make eval-rag` | `uv run --all-packages python -m eval.rag run --suite vbpl-v1 --index-sig <sig>` |
+
+Chạy thật cần `Settings` của docs-mcp có `DOCS_USE_VECTOR`, `DOCS_USE_FTS`, `DOCS_DIRECT_LOOKUP`; thiếu thì script dừng và báo rõ, không chạy nhầm cấu hình.
+
 ## R2 — Câu trả lời có trích dẫn kiểm chứng được
 
 | Việc | Agent | Tiêu chí xong |
