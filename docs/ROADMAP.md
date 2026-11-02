@@ -70,6 +70,17 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 
 Hạn chế: dev có 40 câu `read_first` sát từ vựng luật; chỉ 10 câu nêu số Điều nên ghim chưa được đo đủ; w < 0,1 chưa đo.
 
+**Kết quả test (chạy một lần, 2026-11-02, `eval/results/rag/20261102T072218/report.json`):** 49 câu có đáp án, toàn bộ viết mù.
+
+| Cấu hình | recall@5 | recall@10 | MRR | p50 |
+|---|---|---|---|---|
+| vector (mặc định) | 0,619 [0,497; 0,735] | 0,765 | 0,566 | 230 ms |
+| `hybrid_direct@wfts0.1` | 0,662 [0,549; 0,777] | 0,769 | 0,584 | 325 ms |
+
+Δ theo cặp so với vector: recall@5 +0,043 [-0,039; +0,138], MRR +0,018 [-0,053; +0,093], không phân biệt được. Quyết định giữ nguyên. Tách theo loại câu: tra cứu recall@5 0,692, tổng hợp thấp hơn nhiều.
+
+Điểm test thấp hơn dev khoảng 0,27 recall@5. Phần lớn chênh lệch đến từ cách viết câu: dev có 40 câu `read_first` sát từ vựng luật, test toàn câu viết mù. Con số đại diện cho người dùng thật là số test. Khoảng cách này đủ lớn để thử rerank (mục rerank ở trên) và để đo lại hybrid với câu hỏi viết mù. Muốn đo lại phải có tập test mới, không dùng lại tập này để chỉnh.
+
 **DoD R1:** có bảng recall@5/@10 và MRR cho 4 cấu hình trên ~150 câu. Cấu hình mặc định được chọn theo số đo, không theo cảm tính. Toàn bộ chạy lại được bằng một lệnh.
 
 **Khung đánh giá truy xuất (đã chạy thật trên index bge-m3, 40 câu):** `eval/rag/` có chỉ số (recall@k, hit@k, MRR, nDCG@10; hàm thuần, có test), định dạng `vbpl-v1.jsonl` kèm trình kiểm nhãn so với `data/raw/vbpl`, và script chạy 5 cấu hình (vector, FTS `unaccent`, FTS tách từ `segmented`, hybrid, hybrid + tra trực tiếp) qua port `DocumentRetriever`. Cấu hình `hybrid_direct` dùng chung `ArticlePinner` với `DocumentService`. Mới có 40/150 câu (đều loại tra cứu, đủ 19 văn bản; 10 câu nêu số Điều); các câu tổng hợp và câu không có đáp án làm ở đợt sau. Cấu hình `hybrid_rerank` chưa làm; khoảng tin cậy bootstrap đã có (xem dưới). Báo cáo JSON ghi `index_sig`, model, chiều embedding vào `eval/results/rag/<run_id>/report.json` (đã gitignore).
