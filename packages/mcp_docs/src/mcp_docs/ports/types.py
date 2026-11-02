@@ -26,6 +26,20 @@ class DocumentRejected(Exception):
     """Tài liệu/metadata không hợp lệ (ingest fail-closed)."""
 
 
+class IndexConfigError(Exception):
+    """Cấu hình lệch với chỉ mục (sai số chiều, lẫn model embedding...). Dừng dịch vụ, không suy giảm."""
+
+
+@dataclass(frozen=True, slots=True)
+class Ref:
+    """Tham chiếu pháp lý trong câu hỏi: Điều (và khoản) của một văn bản, đã hoặc chưa xác định."""
+
+    article: str | None = None
+    clause: str | None = None
+    doc_num: str | None = None
+    doc_hint: str | None = None  # tên văn bản nêu trong câu, chưa giải thành `doc_num`
+
+
 @dataclass(frozen=True, slots=True)
 class ArticleUnit:
     """Một Điều của văn bản luật (đính vào `Section.unit` khi `Document.kind == "article"`)."""
@@ -109,4 +123,4 @@ class RetrievedChunk:
 @dataclass(frozen=True, slots=True)
 class SearchResult:
     chunks: list[RetrievedChunk]
-    mode: str = "hybrid"  # hybrid | fts_only
+    mode: str = "hybrid"  # hybrid | vector_only | fts_only

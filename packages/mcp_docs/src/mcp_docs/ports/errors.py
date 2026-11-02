@@ -23,3 +23,11 @@ class EmbedderNotConfigured(NotConfigured):
 
 class DocumentIndexerNotConfigured(NotConfigured):
     pass
+
+
+class SegmenterNotConfigured(NotConfigured):
+    pass
+
+
+class ArticleReaderNotConfigured(NotConfigured):
+    pass

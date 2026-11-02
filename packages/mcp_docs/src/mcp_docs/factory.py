@@ -13,6 +13,8 @@ from pathlib import Path
 from acme_common.factory import build_http_client, lookup
 
 from .ports import (
+    ArticleReader,
+    ArticleReaderNotConfigured,
     DocumentIndexer,
     DocumentIndexerNotConfigured,
     DocumentLoader,
@@ -23,6 +25,8 @@ from .ports import (
     Reranker,
     RerankerNotConfigured,
     RetrieverNotConfigured,
+    SegmenterNotConfigured,
+    TextSegmenter,
 )
 from .settings import Settings
 
@@ -99,14 +103,48 @@ def build_loader(path: str | Path, settings: Settings) -> DocumentLoader:
     return lookup(_LOADERS, ext, DocumentLoaderNotConfigured)(settings)
 
 
+# --- TextSegmenter ---
+def _load_no_segmenter(s: Settings) -> TextSegmenter:
+    from .adapters.segmenter_none import NoSegmenter
+
+    return NoSegmenter()
+
+
+def _load_syllable_bigram(s: Settings) -> TextSegmenter:
+    from .adapters.segmenter_syllable_bigram import SyllableBigramSegmenter
+
+    return SyllableBigramSegmenter()
+
+
+_SEGMENTERS: dict[str, Callable[[Settings], TextSegmenter]] = {
+    "none": _load_no_segmenter,
+    "syllable_bigram": _load_syllable_bigram,
+}
+
+
+def build_segmenter(name: str, settings: Settings) -> TextSegmenter:
+    return lookup(_SEGMENTERS, name, SegmenterNotConfigured)(settings)
+
+
 # --- DocumentRetriever / DocumentIndexer ---
 def _load_pg_retriever(s: Settings, embedder: Embedder) -> DocumentRetriever:
     from .adapters.pgvector_hybrid import PgVectorHybridRetriever
 
     if not s.mcp_database_url:
         raise RetrieverNotConfigured("MCP_DATABASE_URL is required for this retriever")
+    if not (s.docs_use_vector or s.docs_use_fts):
+        raise RetrieverNotConfigured("DOCS_USE_VECTOR and DOCS_USE_FTS are both off")
+    if s.docs_fts_mode not in ("unaccent", "segmented"):
+        raise RetrieverNotConfigured("DOCS_FTS_MODE must be 'unaccent' or 'segmented'")
     return PgVectorHybridRetriever(
-        s.mcp_database_url, embedder, rrf_k=s.docs_rrf_k, n_cand=s.docs_n_cand
+        s.mcp_database_url,
+        embedder,
+        rrf_k=s.docs_rrf_k,
+        n_cand=s.docs_n_cand,
+        use_vector=s.docs_use_vector,
+        use_fts=s.docs_use_fts,
+        fts_mode=s.docs_fts_mode,
+        segmenter=build_segmenter(s.docs_segmenter, s),
     )
 
 
@@ -117,6 +155,25 @@ _RETRIEVERS: dict[str, Callable[[Settings, Embedder], DocumentRetriever]] = {
 
 def build_retriever(name: str, settings: Settings, *, embedder: Embedder) -> DocumentRetriever:
     return lookup(_RETRIEVERS, name, RetrieverNotConfigured)(settings, embedder)
+
+
+# --- ArticleReader ---
+def _load_pg_article_reader(s: Settings) -> ArticleReader:
+    from .adapters.pg_article_reader import PgArticleReader
+
+    if not s.mcp_database_url:
+        raise ArticleReaderNotConfigured("MCP_DATABASE_URL is required for this reader")
+    return PgArticleReader(s.mcp_database_url)
+
+
+_ARTICLE_READERS: dict[str, Callable[[Settings], ArticleReader]] = {
+    "pgvector_hybrid": _load_pg_article_reader,
+}
+
+
+def build_article_reader(name: str, settings: Settings) -> ArticleReader:
+    """`name` theo cùng khoá với retriever (cùng kho, cùng DSN `kn_app`)."""
+    return lookup(_ARTICLE_READERS, name, ArticleReaderNotConfigured)(settings)
 
 
 def _load_pg_indexer(s: Settings) -> DocumentIndexer:

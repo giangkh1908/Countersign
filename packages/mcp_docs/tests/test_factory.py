@@ -4,6 +4,8 @@ from mcp_docs.adapters.fake_hash import FakeHashEmbedder
 from mcp_docs.adapters.markdown import MarkdownLoader
 from mcp_docs.adapters.none import NoReranker
 from mcp_docs.ports import (
+    ArticleReader,
+    ArticleReaderNotConfigured,
     DocumentIndexer,
     DocumentIndexerNotConfigured,
     DocumentLoader,
@@ -34,6 +36,7 @@ def test_known_names_build_ports() -> None:
     r = factory.build_retriever("pgvector_hybrid", S, embedder=emb)
     assert isinstance(r, DocumentRetriever)
     assert isinstance(factory.build_indexer("pgvector_hybrid", S), DocumentIndexer)
+    assert isinstance(factory.build_article_reader("pgvector_hybrid", S), ArticleReader)
 
 
 @pytest.mark.parametrize(
@@ -47,6 +50,7 @@ def test_known_names_build_ports() -> None:
             RetrieverNotConfigured,
         ),
         (lambda: factory.build_indexer("nope", S), DocumentIndexerNotConfigured),
+        (lambda: factory.build_article_reader("nope", S), ArticleReaderNotConfigured),
     ],
 )
 def test_unknown_name_lists_known(call, err) -> None:
@@ -57,3 +61,12 @@ def test_unknown_name_lists_known(call, err) -> None:
 def test_retriever_requires_dsn() -> None:
     with pytest.raises(RetrieverNotConfigured):
         factory.build_retriever("pgvector_hybrid", Settings(), embedder=FakeHashEmbedder())
+
+
+def test_retriever_rejects_both_branches_off() -> None:
+    off = S.model_copy(update={"docs_use_vector": False, "docs_use_fts": False})
+    with pytest.raises(RetrieverNotConfigured):
+        factory.build_retriever("pgvector_hybrid", off, embedder=FakeHashEmbedder())
+    bad = S.model_copy(update={"docs_fts_mode": "bm25"})
+    with pytest.raises(RetrieverNotConfigured):
+        factory.build_retriever("pgvector_hybrid", bad, embedder=FakeHashEmbedder())
