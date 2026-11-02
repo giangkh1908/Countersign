@@ -29,6 +29,7 @@ volumes:
   pg_data: {}
   redis_state_data: {}
   prom_data: {}
+  tempo_data: {}
   grafana_data: {}
   backups: {}
 
@@ -451,6 +452,18 @@ services:
       timeout: 3s
       retries: 10
     deploy: { resources: { limits: { cpus: "0.5", memory: 512m } } }
+
+  tempo:
+    profiles: ["obs"]
+    image: grafana/tempo:2.8.2
+    <<: *hardened
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./infra/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    networks: [core, edge]                     # service gửi OTLP qua core; edge để publish 3200 cho canary/Grafana
+    ports: ["127.0.0.1:3200:3200"]             # dev: Tempo API (quét canary); OTLP 4318 chỉ trong mạng core
+    deploy: { resources: { limits: { cpus: "0.5", memory: 384m } } }
 
   grafana:
     profiles: ["obs"]

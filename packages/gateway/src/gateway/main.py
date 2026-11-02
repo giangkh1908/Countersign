@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from acme_common.log import configure_logging
+from acme_common.telemetry import instrument_fastapi
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
@@ -91,6 +92,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         body = c.metrics.render() if c else b""
         return Response(body, media_type="text/plain; version=0.0.4")
 
+    instrument_fastapi(app, "gateway")
     return app
 
 

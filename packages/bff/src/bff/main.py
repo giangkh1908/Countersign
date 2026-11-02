@@ -11,6 +11,7 @@ from typing import Any
 from acme_common.http import HttpError
 from acme_common.log import configure_logging
 from acme_common.ports import TokenExchangeDenied, TokenInvalid, TokenServiceUnavailable
+from acme_common.telemetry import instrument_fastapi
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -127,6 +128,7 @@ def __getattr__(name: str) -> FastAPI:
     if name == "app":
         configure_logging(Settings().log_level, "bff")
         instance = create_app()
+        instrument_fastapi(instance, "bff")
         globals()["app"] = instance
         return instance
     raise AttributeError(name)

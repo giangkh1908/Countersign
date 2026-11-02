@@ -19,6 +19,7 @@ from acme_common.factory import (
 )
 from acme_common.mcp import AuthMiddleware, ToolInvoker
 from acme_common.ports import Clock, ToolServerHost
+from acme_common.telemetry import traced_asgi
 
 from .factory import (
     build_approval_verifier,
@@ -134,4 +135,4 @@ class TicketsMcpApp:
         await send({"type": "lifespan.shutdown.complete"})
 
 
-app = TicketsMcpApp()
+app = traced_asgi(TicketsMcpApp(), SERVER)
