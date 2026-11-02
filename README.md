@@ -4,7 +4,7 @@ Trợ lý trả lời câu hỏi từ tài liệu công ty, mỗi câu kèm trí
 
 ## Trạng thái
 
-Xong: M0, M1, R0, R1 (embedding bge-m3 qua Ollama, mặc định vector thuần), R2 (trích dẫn kiểm chứng; judge cần LLM thật), A1 (tạo/đóng ticket, `notify-mcp` với adapter `fake` và `telegram`), trace/metric/canary của Q1. Chưa làm: cache (Q1), R3, R4. Lộ trình: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Xong: M0, M1, R0, R1 (embedding bge-m3 qua Ollama, mặc định vector thuần), R2 (trích dẫn kiểm chứng; judge cần LLM thật), A1 (tạo/đóng ticket, `notify-mcp` với adapter `fake` và `telegram`), trace/metric/canary của Q1. Cache (Q1) có code và số đo RQ4 với LLM mock (`python -m eval.cache users|run|report|scan`). Chưa làm: R3 (ASR tầng LLM), R4. Lộ trình: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 Compose mặc định: postgres, redis-state, keycloak, migrate, mock-provider, gateway, docs-mcp, agent, bff. Profile: `tickets` (tickets-mcp, approval-signer), `notify` (notify-mcp, approval-signer), `obs` (tempo, prometheus, grafana). Không bật `tickets` thì agent tự tắt route ticket và các API phê duyệt của BFF trả `503 upstream_unavailable`.
 
