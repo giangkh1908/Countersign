@@ -42,6 +42,12 @@ class Settings(CommonSettings):
     docs_direct_lookup: str = "off"  # off | pin: ghim chunk của "Điều N <văn bản>" lên đầu
     docs_strict_index_meta: bool = False  # true: lệch embed_model với index_meta => dừng khởi động
     docs_rrf_k: int = 60
+    docs_rrf_weight_fts: float = 1.0  # trọng số nhánh FTS trong RRF (1.0 = hành vi cũ)
+    docs_fts_stopwords: bool = False  # bỏ từ dừng tiếng Việt ở phía truy vấn FTS
+    docs_fts_rank: str = "cd"  # cd (ts_rank_cd) | rank (ts_rank): hàm xếp hạng nhánh FTS
+    docs_fts_title: bool = (
+        False  # thử nghiệm: ghép tiêu đề văn bản (trọng số A) vào tsv lúc truy vấn
+    )
     docs_n_cand: int | None = None  # None => max(50, 5*top_k)
     docs_ingest_database_url: str | None = None  # role kn_ingest (chỉ job ingest)
     docs_corpus_dir: str = "data/generated"

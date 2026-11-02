@@ -55,7 +55,7 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 
 **DoD R1:** có bảng recall@5/@10 và MRR cho 4 cấu hình trên ~150 câu. Cấu hình mặc định được chọn theo số đo, không theo cảm tính. Toàn bộ chạy lại được bằng một lệnh.
 
-**Khung đánh giá truy xuất (đã chạy thật trên index bge-m3, 40 câu):** `eval/rag/` có chỉ số (recall@k, hit@k, MRR, nDCG@10; hàm thuần, có test), định dạng `vbpl-v1.jsonl` kèm trình kiểm nhãn so với `data/raw/vbpl`, và script chạy 5 cấu hình (vector, FTS `unaccent`, FTS tách từ `segmented`, hybrid, hybrid + tra trực tiếp) qua port `DocumentRetriever`. Cấu hình `hybrid_direct` dùng chung `ArticlePinner` với `DocumentService`. Mới có 40/150 câu (đều loại tra cứu, đủ 19 văn bản; 10 câu nêu số Điều); các câu tổng hợp và câu không có đáp án làm ở đợt sau. Cấu hình `hybrid_rerank` và khoảng tin cậy bootstrap chưa làm. Báo cáo JSON ghi `index_sig`, model, chiều embedding vào `eval/results/rag/<run_id>/report.json` (đã gitignore).
+**Khung đánh giá truy xuất (đã chạy thật trên index bge-m3, 40 câu):** `eval/rag/` có chỉ số (recall@k, hit@k, MRR, nDCG@10; hàm thuần, có test), định dạng `vbpl-v1.jsonl` kèm trình kiểm nhãn so với `data/raw/vbpl`, và script chạy 5 cấu hình (vector, FTS `unaccent`, FTS tách từ `segmented`, hybrid, hybrid + tra trực tiếp) qua port `DocumentRetriever`. Cấu hình `hybrid_direct` dùng chung `ArticlePinner` với `DocumentService`. Mới có 40/150 câu (đều loại tra cứu, đủ 19 văn bản; 10 câu nêu số Điều); các câu tổng hợp và câu không có đáp án làm ở đợt sau. Cấu hình `hybrid_rerank` chưa làm; khoảng tin cậy bootstrap đã có (xem dưới). Báo cáo JSON ghi `index_sig`, model, chiều embedding vào `eval/results/rag/<run_id>/report.json` (đã gitignore).
 
 **Kết quả lần chạy 2026-11-02 với embedding thật (40 câu, Điều là đơn vị chấm, index 2.003 chunk luật + 69 chunk ACME, `embed_model` = `bge-m3` 1024 chiều chạy local):**
 
@@ -67,7 +67,38 @@ README chạy từ bản clone sạch trong 3 phút 44 giây (2026-11-02), smoke
 | hybrid (RRF, bge-m3) | 0,537 | 0,688 | 0,550 | 0,516 | 0,552 | 307 |
 | hybrid + tra trực tiếp (bge-m3) | 0,637 | 0,762 | 0,650 | 0,613 | 0,645 | 310 |
 
-**Đây là số thật trên 40 câu (đều loại tra cứu), chưa phải bộ 150 câu; chưa có khoảng tin cậy, chưa có rerank, chưa chọn cấu hình mặc định.** Báo cáo JSON ghi `embed_model` thật (`bge-m3`); `index_sig` ghi `unknown` vì lần chạy không truyền `--index-sig`. Trước đó bảng này chạy trên vector `mock_hash` nên các hàng vector không có giá trị. Điều quan sát được: ở mẫu này vector đứng đầu và FTS kéo hybrid xuống thấp hơn vector (truy vấn OR các từ của câu hỏi, `ts_rank_cd`, không loại từ dừng; việc sửa nhánh FTS chưa làm). Tra trực tiếp: trên 10 câu nêu số Điều, recall@5 là 1,000 (hybrid + tra trực tiếp và vector) so với 0,600 của hybrid; trên 30 câu còn lại hybrid và hybrid + tra trực tiếp bằng nhau (0,517), vector 0,967. Mỗi hàng chỉ chênh vài câu nên chưa kết luận chắc về `segmented` so với `unaccent`. Việc còn lại: bộ 150 câu, khoảng tin cậy, sửa FTS, rerank, rồi mới chọn cấu hình mặc định.
+**Đây là số thật trên 40 câu (đều loại tra cứu), chưa phải bộ 150 câu; khoảng tin cậy ở bảng dưới, chưa có rerank, chưa chọn cấu hình mặc định.** Báo cáo JSON ghi `embed_model` thật (`bge-m3`); `index_sig` ghi `unknown` vì lần chạy không truyền `--index-sig`. Trước đó bảng này chạy trên vector `mock_hash` nên các hàng vector không có giá trị. Điều quan sát được: ở mẫu này vector đứng đầu và FTS kéo hybrid xuống thấp hơn vector (truy vấn OR các từ của câu hỏi, `ts_rank_cd`, không loại từ dừng; việc sửa nhánh FTS chưa làm). Tra trực tiếp: trên 10 câu nêu số Điều, recall@5 là 1,000 (hybrid + tra trực tiếp và vector) so với 0,600 của hybrid; trên 30 câu còn lại hybrid và hybrid + tra trực tiếp bằng nhau (0,517), vector 0,967. Mỗi hàng chỉ chênh vài câu nên chưa kết luận chắc về `segmented` so với `unaccent`. Việc còn lại: bộ 150 câu, rerank, quyết định sửa FTS/RRF, rồi mới chọn cấu hình mặc định.
+
+**Chẩn đoán hybrid và thử có kiểm soát nhánh FTS/RRF (2026-11-02, cùng 40 câu, cùng index; chưa đổi mặc định nào):** mỗi dòng là một cấu hình riêng, đổi đúng một thứ so với dòng gốc (hậu tố `@...` trong `eval/rag/backends.py`). Mặc định của mọi công tắc mới giữ hành vi cũ (`DOCS_RRF_WEIGHT_FTS=1.0`, `DOCS_FTS_STOPWORDS=false`, `DOCS_FTS_RANK=cd`, `DOCS_FTS_TITLE=false`). Khoảng là bootstrap 95% theo câu hỏi (1.000 lần, seed 42); Δ là chênh theo cặp so với hybrid gốc.
+
+| Cấu hình | recall@5 [CI95] | recall@10 | MRR | Δ recall@5 so với hybrid [CI95] |
+|---|---|---|---|---|
+| chỉ vector | 0,975 [0,925; 1,000] | 0,988 | 0,924 | +0,438 [+0,275; +0,600] |
+| chỉ FTS (`ts_rank_cd`, gốc) | 0,287 [0,163; 0,425] | 0,438 | 0,184 | -0,250 [-0,375; -0,125] |
+| chỉ FTS + từ dừng | 0,263 [0,138; 0,400] | 0,438 | 0,164 | -0,275 [-0,400; -0,125] |
+| chỉ FTS + `ts_rank` | 0,525 [0,375; 0,675] | 0,588 | 0,398 | -0,013 [-0,150; +0,125] |
+| chỉ FTS + tiêu đề (A) | 0,338 [0,200; 0,500] | 0,463 | 0,194 | -0,200 [-0,325; -0,075] |
+| hybrid gốc (w=1, `n_cand` 250) | 0,537 [0,375; 0,700] | 0,688 | 0,516 | 0 |
+| hybrid, `n_cand`=50 / 70 | 0,613 / 0,562 | 0,887 / 0,762 | 0,545 / 0,528 | +0,075 [0,000; +0,175] / +0,025 [0,000; +0,075] |
+| hybrid, trọng số FTS 0,5 | 0,738 [0,600; 0,875] | 0,863 | 0,592 | +0,200 [+0,075; +0,325] |
+| hybrid, trọng số FTS 0,25 | 0,863 [0,738; 0,963] | 0,988 | 0,673 | +0,325 [+0,200; +0,475] |
+| hybrid, trọng số FTS 0,1 | 0,988 [0,963; 1,000] | 0,988 | 0,792 | +0,450 [+0,275; +0,600] |
+| hybrid + từ dừng | 0,662 [0,512; 0,800] | 0,738 | 0,513 | +0,125 [+0,025; +0,250] |
+| hybrid + `ts_rank` | 0,762 [0,637; 0,887] | 0,887 | 0,694 | +0,225 [+0,075; +0,400] |
+| hybrid + tiêu đề (A) | 0,562 [0,412; 0,725] | 0,762 | 0,537 | +0,025 [0,000; +0,075] |
+| hybrid + từ dừng + w=0,25 (ghép hai thay đổi) | 0,887 [0,787; 0,975] | 0,988 | 0,724 | +0,350 [+0,225; +0,500] |
+| hybrid + tra trực tiếp (gốc) | 0,637 [0,487; 0,775] | 0,762 | 0,613 | +0,100 [+0,025; +0,200] |
+| hybrid + tra trực tiếp, w=0,25 | 0,938 [0,863; 1,000] | 0,988 | 0,755 | +0,400 [+0,250; +0,575] |
+| hybrid + tra trực tiếp, w=0,1 | 0,988 [0,963; 1,000] | 0,988 | 0,852 | +0,450 [+0,275; +0,600] |
+| hybrid + tra trực tiếp + từ dừng + w=0,25 | 0,963 [0,900; 1,000] | 0,988 | 0,806 | +0,425 [+0,275; +0,575] |
+
+Chạy lại: `uv run --all-packages python -m eval.rag run --suite vbpl-v1 --configs sweep`, rồi `... python -m eval.rag compare <report.json> --baseline hybrid --select hybrid@wfts0.5,hybrid@wfts0.25,hybrid@wfts0.1` và `... python -m eval.rag diagnose --suite vbpl-v1`. Còn các dòng `hybrid_direct` với `wfts0.5`, `stop`, `rank`, `title` trong báo cáo JSON (`--configs sweep`). So với vector: không cấu hình hybrid nào có recall@5 cao hơn vector một cách phân biệt được (w=0,1 chênh +0,013, khoảng [0,000; +0,037]); MRR của mọi hybrid vẫn thấp hơn vector (w=0,1: 0,792 so với 0,924, Δ [-0,219; -0,054]).
+
+*Chẩn đoán (`python -m eval.rag diagnose`, `n_cand`=250 như eval):* vector đúng ở top-5 trên 39/40 câu, hybrid trên 22/40. Có 18 câu vector đúng mà hybrid sai (1 câu ngược lại). Trong 18 câu đó, chunk đúng đứng hạng 1 hoặc 2 ở nhánh vector (cả 18 câu). Chia theo cơ chế: 9 câu chunk đúng không có trong nhánh FTS và bị chen bởi chunk có mặt ở cả hai nhánh dù vector xếp thấp hơn (đúng cơ chế giả thuyết); 9 câu chunk đúng có trong FTS nhưng ở hạng 27 đến 175 và bị chen theo cùng kiểu (cơ chế gần giống, nguyên nhân là FTS xếp chunk đúng thấp, không phải vắng mặt); 0 câu nguyên nhân khác. Mọi chunk chen (5 chunk đứng trên chunk đúng ở mỗi câu, 90 chunk) đều có điểm RRF ≥ 1/61 và đều có mặt ở cả hai nhánh, nhưng không phải "hạng thấp ở cả hai danh sách": trung vị hạng vector 12,5 và hạng FTS 10; 78/90 chunk có cả hai hạng ≤ 60. Chỉ cần hạng ở cả hai nhánh trong khoảng 60 là đủ vượt chunk đứng đầu của một nhánh. Chi tiết lệch với giả thuyết: eval chạy `n_cand`=250 (`5*pool`), docs-mcp thật dùng 70, không phải 50; `n_cand` nhỏ chỉ giúp ít (0,613 và 0,562 so với 0,537, khoảng chưa phân biệt được). Tính lại offline từ hạng đã có: nếu trọng số FTS là 0,5 / 0,25 / 0,1 thì 8 / 13 / 18 trong 18 câu sai được cứu, khớp với bảng đo thật.
+
+*Trùng từ câu hỏi và Điều đúng (vector 0,975 có lạc quan không):* trên 40 câu, trung bình 74,9% từ nội dung khác nhau của câu hỏi (sau khi bỏ từ dừng) xuất hiện trong Điều đúng (trung vị 77,8%), so với 23,4% với Điều ngẫu nhiên; 38/40 câu đạt từ 50%. 55,9% cặp từ liền nhau (không phải từ dừng) của câu hỏi có trong Điều đúng, chỉ 2 câu bằng 0. Bộ xếp hạng trùng từ thuần Python có trọng số IDF đạt recall@5 0,625 [0,475; 0,775]. Nghĩa là câu hỏi khá gần từ vựng của Điều, nên 0,975 của vector có thể phản ánh bộ câu dễ hơn câu hỏi nhân viên thực, và FTS có lẽ nên mạnh hơn khi diễn đạt đúng từ luật. Con số này chưa chứng minh chiều ngược lại: trùng từ cao nhưng FTS Postgres (OR toàn bộ từ) vẫn chỉ đạt 0,287, nên chất lượng nhánh FTS là vấn đề riêng, không chỉ do bộ câu.
+
+*Giới hạn:* trọng số FTS 0,1 là mép dưới của lưới {0,5; 0,25; 0,1} và điểm tăng đơn điệu khi giảm, tức tối ưu có thể nằm ngoài lưới hoặc đúng bằng "gần như chỉ vector"; chọn đôi nửa bộ (chọn trên câu chẵn, đo trên câu lẻ và ngược lại) đều chọn 0,1 và giữ 0,975 và 1,000, nhưng 20 câu mỗi nửa là quá ít để coi là kiểm chứng độc lập. Danh sách từ dừng chọn trước theo loại từ, không chỉnh theo bộ này, và `title` chỉ ghép ở phía truy vấn (không đổi migration, mất chỉ mục GIN của `tsv` trong biến thể này). Chưa có đề xuất nào được áp dụng làm mặc định.
 
 Lệnh (máy không có `make` thì chạy dòng `uv run` tương đương; corpus thô ở `data/raw/vbpl` hoặc đặt `VBPL_RAW_DIR`):
 

@@ -147,6 +147,10 @@ def _load_pg_retriever(s: Settings, embedder: Embedder) -> DocumentRetriever:
         use_vector=s.docs_use_vector,
         use_fts=s.docs_use_fts,
         fts_mode=s.docs_fts_mode,
+        rrf_weight_fts=s.docs_rrf_weight_fts,
+        fts_stopwords=s.docs_fts_stopwords,
+        fts_rank=s.docs_fts_rank,
+        fts_title=s.docs_fts_title,
         segmenter=build_segmenter(s.docs_segmenter, s),
     )
 

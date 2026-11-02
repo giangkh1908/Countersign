@@ -11,6 +11,7 @@ truy xuất); gold rỗng gây `ValueError` để lỗi dữ liệu không bị 
 from __future__ import annotations
 
 import math
+import random
 from collections.abc import Hashable, Iterable, Sequence
 
 Key = tuple[str, str]  # (doc_num, article)
@@ -77,3 +78,43 @@ def ndcg_at_k[T: Hashable](ranked: Sequence[T], gold: Iterable[T], k: int) -> fl
 def mean(values: Sequence[float]) -> float:
     """Trung bình; danh sách rỗng cho 0.0 (nhóm không có câu nào)."""
     return sum(values) / len(values) if values else 0.0
+
+
+def _resample_means(values: Sequence[float], n_boot: int, seed: int) -> list[float]:
+    rng = random.Random(seed)
+    n = len(values)
+    return sorted(sum(values[rng.randrange(n)] for _ in range(n)) / n for _ in range(n_boot))
+
+
+def _percentiles(sorted_vals: Sequence[float], alpha: float) -> tuple[float, float]:
+    n = len(sorted_vals)
+    return sorted_vals[int(alpha / 2 * n)], sorted_vals[min(n - 1, int((1 - alpha / 2) * n))]
+
+
+def bootstrap_ci(
+    values: Sequence[float], *, n_boot: int = 1000, seed: int = 42, alpha: float = 0.05
+) -> tuple[float, float]:
+    """Khoảng tin cậy bootstrap (percentile) của trung bình, lấy mẫu lại theo câu hỏi.
+
+    Với n nhỏ (vài chục câu) khoảng này rộng và hơi hẹp hơn thực tế ở sát 0 hoặc 1; chỉ là số đo
+    độ bất định do chọn câu hỏi, không phải do chọn tham số.
+    """
+    if not values:
+        return (0.0, 0.0)
+    return _percentiles(_resample_means(values, n_boot, seed), alpha)
+
+
+def paired_bootstrap_delta(
+    a: Sequence[float],
+    b: Sequence[float],
+    *,
+    n_boot: int = 1000,
+    seed: int = 42,
+    alpha: float = 0.05,
+) -> tuple[float, float, float]:
+    """(mean(a-b), lo, hi): bootstrap theo cặp trên cùng tập câu hỏi (a, b cùng thứ tự)."""
+    if len(a) != len(b):
+        raise ValueError("a và b phải cùng số câu")
+    diffs = [x - y for x, y in zip(a, b, strict=True)]
+    lo, hi = bootstrap_ci(diffs, n_boot=n_boot, seed=seed, alpha=alpha)
+    return mean(diffs), lo, hi

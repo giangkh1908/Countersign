@@ -52,6 +52,10 @@ class ConfigResult:
             out[name] = metrics.mean([r.scores[name] for r in rows])
         return out
 
+    def ci95(self, name: str, *, seed: int = 42) -> tuple[float, float]:
+        """Khoảng tin cậy bootstrap 95% (1.000 lần, theo câu hỏi) của điểm trung bình `name`."""
+        return metrics.bootstrap_ci([r.scores[name] for r in self.results], seed=seed)
+
     def by_type(self) -> dict[str, dict[str, float]]:
         groups: dict[str, list[QuestionResult]] = defaultdict(list)
         for r in self.results:
@@ -123,14 +127,19 @@ async def run_all(
 
 def format_table(results: dict[str, ConfigResult]) -> str:
     cols = ["recall@5", "recall@10", "hit@5", "mrr", "ndcg@10"]
-    head = f"{'cấu hình':<26}{'n':>4}" + "".join(f"{c:>11}" for c in cols) + f"{'p50 ms':>9}"
+    head = (
+        f"{'cấu hình':<30}{'n':>4}"
+        + "".join(f"{c:>11}" for c in cols)
+        + f"{'recall@5 CI95':>17}{'p50 ms':>9}"
+    )
     lines = [head, "-" * len(head)]
     for name, r in results.items():
         agg = r.aggregate()
+        lo, hi = r.ci95("recall@5")
         lines.append(
-            f"{CONFIG_LABELS.get(name, name):<26}{int(agg['n']):>4}"
+            f"{CONFIG_LABELS.get(name, name):<30}{int(agg['n']):>4}"
             + "".join(f"{agg[c]:>11.3f}" for c in cols)
-            + f"{r.latency()['p50']:>9.1f}"
+            + f"{f'[{lo:.3f}, {hi:.3f}]':>17}{r.latency()['p50']:>9.1f}"
         )
     return "\n".join(lines)
 
@@ -157,6 +166,7 @@ def build_report(
             name: {
                 "label": CONFIG_LABELS.get(name, name),
                 "metrics": r.aggregate(),
+                "ci95": {n: list(r.ci95(n)) for n in ("recall@5", "recall@10", "hit@5", "mrr")},
                 "by_type": r.by_type(),
                 "latency_ms": r.latency(),
                 "per_question": [
