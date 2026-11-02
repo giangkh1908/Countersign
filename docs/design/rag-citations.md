@@ -149,14 +149,14 @@ CREATE INDEX IF NOT EXISTS chunks_tsv_seg_gin ON chunks USING gin (tsv_seg);
 - `30-knowledge.sql` hiện khai báo `embedding vector(1024) NOT NULL` và index `chunks_embedding_hnsw`. Giữ file này như **đường cơ sở v0** (volume mới vẫn tạo ra schema cũ), rồi migration `0002_embedding_dim` đưa về số chiều trong config:
 
 ```sql
--- up (render bằng envsubst ${EMBED_DIM})
+-- up (giá trị truyền bằng psql -v embed_dim=..., image Postgres không có envsubst)
 DROP INDEX IF EXISTS chunks_embedding_hnsw;
 ALTER TABLE chunks ALTER COLUMN embedding TYPE vector(${EMBED_DIM}) USING NULL;   -- chỉ chạy được khi chunks rỗng (xem dưới)
 CREATE INDEX chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops);
 ```
 
 - Không có phép ép kiểu giữa các số chiều khác nhau, nên: nếu `chunks` còn dữ liệu và số chiều hiện tại khác `EMBED_DIM` thì runner **dừng** trừ khi có `MIGRATE_FORCE_REEMBED=1`; khi đó runner `TRUNCATE chunks` và `UPDATE documents SET index_sig = ''` để lần ingest sau nạp lại toàn bộ. Nếu số chiều đã đúng, migration là no-op.
-- Giới hạn của pgvector: index HNSW cho kiểu `vector` có trần số chiều (2.000 ở các bản đã biết); model vượt trần phải dùng `halfvec` hoặc giảm chiều. **[cần xác minh theo phiên bản pgvector đã pin trong compose]** trước khi chọn model (mục 10).
+- Giới hạn của pgvector: index HNSW cho kiểu `vector` có trần 2.000 chiều (đã kiểm trên pgvector 0.8.7 của image đã pin: 2.000 tạo được, 2.001 lỗi); model vượt trần phải dùng `halfvec` hoặc giảm chiều.
 - **Kiểm khi khởi động** (fail-fast): thêm method không trừu tượng `async def verify_schema(self, expected_dim: int) -> None` (mặc định no-op) vào port `DocumentRetriever` và `DocumentIndexer`; adapter pg override: đọc số chiều cột (`SELECT atttypmod FROM pg_attribute WHERE attrelid = 'chunks'::regclass AND attname = 'embedding'` — với `vector`, `atttypmod` chính là số chiều) và so với `Settings.docs_embed_dim`. Cùng lúc `main.py`/job ingest gọi `embedder.embed(["dim probe"])` và so `len(vec)` với `docs_embed_dim`. Sai chiều ở bất kỳ nơi nào => dừng dịch vụ với thông báo rõ (không bắt `EmbeddingUnavailable` suy giảm). `GatewayHttpEmbedder` đã kiểm `len(v) == dim` mỗi batch (`bad_shape`); kiểm lúc khởi động là bổ sung, không thay thế.
 - Ghi model/chiều đang dùng: bảng `index_meta(key text primary key, value text)` với `embed_model`, `embed_dim`, `chunker_version`, `fts_mode`; ingest ghi, retriever khởi động so khớp `embed_model` với config (khác => cảnh báo/dừng theo `DOCS_STRICT_INDEX_META`). Đây là chỗ chống lẫn vector của hai model trong cùng một cột.
 - `docs_embed_dim` (đã có trong `settings.py`, mặc định 1024, comment "khớp chunks.embedding vector(1024)") đổi mặc định theo model được chọn; không còn giá trị 1024 nào nằm trong `pgvector_hybrid.py` (hiện câu SQL có `%(qv)s::vector(1024)` cứng) hay `pgvector_indexer.py` (`dim=1024` mặc định): cả hai nhận `dim` từ factory, câu SQL dùng `%(qv)s::vector` không kèm chiều.

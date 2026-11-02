@@ -40,7 +40,7 @@ applied() { sql -c "SELECT version FROM schema_migrations ORDER BY version"; }
 run_one() {
   local dir="$1" ver="$2" file="$DIR/$2.$1.sql" bookkeeping
   [ -f "$file" ] || { echo "Thiếu file $file" >&2; exit 1; }
-  if [ "$dir" = up ]; then bookkeeping="INSERT INTO schema_migrations (version) VALUES ('$ver')"
+  if [ "$dir" = up ]; then bookkeeping="INSERT INTO schema_migrations (version) VALUES ('$ver') ON CONFLICT DO NOTHING"
   else bookkeeping="DELETE FROM schema_migrations WHERE version = '$ver'"; fi
   echo "migrate $dir $ver"
   sql -1 -v "embed_dim=$EMBED_DIM" -v "force_reembed=$FORCE" \
@@ -58,6 +58,12 @@ case "$cmd" in
       if grep -qx "$ver" <<<"$done_list"; then continue; fi
       run_one up "$ver"
     done
+    # 0002 đã áp thì vòng trên bỏ qua, nên đổi EMBED_DIM về sau phải chạy lại nó (idempotent, có chặn dữ liệu).
+    cur_dim="$(sql -c "SELECT value FROM index_meta WHERE key = 'embed_dim'")"
+    if [ "$cur_dim" != "$EMBED_DIM" ]; then
+      echo "đổi số chiều embedding: $cur_dim -> $EMBED_DIM"
+      run_one up 0002_embedding_dim
+    fi
     echo "migrate up xong"
     ;;
   down)
