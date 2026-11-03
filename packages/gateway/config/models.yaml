@@ -4,12 +4,14 @@
 # Test/CI dùng cấu hình mock riêng: packages/gateway/tests/models.test.yaml (GW_MODELS_CONFIG).
 # Chỉ dùng phần tử đầu của `chain` (chưa có fallback).
 default_max_output: 4096          # client không gửi max_tokens thì dùng giá trị này
+# price (tuỳ chọn): USD / 1 triệu token, chỉ dùng khi provider không tự báo chi phí (OpenRouter có `usage.cost`).
+# Giá lấy từ https://openrouter.ai/api/v1/models, /embeddings/models, ?output_modalities=rerank ngày 2026-11-03.
 aliases:
   # extra_body gửi thẳng tới provider: tắt reasoning của DeepSeek V4.1 Flash (đo: 537 -> 5 token, 3,8s -> 0,7s).
-  acme-fast:  { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 30, extra_body: { reasoning: { enabled: false } } }
-  acme-smart: { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 90, extra_body: { reasoning: { enabled: false } } }
+  acme-fast:  { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 30, extra_body: { reasoning: { enabled: false } }, price: { input_per_mtok: 0.045, output_per_mtok: 0.5 } }
+  acme-smart: { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 90, extra_body: { reasoning: { enabled: false } }, price: { input_per_mtok: 0.045, output_per_mtok: 0.5 } }
   # Judge kiểm chứng trích dẫn (R2): cùng model với acme-fast cho đến khi hiệu chuẩn chọn model riêng.
-  acme-judge: { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 30, extra_body: { reasoning: { enabled: false } } }
+  acme-judge: { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 30, extra_body: { reasoning: { enabled: false } }, price: { input_per_mtok: 0.045, output_per_mtok: 0.5 } }
   # Embedding qua OpenRouter (POST {base_url}/embeddings, key GW_EMBEDDING_API_KEY_FILE = secrets/openrouter_api_key).
   # dim phải khớp EMBED_DIM / schema pgvector (1024). Đổi model thì chạy lại ingest (tự nạp lại, không cần --force).
   acme-embed:
@@ -19,6 +21,7 @@ aliases:
     model: baai/bge-m3
     dim: 1024
     timeout_s: 60
+    price: { input_per_mtok: 0.01 }
   # Rerank cross-encoder (R1, tuỳ chọn) qua OpenRouter: POST {base_url}/v1/rerank (định dạng Cohere), cùng key.
   # Dùng khi DOCS_RERANK=gateway_rerank.
   acme-rerank:
@@ -27,3 +30,5 @@ aliases:
     base_url: https://openrouter.ai/api
     model: qwen/qwen3-reranker-8b
     timeout_s: 30
+    # Listing ghi giá 0 nhưng probe thực tế tính 0,2 USD/Mtok theo usage.total_tokens (3,02e-5 USD cho 151 token).
+    price: { input_per_mtok: 0.2 }

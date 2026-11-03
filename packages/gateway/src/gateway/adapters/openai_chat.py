@@ -20,6 +20,7 @@ from ..ports.types import (
     ToolCallDelta,
     Usage,
 )
+from ._cost import reported_cost
 
 _RESERVED = frozenset({"model", "messages", "stream", "stream_options"})
 _PASS_PARAMS = ("temperature", "top_p", "max_tokens", "stop", "parallel_tool_calls")
@@ -32,6 +33,7 @@ def _usage(u: dict[str, Any] | None) -> Usage:
         prompt_tokens=int(u.get("prompt_tokens") or 0),
         completion_tokens=int(u.get("completion_tokens") or 0),
         cached_tokens=int(details.get("cached_tokens") or 0),
+        cost_usd=reported_cost(u),
     )
 
 

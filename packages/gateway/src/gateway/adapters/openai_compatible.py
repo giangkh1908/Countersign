@@ -12,6 +12,7 @@ from acme_common.http import HttpError, RetryingHttpClient
 
 from ..ports.embedding_provider import EmbeddingProvider
 from ..ports.types import EmbeddingResult, ProviderError
+from ._cost import reported_cost
 
 
 class OpenAICompatibleEmbeddingProvider(EmbeddingProvider):
@@ -43,7 +44,7 @@ class OpenAICompatibleEmbeddingProvider(EmbeddingProvider):
             raise ProviderError("protocol") from None
         if len(vecs) != len(texts):
             raise ProviderError("protocol")
-        return EmbeddingResult(vecs, tokens)
+        return EmbeddingResult(vecs, tokens, reported_cost(usage))
 
     async def aclose(self) -> None:
         await self._http.aclose()

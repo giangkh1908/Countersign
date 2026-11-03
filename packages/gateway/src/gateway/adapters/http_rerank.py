@@ -11,6 +11,7 @@ from acme_common.http import HttpError, RetryingHttpClient
 
 from ..ports.rerank_provider import RerankProvider
 from ..ports.types import ProviderError, RerankItem, RerankResult
+from ._cost import reported_cost
 
 
 class HttpRerankProvider(RerankProvider):
@@ -50,7 +51,7 @@ class HttpRerankProvider(RerankProvider):
             tokens = int(usage.get("prompt_tokens") or usage.get("total_tokens") or 0)
         except (ValueError, KeyError, TypeError, AttributeError):
             raise ProviderError("protocol") from None
-        return RerankResult(items, tokens)
+        return RerankResult(items, tokens, reported_cost(usage))
 
     async def aclose(self) -> None:
         await self._http.aclose()

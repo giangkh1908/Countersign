@@ -21,6 +21,7 @@ from .auth import Caller
 from .catalog import EmbeddingSpec, ModelCatalog
 from .errors import GatewayError
 from .metrics import Metrics
+from .pricing import cost_usd, to_micro_usd
 
 log = logging.getLogger("gateway.embeddings")
 
@@ -96,6 +97,7 @@ class EmbeddingService:
         latency_ms: int,
         overhead_ms: int,
         known_alias: bool,
+        cost: float = 0.0,
     ) -> None:
         """Ghi `usage_events` cùng cột với chat (contracts §5); không có output token."""
         event = {
@@ -111,7 +113,7 @@ class EmbeddingService:
             "input_tokens": tokens,
             "output_tokens": 0,
             "cached_input_tokens": 0,
-            "cost_micro_usd": 0,
+            "cost_micro_usd": to_micro_usd(cost),
             "latency_ms": latency_ms,
             "ttft_ms": None,
             "gateway_overhead_ms": overhead_ms,
@@ -173,7 +175,8 @@ class EmbeddingService:
             )
             self._emit(**common, tokens=0, status=502, error_code="all_providers_failed")
             raise GatewayError("all_providers_failed")
-        self._emit(**common, tokens=res.prompt_tokens, status=200, error_code=None)
+        cost = cost_usd(res.cost_usd, spec.price, res.prompt_tokens)
+        self._emit(**common, tokens=res.prompt_tokens, status=200, error_code=None, cost=cost)
         body = {
             "object": "list",
             "data": [

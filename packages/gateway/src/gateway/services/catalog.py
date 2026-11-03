@@ -12,6 +12,29 @@ from .errors import GatewayError
 
 
 @dataclass(frozen=True, slots=True)
+class Price:
+    """Bảng giá của một alias: USD trên 1 triệu token (đầu ra = 0 với embedding/rerank)."""
+
+    input_per_mtok: float = 0.0
+    output_per_mtok: float = 0.0
+
+
+def _parse_price(alias: str, raw: Any) -> Price | None:
+    """Đọc block `price` của alias; None nếu không khai báo. Sai kiểu/âm -> GatewayError."""
+    if raw is None:
+        return None
+    bad = GatewayError("invalid_request", f"Alias '{alias}': price is invalid.")
+    if not isinstance(raw, dict) or set(raw) - {"input_per_mtok", "output_per_mtok"}:
+        raise bad
+    vals: dict[str, float] = {}
+    for k, v in raw.items():
+        if isinstance(v, bool) or not isinstance(v, int | float) or v < 0 or v != v:
+            raise bad
+        vals[k] = float(v)
+    return Price(**vals)
+
+
+@dataclass(frozen=True, slots=True)
 class ModelRef:
     provider: str
     model: str
@@ -27,6 +50,7 @@ class Resolved:
     extra_body: dict[str, Any] = field(
         default_factory=dict
     )  # tham số riêng theo alias, gateway không hiểu nội dung
+    price: Price | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +62,7 @@ class EmbeddingSpec:
     model: str
     dim: int
     options: dict[str, Any]  # phần còn lại của block (vd base_url); adapter tự chọn phần cần
+    price: Price | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +73,7 @@ class RerankSpec:
     adapter: str
     model: str
     options: dict[str, Any]
+    price: Price | None = None
 
 
 class ModelCatalog:
@@ -68,25 +94,27 @@ class ModelCatalog:
         spec = self._aliases.get(requested)
         if spec is None or spec.get("kind") != "embedding":
             raise GatewayError("invalid_request", f"Unknown embedding model '{requested}'.")
-        reserved = {"kind", "adapter", "model", "dim"}
+        reserved = {"kind", "adapter", "model", "dim", "price"}
         return EmbeddingSpec(
             alias=requested,
             adapter=str(spec.get("adapter", "")),
             model=str(spec.get("model", "")),
             dim=int(spec.get("dim", 1024)),
             options={k: v for k, v in spec.items() if k not in reserved},
+            price=_parse_price(requested, spec.get("price")),
         )
 
     def rerank(self, requested: str) -> RerankSpec:
         spec = self._aliases.get(requested)
         if spec is None or spec.get("kind") != "rerank":
             raise GatewayError("invalid_request", f"Unknown rerank model '{requested}'.")
-        reserved = {"kind", "adapter", "model"}
+        reserved = {"kind", "adapter", "model", "price"}
         return RerankSpec(
             alias=requested,
             adapter=str(spec.get("adapter", "")),
             model=str(spec.get("model", "")),
             options={k: v for k, v in spec.items() if k not in reserved},
+            price=_parse_price(requested, spec.get("price")),
         )
 
     def resolve(self, requested: str) -> Resolved:
@@ -112,4 +140,5 @@ class ModelCatalog:
             timeout_s=float(spec.get("timeout_s", 60)),
             default_max_output=int(spec.get("default_max_output", self._default_max_output)),
             extra_body=dict(extra_body),
+            price=_parse_price(requested, spec.get("price")),
         )

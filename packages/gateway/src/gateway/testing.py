@@ -111,9 +111,12 @@ class FakeEmbeddingProvider(EmbeddingProvider):
     name = "fake"
 
     def __init__(
-        self, vectors: list[list[float]] | None = None, error: ProviderError | None = None
+        self,
+        vectors: list[list[float]] | None = None,
+        error: ProviderError | None = None,
+        cost_usd: float | None = None,
     ) -> None:
-        self.vectors, self.error = vectors, error
+        self.vectors, self.error, self.cost_usd = vectors, error, cost_usd
         self.calls: list[tuple[str, list[str]]] = []
 
     async def embed(self, model: str, texts: list[str]) -> EmbeddingResult:
@@ -121,7 +124,7 @@ class FakeEmbeddingProvider(EmbeddingProvider):
         if self.error:
             raise self.error
         assert self.vectors is not None
-        return EmbeddingResult(self.vectors, len(texts))
+        return EmbeddingResult(self.vectors, len(texts), self.cost_usd)
 
 
 class FakeRerankProvider(RerankProvider):
@@ -130,9 +133,12 @@ class FakeRerankProvider(RerankProvider):
     name = "fake"
 
     def __init__(
-        self, scores: list[float] | None = None, error: ProviderError | None = None
+        self,
+        scores: list[float] | None = None,
+        error: ProviderError | None = None,
+        cost_usd: float | None = None,
     ) -> None:
-        self.scores, self.error = scores, error
+        self.scores, self.error, self.cost_usd = scores, error, cost_usd
         self.calls: list[tuple[str, str, list[str], int]] = []
 
     async def rerank(
@@ -142,7 +148,9 @@ class FakeRerankProvider(RerankProvider):
         if self.error:
             raise self.error
         assert self.scores is not None
-        return RerankResult([RerankItem(i, s) for i, s in enumerate(self.scores)], len(query))
+        return RerankResult(
+            [RerankItem(i, s) for i, s in enumerate(self.scores)], len(query), self.cost_usd
+        )
 
 
 class FakeResponseCache(ResponseCache):
