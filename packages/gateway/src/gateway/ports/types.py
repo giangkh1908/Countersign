@@ -17,6 +17,7 @@ class Usage:
     cached_tokens: int = 0
     cache_write_tokens: int = 0
     estimated: bool = False  # ước lượng khi client ngắt giữa chừng
+    cost_usd: float | None = None  # chi phí (USD) do provider tự báo; None = không báo
 
     @property
     def total_tokens(self) -> int:
@@ -29,6 +30,7 @@ class EmbeddingResult:
 
     vectors: list[list[float]]
     prompt_tokens: int
+    cost_usd: float | None = None  # chi phí (USD) do provider tự báo; None = không báo
 
 
 @dataclass(slots=True)
@@ -45,6 +47,7 @@ class RerankResult:
 
     items: list[RerankItem]
     prompt_tokens: int = 0
+    cost_usd: float | None = None  # chi phí (USD) do provider tự báo; None = không báo
 
 
 @dataclass(slots=True)

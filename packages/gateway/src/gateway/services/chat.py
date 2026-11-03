@@ -26,6 +26,7 @@ from .catalog import ModelCatalog, Resolved
 from .encoder import StreamEncoder, completion_body, sse
 from .errors import GatewayError
 from .metrics import Metrics
+from .pricing import cost_usd, to_micro_usd
 
 log = logging.getLogger("gateway.chat")
 
@@ -41,6 +42,14 @@ _IGNORED = (
     "user",
 )
 _PARAMS = ("temperature", "top_p", "stop", "parallel_tool_calls")
+
+
+def _cost(resolved: Resolved | None, usage: Usage | None, cache: str = "miss") -> float:
+    """Chi phí USD của một lượt: lượt trúng cache hoặc không có usage = 0."""
+    if cache != "miss" or usage is None:
+        return 0.0
+    price = resolved.price if resolved else None
+    return cost_usd(usage.cost_usd, price, usage.prompt_tokens, usage.completion_tokens)
 
 
 def _chat_span(model: str, cache: str = "miss") -> Any:
@@ -210,7 +219,7 @@ class ChatService:
             "input_tokens": u.prompt_tokens,
             "output_tokens": u.completion_tokens,
             "cached_input_tokens": u.cached_tokens,
-            "cost_micro_usd": 0,  # chưa có bảng giá
+            "cost_micro_usd": to_micro_usd(_cost(resolved, usage, cache)),
             "latency_ms": latency_ms,
             "ttft_ms": ttft_ms,
             "gateway_overhead_ms": overhead_ms,
@@ -232,12 +241,20 @@ class ChatService:
         m.latency.labels(label).observe(latency_ms / 1000)
 
     def _headers(
-        self, request_id: str, provider: str, model: str, parsed: ParsedChat, cache: str | None
+        self,
+        request_id: str,
+        provider: str,
+        model: str,
+        parsed: ParsedChat,
+        cache: str | None,
+        cost: float | None = None,
     ) -> dict[str, str]:
         h = {
             "x-acme-provider": provider,
             "x-acme-model": model,
         }
+        if cost is not None:  # chỉ biết trước khi gửi header với response không stream/cache hit
+            h["x-acme-cost-usd"] = f"{cost:.8f}"
         if cache:
             h["x-acme-cache"] = cache
         if parsed.ignored:
@@ -363,7 +380,14 @@ class ChatService:
         created = int(self._clock.now().timestamp())
         return ChatResult(
             completion_body(request_id, parsed.alias, created, resp),
-            self._headers(request_id, provider.name, req.model, parsed, cache_state),
+            self._headers(
+                request_id,
+                provider.name,
+                req.model,
+                parsed,
+                cache_state,
+                _cost(resolved, resp.usage),
+            ),
         )
 
     def _miss_state(self, key: str | None) -> str | None:
@@ -392,7 +416,7 @@ class ChatService:
         created = int(self._clock.now().timestamp())
         return ChatResult(
             completion_body(request_id, parsed.alias, created, resp),
-            self._headers(request_id, hit.provider, hit.model, parsed, "exact"),
+            self._headers(request_id, hit.provider, hit.model, parsed, "exact", 0.0),
         )
 
     def _emit_hit(
@@ -465,7 +489,7 @@ class ChatService:
         if key is not None and (hit := await self._cache_get(key)) is not None:
             return StreamResult(
                 self._cached_stream(request_id, caller, parsed, resolved, hit, t0),
-                self._headers(request_id, hit.provider, hit.model, parsed, "exact"),
+                self._headers(request_id, hit.provider, hit.model, parsed, "exact", 0.0),
             )
         cache_state = self._miss_state(key)
         t_call = self._clock.monotonic()
@@ -595,7 +619,7 @@ class ChatService:
                 )
             x_acme = {
                 "request_id": request_id,
-                "cost_usd": 0.0,
+                "cost_usd": round(_cost(resolved, usage), 8),
                 "fallbacks": 0,
                 "provider": provider.name,
                 "model": req.model,
