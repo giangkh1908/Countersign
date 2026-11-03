@@ -42,14 +42,30 @@ def _load_anthropic(settings: Settings) -> ChatProvider:
 
 
 def _load_mock(settings: Settings) -> ChatProvider:
-    from .adapters.mock import MockChatProvider
+    from .adapters.openai_chat import OpenAIChatProvider
 
-    return MockChatProvider(settings.gw_mock_base_url, timeout_s=settings.gw_provider_timeout_s)
+    return OpenAIChatProvider(
+        settings.gw_mock_base_url, name="mock", timeout_s=settings.gw_provider_timeout_s
+    )
+
+
+def _load_openrouter(settings: Settings) -> ChatProvider:
+    from .adapters.openai_chat import OpenAIChatProvider
+
+    if not settings.openrouter_api_key:
+        raise ProviderNotConfigured("provider 'openrouter' requires OPENROUTER_API_KEY")
+    return OpenAIChatProvider(
+        settings.gw_openrouter_base_url,
+        name="openrouter",
+        api_key=settings.openrouter_api_key,
+        timeout_s=settings.gw_provider_timeout_s,
+    )
 
 
 _PROVIDERS: dict[str, Callable[[Settings], ChatProvider]] = {
     "anthropic": _load_anthropic,
     "mock": _load_mock,
+    "openrouter": _load_openrouter,
 }
 
 

@@ -11,7 +11,7 @@ import openai
 import pytest
 from fastapi import FastAPI
 from gateway.adapters.anthropic import AnthropicChatProvider, build_params
-from gateway.adapters.mock import MockChatProvider
+from gateway.adapters.openai_chat import OpenAIChatProvider
 from gateway.container import build_container
 from gateway.main import create_app
 from gateway.ports.types import ChatRequest, ProviderError
@@ -180,7 +180,15 @@ async def test_mock_adapter_errors() -> None:
     app = make_mock_app()
     app.state.ctx.overrides["*"] = {"error": "429", "retry_after_s": 3}
     client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://mock")
-    p = MockChatProvider("http://mock", client=client)
+    p = OpenAIChatProvider("http://mock", client=client)
     with pytest.raises(ProviderError) as e:
         await p.complete(req())
     assert e.value.kind == "http_429" and e.value.retryable and e.value.retry_after_s == 3
+
+
+def test_bearer_header_only_with_key() -> None:
+    with_key = OpenAIChatProvider("http://x", api_key="sk-1", name="openrouter")
+    without = OpenAIChatProvider("http://x")
+    assert with_key._client.headers["authorization"] == "Bearer sk-1"
+    assert with_key.name == "openrouter" and without.name == "openai_chat"
+    assert "authorization" not in without._client.headers

@@ -2,6 +2,7 @@
 # Đối chiếu id chính xác với docs của provider trước khi chạy thật.
 # Chỉ dùng phần tử đầu của `chain` (chưa có fallback).
 default_max_output: 4096          # Anthropic bắt buộc max_tokens; dùng khi client không gửi
+# Dùng OpenRouter: chain: [openrouter/<vendor>/<model>] (cần OPENROUTER_API_KEY).
 aliases:
   acme-fast:  { chain: [anthropic/claude-haiku-5-5], timeout_s: 30 }
   acme-smart: { chain: [anthropic/claude-sonnet-5-5], timeout_s: 90 }

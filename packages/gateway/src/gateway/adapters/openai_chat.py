@@ -1,6 +1,6 @@
-"""Adapter `mock` cho port `ChatProvider`. Gọi `mock-provider` (wire OpenAI-compatible).
+"""Adapter chung cho port `ChatProvider` qua wire OpenAI-compatible (`mock-provider`, OpenRouter...).
 
-Dùng với `GW_PROVIDER_OVERRIDE=mock`. Không retry. Message lỗi không chứa URL.
+Dùng với `GW_PROVIDER_OVERRIDE=mock` hoặc chain `openrouter/<model>`; có `api_key` thì gửi Bearer. Không retry. Message lỗi không chứa URL.
 """
 
 from __future__ import annotations
@@ -46,18 +46,24 @@ def _status_error(resp: httpx.Response) -> ProviderError:
     )
 
 
-class MockChatProvider(ChatProvider):
-    name = "mock"
-
+class OpenAIChatProvider(ChatProvider):
     def __init__(
         self,
         base_url: str,
         *,
         timeout_s: float = 60.0,
+        api_key: str | None = None,
+        name: str = "openai_chat",
         client: httpx.AsyncClient | None = None,
     ) -> None:
+        self.name = name
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._client = client or httpx.AsyncClient(
-            base_url=base_url, timeout=timeout_s, trust_env=False, follow_redirects=False
+            base_url=base_url,
+            timeout=timeout_s,
+            headers=headers,
+            trust_env=False,
+            follow_redirects=False,
         )
 
     def _body(self, req: ChatRequest) -> dict[str, Any]:

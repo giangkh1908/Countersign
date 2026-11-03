@@ -14,11 +14,15 @@ class Settings(CommonSettings):
     gw_key_pepper: str | None = None  # >= 32 byte; GW_KEY_PEPPER hoặc GW_KEY_PEPPER_FILE
     gw_key_pepper_prev: str | None = None
     anthropic_api_key: str | None = None
+    openrouter_api_key: str | None = None  # OPENROUTER_API_KEY[_FILE]
     gw_provider_override: str | None = None  # vd "mock"; factory thay mọi chain
     gw_keystore_adapter: str = "postgres"
     gw_models_config: str | None = None  # mặc định ./config/models.yaml
     gw_mock_base_url: str = "http://mock-provider:8900"  # adapter `mock`
     gw_anthropic_base_url: str | None = None  # None = endpoint công khai của SDK
+    gw_openrouter_base_url: str = (
+        "https://openrouter.ai/api"  # client gọi {base}/v1/chat/completions
+    )
     gw_provider_timeout_s: float = 60.0  # trần timeout HTTP tới provider
     gw_embedding_api_key: str | None = (
         None  # adapter `openai_compatible`; GW_EMBEDDING_API_KEY[_FILE]
