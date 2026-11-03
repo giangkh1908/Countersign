@@ -58,6 +58,9 @@ class ChatRequest:
     tool_choice: str | dict[str, Any] | None = None
     params: dict[str, Any] = field(default_factory=dict)  # temperature, top_p, max_tokens, stop...
     stream: bool = False
+    extra_body: dict[str, Any] = field(
+        default_factory=dict
+    )  # tham số riêng theo alias, adapter tự quyết dùng
 
 
 @dataclass(slots=True)

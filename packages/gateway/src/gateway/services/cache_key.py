@@ -57,6 +57,7 @@ def build_cache_key(
     tool_choice: Any,
     index_version: str,
     strict: bool = True,
+    extra_body: dict[str, Any] | None = None,
 ) -> str | None:
     """Trả khoá, hoặc None nếu request không đủ điều kiện cache."""
     if user is None:
@@ -71,19 +72,17 @@ def build_cache_key(
     if not strict:
         dept = roles = clearance = "*"
     model_seg = re.sub(r"[^A-Za-z0-9_.\-]", "_", f"{provider}.{model}")[:96]
-    canonical = json.dumps(
-        {
-            "messages": messages,
-            "params": params,
-            "tools": sorted(_canon(t) for t in tools) if tools else [],
-            "tool_choice": tool_choice,
-            "model": [provider, model],
-            "scope": [dept, clearance, roles],
-            "ver": index_version,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
+    material: dict[str, Any] = {
+        "messages": messages,
+        "params": params,
+        "tools": sorted(_canon(t) for t in tools) if tools else [],
+        "tool_choice": tool_choice,
+        "model": [provider, model],
+        "scope": [dept, clearance, roles],
+        "ver": index_version,
+    }
+    if extra_body:  # chỉ thêm khi có, để khoá cũ (không extra_body) không đổi
+        material["extra_body"] = extra_body
+    canonical = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     digest = hashlib.sha256(canonical.encode()).hexdigest()
     return f"{KEY_PREFIX}:{index_version}:{dept}:{clearance}:{roles}:{model_seg}:{digest}"

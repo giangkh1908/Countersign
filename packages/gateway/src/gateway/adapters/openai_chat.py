@@ -21,6 +21,7 @@ from ..ports.types import (
     Usage,
 )
 
+_RESERVED = frozenset({"model", "messages", "stream", "stream_options"})
 _PASS_PARAMS = ("temperature", "top_p", "max_tokens", "stop", "parallel_tool_calls")
 
 
@@ -67,7 +68,8 @@ class OpenAIChatProvider(ChatProvider):
         )
 
     def _body(self, req: ChatRequest) -> dict[str, Any]:
-        body: dict[str, Any] = {"model": req.model, "messages": req.messages, "stream": req.stream}
+        body: dict[str, Any] = {k: v for k, v in req.extra_body.items() if k not in _RESERVED}
+        body.update({"model": req.model, "messages": req.messages, "stream": req.stream})
         for k in _PASS_PARAMS:
             if req.params.get(k) is not None:
                 body[k] = req.params[k]
