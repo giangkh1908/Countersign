@@ -257,6 +257,8 @@ services:
       GW_KEY_PEPPER_FILE: /run/secrets/gw_key_pepper
       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
       OPENROUTER_API_KEY_FILE: /run/secrets/openrouter_api_key
+      GW_EMBEDDING_API_KEY_FILE: /run/secrets/openrouter_api_key   # embedding acme-embed cũng qua OpenRouter
+      GW_RERANK_API_KEY_FILE: /run/secrets/openrouter_api_key      # rerank acme-rerank cũng qua OpenRouter
       GW_MODELS_CONFIG: ${GW_MODELS_CONFIG:-/app/packages/gateway/config/models.yaml}
       GW_PROVIDER_OVERRIDE: ${GW_PROVIDER_OVERRIDE:-}          # trống = model thật trong models.yaml; `mock` = LLM giả (contracts §9.1 mục 5)
       AUDIT_HMAC_KEY_FILE: /run/secrets/audit_hmac_key          # khoá ngoài DB
@@ -265,7 +267,6 @@ services:
       GW_CACHE_REDIS_URL_FILE: /run/secrets/gw_cache_redis_url
       GW_CACHE_TTL_S: ${GW_CACHE_TTL_S:-3600}
       GW_CACHE_INDEX_VERSION: ${GW_CACHE_INDEX_VERSION:-0}      # tăng khi nạp lại index/đổi embedding
-    extra_hosts: ["host.docker.internal:host-gateway"]   # tới runtime embedding trên host (embedding/rerank local trong models.yaml)
     secrets: [gw_app_password, gw_database_url, gw_key_pepper, anthropic_api_key, openrouter_api_key, audit_hmac_key, metrics_token, gw_cache_redis_url]
     ports: ["8000:8000"]                      # dev; publish được vì gateway có mặt ở network egress (non-internal)
     networks: [core, egress]

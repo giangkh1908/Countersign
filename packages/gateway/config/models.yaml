@@ -1,6 +1,6 @@
 # Alias model của gateway (contracts §8). Đây là file DUY NHẤT người dùng cần sửa để đổi model.
 # Chat qua OpenRouter (chain `openrouter/<vendor>/<model>`, cần secrets/openrouter_api_key); id lấy từ
-# https://openrouter.ai/api/v1/models. Embedding và rerank chạy local trên host (Ollama, llama-server).
+# https://openrouter.ai/api/v1/models. Embedding và rerank cũng qua OpenRouter (cùng key), không cần runtime local.
 # Test/CI dùng cấu hình mock riêng: packages/gateway/tests/models.test.yaml (GW_MODELS_CONFIG).
 # Chỉ dùng phần tử đầu của `chain` (chưa có fallback).
 default_max_output: 4096          # client không gửi max_tokens thì dùng giá trị này
@@ -9,24 +9,20 @@ aliases:
   acme-smart: { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 90 }
   # Judge kiểm chứng trích dẫn (R2): cùng model với acme-fast cho đến khi hiệu chuẩn chọn model riêng.
   acme-judge: { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 30 }
-  # Gateway trong container tới host qua host.docker.internal (extra_hosts trong docker-compose.yml).
-  # dim phải khớp EMBED_DIM / schema pgvector (1024).
+  # Embedding qua OpenRouter (POST {base_url}/embeddings, key GW_EMBEDDING_API_KEY_FILE = secrets/openrouter_api_key).
+  # dim phải khớp EMBED_DIM / schema pgvector (1024). Đổi model thì chạy lại ingest (tự nạp lại, không cần --force).
   acme-embed:
     kind: embedding
     adapter: openai_compatible
-    base_url: http://host.docker.internal:11434/v1
-    model: bge-m3
+    base_url: https://openrouter.ai/api/v1
+    model: baai/bge-m3
     dim: 1024
-    # Lô 32 chunk tới 700 token trên GPU 4 GB mất hàng chục giây (lần đầu thêm thời gian nạp model).
-    timeout_s: 180
-    # Không thử lại khi timeout: runtime vẫn đang tính lô cũ, thử lại chỉ nhân đôi tải.
-    max_attempts: 1
-  # Rerank cross-encoder (R1): llama.cpp `llama-server --reranking` chạy trên host cổng 8081.
+    timeout_s: 60
+  # Rerank cross-encoder (R1, tuỳ chọn) qua OpenRouter: POST {base_url}/v1/rerank (định dạng Cohere), cùng key.
   # Dùng khi DOCS_RERANK=gateway_rerank.
   acme-rerank:
     kind: rerank
     adapter: http_rerank
-    base_url: http://host.docker.internal:8081
-    model: bge-reranker-v2-m3
-    timeout_s: 60
-    max_attempts: 1
+    base_url: https://openrouter.ai/api
+    model: qwen/qwen3-reranker-8b
+    timeout_s: 30

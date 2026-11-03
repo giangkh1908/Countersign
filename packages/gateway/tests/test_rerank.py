@@ -286,14 +286,14 @@ def test_catalog_rerank_spec_and_real_config() -> None:
     import gateway
 
     cfg = Path(gateway.__file__).resolve().parents[2] / "config"
-    ollama = ModelCatalog.from_file(cfg / "models.yaml")
-    spec = ollama.rerank("acme-rerank")
+    real = ModelCatalog.from_file(cfg / "models.yaml")
+    spec = real.rerank("acme-rerank")
     assert spec.adapter == "http_rerank"
-    assert spec.options["base_url"] == "http://host.docker.internal:8081"
+    assert spec.options["base_url"] == "https://openrouter.ai/api"
     default = ModelCatalog.from_file(Path(__file__).resolve().parent / "models.test.yaml")
     assert "acme-rerank" not in default.aliases()
     with pytest.raises(GatewayError):
-        ollama.rerank("acme-embed")
+        real.rerank("acme-embed")
 
 
 # ---------- CLI update-key-models ----------

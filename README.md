@@ -55,16 +55,11 @@ Cần `DOCS_INGEST_DATABASE_URL` (role `kn_ingest`) trong môi trường. Ingest
 
 ### Cấu hình: `.env` và `models.yaml`
 
-Chỉ sửa hai chỗ: `.env` (vài biến compose nội suy, xem `.env.example`) và `packages/gateway/config/models.yaml` (alias model). Chat đi qua OpenRouter (`acme-fast`, `acme-judge` = Claude Haiku, `acme-smart` = Claude Sonnet; cần `secrets/openrouter_api_key`), embedding `bge-m3` qua Ollama trên host, rerank qua llama-server cổng 8081.
-
-```
-ollama pull bge-m3                       # 1024 chiều, giữ EMBED_DIM=1024
-docker compose up -d --build gateway docs-mcp
-```
+Chỉ sửa hai chỗ: `.env` (vài biến compose nội suy, xem `.env.example`) và `packages/gateway/config/models.yaml` (alias model). Chat và embedding đều đi qua OpenRouter bằng một key `secrets/openrouter_api_key`: ba alias chat dùng DeepSeek V4.1 Flash, `acme-embed` dùng `baai/bge-m3` (1024 chiều, giữ `EMBED_DIM=1024`). Rerank tuỳ chọn (`DOCS_RERANK=gateway_rerank`) cũng qua OpenRouter (`qwen/qwen3-reranker-8b`). Không cần Ollama hay runtime local nào.
 
 Chạy từng service ngoài Docker (`uv run`): `Settings` có `extra="ignore"` và giá trị mặc định, nên không cần liệt kê hết biến; secret đặt qua `<BIẾN>_FILE` trỏ tới `./secrets/<tên>`. Test và CI dùng cấu hình mock riêng `packages/gateway/tests/models.test.yaml` (chat giả, embedding `mock_hash`), không phụ thuộc OpenRouter hay Ollama; muốn dựng stack mock thì đặt `GW_PROVIDER_OVERRIDE=mock` và `GW_MODELS_CONFIG=/app/packages/gateway/tests/models.test.yaml`.
 
-Gateway trong container tới Ollama qua `host.docker.internal:11434` (`extra_hosts` trong compose). Ollama mặc định chỉ nghe `127.0.0.1`; nếu gateway không tới được, đó là quyết định mở `OLLAMA_HOST` của bạn, repo không tự đổi. Sau khi đổi model, chạy lại ingest **không cần `--force`**: `index_sig` và `index_meta.embed_model` dùng id model thật (header `x-acme-model` gateway trả về), nên tài liệu tự nạp lại. Trên GTX 1650 4 GB, lô 32 chunk mất hàng chục giây; `timeout_s` và `max_attempts: 1` nằm trong `models.yaml`, phía docs-mcp là `DOCS_EMBED_TIMEOUT_S`.
+Sau khi đổi model embedding, chạy lại ingest **không cần `--force`**: `index_sig` và `index_meta.embed_model` dùng id model thật (header `x-acme-model` gateway trả về), nên tài liệu tự nạp lại. `timeout_s` của embedding nằm trong `models.yaml`, phía docs-mcp là `DOCS_EMBED_TIMEOUT_S`.
 
 ## Tải corpus luật
 
