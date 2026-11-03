@@ -1,8 +1,61 @@
 # AI_EXAMPLE — Trợ lý AI nội bộ có trích dẫn kiểm chứng được
 
+## Hệ thống gồm gì
+
 Trợ lý trả lời câu hỏi từ tài liệu công ty, mỗi câu kèm trích dẫn trỏ tới đoạn nguồn cụ thể, phân quyền theo người dùng ở tầng DB (RLS). Stack: LangGraph (agent), MCP (docs-mcp), gateway LLM mỏng, Keycloak + BFF + SPA React/TS. Corpus chính: 19 luật Việt Nam từ vbpl.vn ([`data/SOURCES.md`](data/SOURCES.md)). Phạm vi: [ADR-006](docs/adr/ADR-006-scope-rag-citations.md), [ADR-007](docs/adr/ADR-007-actions-cache-observability.md).
 
-## Chạy thử từ đầu (khoảng 15 phút)
+```
+Trình duyệt (SPA :8300)
+   └─> BFF (giữ phiên; đăng nhập qua Keycloak)
+         └─> Agent (LangGraph)
+               └─> docs-mcp (tìm tài liệu, RLS theo người hỏi)
+               └─> Gateway (LLM và embedding qua OpenRouter)
+```
+
+## Địa chỉ
+
+| Dịch vụ | URL | Ghi chú |
+|---|---|---|
+| Chat | http://localhost:8300 | Giao diện dùng hằng ngày; đăng nhập bằng tài khoản Keycloak |
+| Frontend dev | http://localhost:5173 | `cd web && pnpm dev`, proxy `/api` và `/auth` về :8300 |
+| Quản trị người dùng | http://keycloak.acme.local:8080/admin | User `admin`, mật khẩu trong `secrets/kc_admin_password`; cần dòng hosts ở mục dựng môi trường |
+| Gateway | http://localhost:8000 | API tương thích OpenAI, dùng key nội bộ |
+| Grafana | http://localhost:3000 | Chỉ khi bật profile `obs` |
+
+## Lệnh chạy
+
+| Việc | Lệnh |
+|---|---|
+| Bật cả stack | `docker compose up -d --build --wait` (= `make up`). Dữ liệu giữ trong volume |
+| Tắt | `docker compose down` (= `make down`) |
+| Xem log | `docker compose logs -f --tail=100` (= `make logs`), hoặc `docker compose logs -f agent gateway` |
+| Frontend dev | `cd web && pnpm dev` |
+| Bật ticket | `docker compose --profile tickets up -d --wait` |
+| Bật trace, metric | `docker compose --profile obs up -d --wait` |
+| Sao lưu DB | `make backup` (= `bash scripts/backup.sh`, ghi vào `backups/`) |
+| Đổi model | Sửa `packages/gateway/config/models.yaml` rồi `docker compose up -d --build --wait gateway`. Đổi model embedding thì chạy lại `bash scripts/ingest.sh` |
+| Nạp thêm tài liệu | `bash scripts/ingest.sh <thư-mục>` (thư mục nằm trong `data/`, có `documents.jsonl` khai báo ACL) |
+| Chạy không tốn tiền (LLM giả) | Trong `.env` đặt `GW_PROVIDER_OVERRIDE=mock` và `GW_MODELS_CONFIG=/app/packages/gateway/tests/models.test.yaml`, rồi bật lại stack. Embedding giả không so sánh được với vector đã nạp, nên phải ingest lại |
+
+## Quản lý người dùng
+
+Chatbot không giữ danh sách người dùng riêng. Danh tính và quyền (vai trò, phòng ban, cấp độ mật) nằm ở Keycloak và đi vào token; DB lọc tài liệu theo các giá trị đó. Thêm nhân viên là thêm user trong Keycloak.
+
+Tạo nhân viên mới trên trang quản trị:
+
+1. Mở http://keycloak.acme.local:8080/admin, đăng nhập `admin`, chọn realm `acme`.
+2. **Users** > **Add user**. Điền Username, Email, First name, Last name.
+3. Chọn **Phòng ban** (một hoặc nhiều trong SALES, ENG, HR, CS, IT), **Cấp độ mật** (0 Công khai, 1 Nội bộ, 2 Mật, 3 Tối mật) và **Mã nhân viên**. Phòng ban và Cấp độ mật là bắt buộc: token thiếu hai claim này sẽ bị resource server từ chối.
+4. **Create**. Sang tab **Credentials** > **Set password**, nhập mật khẩu và tắt **Temporary**.
+5. Tab **Role mapping** > **Assign role**, gán `employee` (thêm `team_lead`, `dept_manager`, `management`, `auditor`, `admin` nếu cần). Không có vai trò thì đăng nhập vào chat bị từ chối.
+
+Giá trị ngoài danh sách (ví dụ cấp độ 7, phòng XYZ) bị Keycloak từ chối. Cấu hình form nằm ở user profile trong `infra/keycloak/realm-acme.json`. Realm đã tồn tại thì file này không được import lại; sửa xong phải áp vào Keycloak đang chạy (Realm settings > User profile > JSON editor, hoặc `PUT /admin/realms/acme/users/profile`).
+
+Tương đương bằng code: [Keycloak Admin REST API](https://www.keycloak.org/docs-api/latest/rest-api/index.html). Production: nối Keycloak với AD/LDAP qua **User federation** để nhân viên và nhóm lấy từ thư mục công ty.
+
+## Dựng môi trường dev lần đầu
+
+Dựng một lần trên máy dev, với dữ liệu giả (công ty ACME, 16 nhân viên) và luật tải từ vbpl.vn (khoảng 15 phút). Các script bash dưới đây chỉ là công cụ dựng, không phải cách vận hành hằng ngày.
 
 Cần: Docker Desktop (compose v2), [uv](https://docs.astral.sh/uv/), Python 3.12, Node 22 + pnpm, một key [OpenRouter](https://openrouter.ai/keys) có số dư. Trên Windows chạy mọi lệnh trong **Git Bash** (hoặc WSL), ở thư mục gốc repo. Git Bash không có `make`: mỗi `make x` dưới đây có lệnh tương đương ghi kèm.
 
@@ -17,9 +70,10 @@ Cần: Docker Desktop (compose v2), [uv](https://docs.astral.sh/uv/), Python 3.1
 | 7 | `bash scripts/bootstrap-gateway-keys.sh --restart` | Tạo API key nội bộ để agent và docs-mcp gọi gateway |
 | 8 | `uv run --with beautifulsoup4 python -m data.vbpl` rồi `uv run python -m data.vbpl.metadata` | Tải 19 luật từ vbpl.vn vào `data/raw/` và gán quyền truy cập cho từng luật (khoảng 1 phút) |
 | 9 | `bash scripts/ingest.sh` | Cắt đoạn, embed và nạp luật cùng tài liệu ACME vào kho tri thức (khoảng 2.000 đoạn, vài phút qua OpenRouter). Chạy lại thì tài liệu không đổi được bỏ qua |
-| 10 | `bash scripts/set-password.sh hoa.ngo MatKhau@123` | Đặt mật khẩu đăng nhập cho user thử nghiệm (user seed không có mật khẩu sẵn) |
-| 11 | `bash scripts/smoke.sh` | Kiểm nhanh các service |
-| 12 | Mở http://localhost:8300, đăng nhập `hoa.ngo` / mật khẩu vừa đặt | Hỏi thử, ví dụ: "Người lao động làm đủ 12 tháng được nghỉ phép năm bao nhiêu ngày?" |
+| 10 | `bash scripts/smoke.sh` | Kiểm nhanh các service |
+| 11 | Mở http://localhost:8300, đăng nhập bằng một user seed (đặt mật khẩu ở ghi chú dưới) | Hỏi thử, ví dụ: "Người lao động làm đủ 12 tháng được nghỉ phép năm bao nhiêu ngày?" |
+
+User seed không có mật khẩu sẵn. Lối tắt cho dev: `bash scripts/set-password.sh hoa.ngo MatKhau@123`. Cách chuẩn là trang admin Keycloak (mục Quản lý người dùng).
 
 Gặp lỗi schema ở bước 5 khi máy đã từng chạy bản cũ: `docker compose down -v` (xoá volume Postgres) rồi chạy lại từ bước 5. SQL khởi tạo chỉ chạy trên volume trống.
 
@@ -35,20 +89,6 @@ Câu trả lời chỉ dùng tài liệu mà người hỏi được phép xem; 
 | `phuc.cao` | mọi phòng, 3 (management) | Gần như tất cả |
 
 Đủ 16 user ở `data/generated/users.json`.
-
-### Hằng ngày
-
-| Việc | Lệnh |
-|---|---|
-| Bật lại stack | `make up` (dữ liệu giữ trong volume, không cần làm lại bước 6 đến 10) |
-| Dừng | `make down` (= `docker compose down`) |
-| Xem log | `make logs` hoặc `docker compose logs -f agent gateway` |
-| Đổi model | Sửa `packages/gateway/config/models.yaml` rồi `docker compose up -d --build --wait gateway`. Đổi model embedding thì chạy lại `bash scripts/ingest.sh` |
-| Nạp thêm tài liệu | `bash scripts/ingest.sh <thư-mục>` (thư mục nằm trong `data/`, có `documents.jsonl` khai báo ACL) |
-| Chạy không tốn tiền (LLM giả) | Trong `.env` đặt `GW_PROVIDER_OVERRIDE=mock` và `GW_MODELS_CONFIG=/app/packages/gateway/tests/models.test.yaml`, rồi `make up`. Embedding giả không so sánh được với vector đã nạp, nên phải ingest lại |
-| Sao lưu DB | `make backup` (= `bash scripts/backup.sh`, ghi vào `backups/`) |
-| Bật ticket | `docker compose --profile tickets up -d --wait` |
-| Bật trace, metric (Grafana :3000) | `docker compose --profile obs up -d --wait` |
 
 ## Trạng thái
 
