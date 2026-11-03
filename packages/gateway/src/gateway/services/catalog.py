@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +24,9 @@ class Resolved:
     chain: tuple[ModelRef, ...]
     timeout_s: float
     default_max_output: int
+    extra_body: dict[str, Any] = field(
+        default_factory=dict
+    )  # tham số riêng theo alias, gateway không hiểu nội dung
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,10 +100,16 @@ class ModelCatalog:
             chain.append(ModelRef(self._override or provider, model))
         if not chain:
             raise GatewayError("invalid_request", f"Alias '{requested}' is not available.")
+        extra_body = spec.get("extra_body") or {}
+        if not isinstance(extra_body, dict):
+            raise GatewayError(
+                "invalid_request", f"Alias '{requested}': extra_body must be a mapping."
+            )
         return Resolved(
             requested=requested,
             alias=alias,
             chain=tuple(chain),
             timeout_s=float(spec.get("timeout_s", 60)),
             default_max_output=int(spec.get("default_max_output", self._default_max_output)),
+            extra_body=dict(extra_body),
         )

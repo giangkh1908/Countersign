@@ -173,6 +173,7 @@ class ChatService:
             tool_choice=parsed.tool_choice,
             params=params,
             stream=parsed.stream,
+            extra_body=resolved.extra_body,
         )
         return resolved, provider, req
 
@@ -262,6 +263,7 @@ class ChatService:
             params=req.params,
             tools=req.tools,
             tool_choice=req.tool_choice,
+            extra_body=req.extra_body,
             index_version=self._cache_ver,
         )
         if key is None:

@@ -55,7 +55,7 @@ Cần `DOCS_INGEST_DATABASE_URL` (role `kn_ingest`) trong môi trường. Ingest
 
 ### Cấu hình: `.env` và `models.yaml`
 
-Chỉ sửa hai chỗ: `.env` (vài biến compose nội suy, xem `.env.example`) và `packages/gateway/config/models.yaml` (alias model). Chat và embedding đều đi qua OpenRouter bằng một key `secrets/openrouter_api_key`: ba alias chat dùng DeepSeek V4.1 Flash, `acme-embed` dùng `baai/bge-m3` (1024 chiều, giữ `EMBED_DIM=1024`). Rerank tuỳ chọn (`DOCS_RERANK=gateway_rerank`) cũng qua OpenRouter (`qwen/qwen3-reranker-8b`). Không cần Ollama hay runtime local nào.
+Chỉ sửa hai chỗ: `.env` (vài biến compose nội suy, xem `.env.example`) và `packages/gateway/config/models.yaml` (alias model). Chat và embedding đều đi qua OpenRouter bằng một key `secrets/openrouter_api_key`: ba alias chat dùng DeepSeek V4.1 Flash, `acme-embed` dùng `baai/bge-m3` (1024 chiều, giữ `EMBED_DIM=1024`). Mỗi alias chat có thể khai `extra_body` (dict gửi kèm tới provider, gateway không diễn giải); hiện dùng `reasoning: {enabled: false}` để tắt reasoning của DeepSeek V4.1 Flash. Rerank tuỳ chọn (`DOCS_RERANK=gateway_rerank`) cũng qua OpenRouter (`qwen/qwen3-reranker-8b`). Không cần Ollama hay runtime local nào.
 
 Chạy từng service ngoài Docker (`uv run`): `Settings` có `extra="ignore"` và giá trị mặc định, nên không cần liệt kê hết biến; secret đặt qua `<BIẾN>_FILE` trỏ tới `./secrets/<tên>`. Test và CI dùng cấu hình mock riêng `packages/gateway/tests/models.test.yaml` (chat giả, embedding `mock_hash`), không phụ thuộc OpenRouter hay Ollama; muốn dựng stack mock thì đặt `GW_PROVIDER_OVERRIDE=mock` và `GW_MODELS_CONFIG=/app/packages/gateway/tests/models.test.yaml`.
 

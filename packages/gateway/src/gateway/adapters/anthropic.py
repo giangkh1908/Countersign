@@ -181,6 +181,8 @@ def build_params(req: ChatRequest) -> dict[str, Any]:
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
+    if req.extra_body:
+        kwargs["extra_body"] = dict(req.extra_body)  # SDK gộp vào JSON body
     return kwargs
 
 
