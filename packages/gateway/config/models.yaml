@@ -6,7 +6,7 @@
 default_max_output: 4096          # client không gửi max_tokens thì dùng giá trị này
 aliases:
   acme-fast:  { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 30 }
-  acme-smart: { chain: [openrouter/anthropic/claude-haiku-5.5], timeout_s: 90 }
+  acme-smart: { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 90 }
   # Judge kiểm chứng trích dẫn (R2): cùng model với acme-fast cho đến khi hiệu chuẩn chọn model riêng.
   acme-judge: { chain: [openrouter/deepseek/deepseek-v4.1-flash], timeout_s: 30 }
   # Gateway trong container tới host qua host.docker.internal (extra_hosts trong docker-compose.yml).
