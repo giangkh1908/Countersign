@@ -106,7 +106,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "hybrid_direct@stop", "hybrid_direct@rank", "hybrid_direct@title",
         "hybrid_direct@stop+wfts0.25",
     ),
-    # So rerank với nền không rerank, quét top_n. Cần gateway có `acme-rerank` (models.ollama.yaml).
+    # So rerank với nền không rerank, quét top_n. Cần gateway có `acme-rerank` (models.yaml).
     "rerank": (
         "vector", "hybrid",
         "vector_rerank@top10", "vector_rerank@top30", "vector_rerank@top50",

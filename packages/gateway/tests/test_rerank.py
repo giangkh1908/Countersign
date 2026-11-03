@@ -280,17 +280,17 @@ def test_factory_builds_known_and_rejects_unknown() -> None:
         build_rerank_provider("http_rerank", s, {})
 
 
-def test_catalog_rerank_spec_and_ollama_config() -> None:
+def test_catalog_rerank_spec_and_real_config() -> None:
     from pathlib import Path
 
     import gateway
 
     cfg = Path(gateway.__file__).resolve().parents[2] / "config"
-    ollama = ModelCatalog.from_file(cfg / "models.ollama.yaml")
+    ollama = ModelCatalog.from_file(cfg / "models.yaml")
     spec = ollama.rerank("acme-rerank")
     assert spec.adapter == "http_rerank"
     assert spec.options["base_url"] == "http://host.docker.internal:8081"
-    default = ModelCatalog.from_file(cfg / "models.yaml")
+    default = ModelCatalog.from_file(Path(__file__).resolve().parent / "models.test.yaml")
     assert "acme-rerank" not in default.aliases()
     with pytest.raises(GatewayError):
         ollama.rerank("acme-embed")

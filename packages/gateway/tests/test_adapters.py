@@ -155,7 +155,7 @@ async def test_stream_cut_is_protocol_error() -> None:
 
 
 async def test_gateway_end_to_end_with_anthropic_adapter(env: Env) -> None:
-    """Không override: alias acme-fast -> provider `anthropic`, model id từ models.yaml."""
+    """Không override: alias acme-fast -> provider `anthropic`, model id từ models.test.yaml."""
     settings = make_settings(gw_provider_override=None)
     adapter = anthropic_provider(env.mock_app)
     c = build_container(

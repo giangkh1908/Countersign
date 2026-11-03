@@ -1,20 +1,32 @@
-# Alias model của gateway (contracts §8). Model id lấy từ đây, không hardcode trong code.
-# Đối chiếu id chính xác với docs của provider trước khi chạy thật.
+# Alias model của gateway (contracts §8). Đây là file DUY NHẤT người dùng cần sửa để đổi model.
+# Chat qua OpenRouter (chain `openrouter/<vendor>/<model>`, cần secrets/openrouter_api_key); id lấy từ
+# https://openrouter.ai/api/v1/models. Embedding và rerank chạy local trên host (Ollama, llama-server).
+# Test/CI dùng cấu hình mock riêng: packages/gateway/tests/models.test.yaml (GW_MODELS_CONFIG).
 # Chỉ dùng phần tử đầu của `chain` (chưa có fallback).
-default_max_output: 4096          # Anthropic bắt buộc max_tokens; dùng khi client không gửi
-# Dùng OpenRouter: chain: [openrouter/<vendor>/<model>] (cần OPENROUTER_API_KEY).
+default_max_output: 4096          # client không gửi max_tokens thì dùng giá trị này
 aliases:
-  acme-fast:  { chain: [anthropic/claude-haiku-5-5], timeout_s: 30 }
-  acme-smart: { chain: [anthropic/claude-sonnet-5-5], timeout_s: 90 }
-  # Judge kiểm chứng trích dẫn (R2): cùng chain với acme-fast cho đến khi hiệu chuẩn chọn model riêng.
-  acme-judge: { chain: [anthropic/claude-haiku-5-5], timeout_s: 30 }
-  # Alias embedding theo block: đổi provider thật chỉ cần sửa block này (và GW_EMBEDDING_API_KEY).
-  # dim phải khớp schema pgvector (1024). Ví dụ provider thật (chuẩn OpenAI-compatible):
-  #   adapter: openai_compatible
-  #   base_url: https://<host>/v1
-  #   model: <id model của provider>
+  acme-fast:  { chain: [openrouter/anthropic/claude-haiku-5.5], timeout_s: 30 }
+  acme-smart: { chain: [openrouter/anthropic/claude-sonnet-5.5], timeout_s: 90 }
+  # Judge kiểm chứng trích dẫn (R2): cùng model với acme-fast cho đến khi hiệu chuẩn chọn model riêng.
+  acme-judge: { chain: [openrouter/anthropic/claude-haiku-5.5], timeout_s: 30 }
+  # Gateway trong container tới host qua host.docker.internal (extra_hosts trong docker-compose.yml).
+  # dim phải khớp EMBED_DIM / schema pgvector (1024).
   acme-embed:
     kind: embedding
-    adapter: mock_hash
-    model: mock-hash-1024
+    adapter: openai_compatible
+    base_url: http://host.docker.internal:11434/v1
+    model: bge-m3
     dim: 1024
+    # Lô 32 chunk tới 700 token trên GPU 4 GB mất hàng chục giây (lần đầu thêm thời gian nạp model).
+    timeout_s: 180
+    # Không thử lại khi timeout: runtime vẫn đang tính lô cũ, thử lại chỉ nhân đôi tải.
+    max_attempts: 1
+  # Rerank cross-encoder (R1): llama.cpp `llama-server --reranking` chạy trên host cổng 8081.
+  # Dùng khi DOCS_RERANK=gateway_rerank.
+  acme-rerank:
+    kind: rerank
+    adapter: http_rerank
+    base_url: http://host.docker.internal:8081
+    model: bge-reranker-v2-m3
+    timeout_s: 60
+    max_attempts: 1
