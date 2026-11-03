@@ -10,7 +10,7 @@ import httpx
 from acme_common.ports import Principal
 from acme_common.testing import FakeClock, FakeEventSink, FakeTokenVerifier
 from fastapi import FastAPI
-from gateway.adapters.mock import MockChatProvider
+from gateway.adapters.openai_chat import OpenAIChatProvider
 from gateway.container import build_container
 from gateway.main import create_app
 from gateway.ports.chat_provider import ChatProvider
@@ -85,8 +85,9 @@ def make_env() -> Env:
     verifier = FakeTokenVerifier()
     settings = make_settings()
     mock_app = make_mock_app()
-    provider = MockChatProvider(
+    provider = OpenAIChatProvider(
         "http://mock",
+        name="mock",
         client=httpx.AsyncClient(
             transport=httpx.ASGITransport(app=mock_app), base_url="http://mock"
         ),

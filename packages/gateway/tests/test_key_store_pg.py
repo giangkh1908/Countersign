@@ -99,13 +99,14 @@ async def test_l1_ttl_expiry_sees_external_revoke(store: PostgresKeyStore) -> No
 
 async def test_gateway_with_real_key_store(store: PostgresKeyStore) -> None:
     """Đầu-cuối: key tạo trong Postgres thật -> gateway (provider = mock_provider in-process)."""
-    from gateway.adapters.mock import MockChatProvider
+    from gateway.adapters.openai_chat import OpenAIChatProvider
 
     issued = issue()
     rec = await store.create(issued.new, "pytest")
     sink = FakeEventSink()
-    provider = MockChatProvider(
+    provider = OpenAIChatProvider(
         "http://mock",
+        name="mock",
         client=httpx.AsyncClient(
             transport=httpx.ASGITransport(app=make_mock_app()), base_url="http://mock"
         ),

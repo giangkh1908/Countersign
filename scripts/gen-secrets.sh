@@ -80,6 +80,7 @@ put bff_oidc_client_secret rand_hex 24
 put_empty docs_gateway_key      # key service docs-mcp -> gateway (Admin API POST /admin/keys)
 put_empty agent_gateway_key     # key của agent-service (tạo sau khi gateway chạy)
 put_empty anthropic_api_key     # điền key thật nếu dùng provider thật
+put_empty openrouter_api_key    # điền key thật nếu dùng provider openrouter
 put_empty telegram_bot_token    # token bot Telegram cho notify-mcp (chỉ cần khi kênh dùng adapter telegram)
 
 # URL đầy đủ cho gateway; mật khẩu chỉ gồm [A-Za-z0-9] nên không cần url-encode
