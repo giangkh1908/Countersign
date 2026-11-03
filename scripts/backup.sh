@@ -6,9 +6,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p backups
 TS=$(date +%Y%m%d-%H%M%S)
-docker compose exec -T postgres pg_dumpall -U postgres --globals-only > "backups/globals-$TS.sql"
-for db in gateway knowledge tickets agent keycloak; do
-  docker compose exec -T postgres pg_dump -U postgres -Fc -Z 6 "$db" > "backups/$db-$TS.dump"
+docker compose exec -T -u postgres postgres pg_dumpall -U postgres --globals-only > "backups/globals-$TS.sql"
+for db in gateway knowledge tickets notify agent keycloak; do
+  docker compose exec -T -u postgres postgres pg_dump -U postgres -Fc -Z 6 "$db" > "backups/$db-$TS.dump"
 done
 sha256sum backups/*-"$TS".* > "backups/SHA256SUMS-$TS"
 # giữ 7 bản
