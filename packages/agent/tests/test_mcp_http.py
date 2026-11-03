@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx2
 from acme_common.testing import FakeClock, FakeTokenBroker
-from agent.adapters.mcp_http import McpHttpToolProvider
+from agent.adapters.mcp_http import MAX_OUTPUT_BYTES, McpHttpToolProvider, fit_output
 from agent.factory import build_agent_registry
 from agent.settings import Settings
 from agent.testing import make_principal
@@ -23,6 +23,8 @@ def make_server() -> MCPServer:
     @srv.tool()
     def get_ticket(code: str) -> dict[str, Any]:
         """Lay ticket."""
+        if code == "big":
+            return {"results": [{"text": "x" * 4000} for _ in range(20)]}
         return {"code": code, "status": "open"}
 
     @srv.tool()
@@ -120,3 +122,25 @@ async def test_commit_business_error_is_mapped() -> None:
         )
         assert res["ok"] is False
         assert isinstance(res["error"]["code"], str)
+
+
+async def test_large_result_stays_valid_json_with_results() -> None:
+    async with open_provider() as (prov, _):
+        tools = await prov.tools_for("ticket_agent", make_principal(), "ut", thread_id="t-1")
+        t = next(t for t in tools if t.name == "get_ticket")
+        out = await t.ainvoke({"code": "big"})
+        data = json.loads(out)
+        assert data["results"] and data["truncated"] is True and data["omitted"] > 0
+        assert len(out.encode()) <= MAX_OUTPUT_BYTES
+
+
+def test_fit_output_small_unchanged_and_no_truncate_exempt() -> None:
+    small = {"results": [1, 2]}
+    assert json.loads(fit_output("search_documents", small)) == small
+    big = {"intent_jws": "j" * 50000}
+    assert json.loads(fit_output("prepare_create_ticket", big)) == big
+
+
+def test_fit_output_untruncatable_returns_valid_json() -> None:
+    out2 = json.loads(fit_output("x", ["a" * 40000]))
+    assert out2 == {"truncated": True, "error": {"code": "output_too_large"}}

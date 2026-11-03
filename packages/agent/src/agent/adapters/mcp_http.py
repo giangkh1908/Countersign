@@ -15,6 +15,7 @@ from typing import Any
 
 import httpx2
 from acme_common.mcp.context import THREAD_ID_META_KEY
+from acme_common.mcp.tool_invoker import ToolError, truncate_output
 from acme_common.ports import Principal, TokenBroker
 from acme_common.telemetry import inject_trace_headers
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
@@ -26,7 +27,8 @@ from ..ports.tool_provider import AgentAccess, ServerAccess, ToolProvider
 
 HttpClientFactory = Callable[[dict[str, str]], httpx2.AsyncClient]
 _DISCOVERY_TTL_S = 300.0
-MAX_OUTPUT_BYTES = 8192
+# Kết quả tra luật 15–50 KB; 8 KB làm mất gần hết đoạn (bằng mặc định mcp_max_output_bytes).
+MAX_OUTPUT_BYTES = 32768
 # Tool `prepare_*` mang intent_jws (chữ ký) nên cắt là hỏng chữ ký; chỉ các tool này được miễn.
 _NO_TRUNCATE = frozenset({"prepare_close_ticket", "prepare_create_ticket"})
 
@@ -39,6 +41,19 @@ def _default_http(headers: dict[str, str]) -> httpx2.AsyncClient:
             "request": [inject_trace_headers]
         },  # traceparent sang MCP (httpx2 không có instrumentation)
     )
+
+
+def fit_output(name: str, data: Any) -> str:
+    """Đưa kết quả tool về JSON hợp lệ <= MAX_OUTPUT_BYTES; không bao giờ cắt giữa chuỗi JSON."""
+    text = json.dumps(data, ensure_ascii=False)
+    if len(text.encode()) <= MAX_OUTPUT_BYTES or name in _NO_TRUNCATE:
+        return text
+    if isinstance(data, dict):
+        try:
+            return json.dumps(truncate_output(data, MAX_OUTPUT_BYTES)[0], ensure_ascii=False)
+        except ToolError:
+            pass
+    return json.dumps({"truncated": True, "error": {"code": "output_too_large"}})
 
 
 class McpHttpToolProvider(ToolProvider):
@@ -154,12 +169,9 @@ class McpHttpToolProvider(ToolProvider):
             is_error, data = await self._call_raw(
                 sa, name, kwargs, principal, user_token, thread_id
             )
-            text = json.dumps(data, ensure_ascii=False)
             if is_error:
-                raise ToolException(text)
-            if len(text.encode()) > MAX_OUTPUT_BYTES and name not in _NO_TRUNCATE:
-                text = text.encode()[:MAX_OUTPUT_BYTES].decode(errors="ignore") + " [...cắt]"
-            return text
+                raise ToolException(json.dumps(data, ensure_ascii=False))
+            return fit_output(name, data)
 
         return StructuredTool(
             name=name,
