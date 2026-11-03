@@ -79,7 +79,7 @@ provision() {
 provision agent_gateway_key agent agent-service acme-fast,acme-smart,acme-judge \
   --rpm 120 --tpm 200000 --max-concurrency 8 --trust-end-user-token
 # docs-mcp: embedding và rerank. `create-key` không kiểm alias với catalog, nên key cấp được dù gateway
-# chưa phục vụ `acme-rerank` (chỉ có trong models.ollama.yaml). Key hợp lệ có sẵn được đặt lại danh sách
+# chưa phục vụ `acme-rerank` (chỉ có khi models.yaml khai nó, không có trong models.test.yaml). Key hợp lệ có sẵn được đặt lại danh sách
 # model bằng `update-key-models` (không rotate).
 provision docs_gateway_key docs-mcp docs-mcp acme-embed,acme-rerank \
   --rpm 120 --tpm 200000 --max-concurrency 4

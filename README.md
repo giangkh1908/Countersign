@@ -22,7 +22,7 @@ uv, Python 3.12, Node 22, pnpm, Docker (compose v2). Windows: dùng Git Bash ho�
    `uv run python -m data.generator` rồi `bash data/load_seed.sh`
 6. `bash scripts/bootstrap-gateway-keys.sh --restart` — tạo API key gateway cho agent và docs-mcp (cần phòng `IT` từ seed)
 7. `bash scripts/smoke.sh`
-8. Mở http://localhost:8300 (đăng nhập qua Keycloak). Gateway mặc định dùng `mock-provider`; muốn LLM thật, điền `secrets/anthropic_api_key` rồi đổi `GW_PROVIDER_OVERRIDE` trong `.env` (compose mặc định `mock`; tên hợp lệ ở `packages/gateway/src/gateway/factory.py`).
+8. Mở http://localhost:8300 (đăng nhập qua Keycloak). Gateway mặc định gọi model thật theo `models.yaml` (điền `secrets/openrouter_api_key`); muốn LLM giả đặt `GW_PROVIDER_OVERRIDE=mock` và `GW_MODELS_CONFIG` trỏ `tests/models.test.yaml` trong `.env` (xem mục Cấu hình).
 
 Bật ticket: `docker compose --profile tickets up -d`. Dừng: `make down`. Log: `make logs`.
 
@@ -53,17 +53,18 @@ uv run python -m mcp_docs.ingest [--corpus-dir data/generated] [--force]
 
 Cần `DOCS_INGEST_DATABASE_URL` (role `kn_ingest`) trong môi trường. Ingest và truy vấn phải dùng cùng embedder (`DOCS_EMBEDDER`: mặc định ngoài compose là `fake_hash`, compose đặt `gateway_http`); khác embedder thì vector không so sánh được; đổi model thì ingest lại tự nạp lại (không cần `--force`), chỉ đổi cách chunk hoặc ACL mới cần ép.
 
-### Embedding thật bằng Ollama (tuỳ chọn)
+### Cấu hình: `.env` và `models.yaml`
 
-Mặc định gateway dùng `mock_hash` (không cần GPU, CI dùng cấu hình này). Để dùng embedding thật chạy trên máy host:
+Chỉ sửa hai chỗ: `.env` (vài biến compose nội suy, xem `.env.example`) và `packages/gateway/config/models.yaml` (alias model). Chat đi qua OpenRouter (`acme-fast`, `acme-judge` = Claude Haiku, `acme-smart` = Claude Sonnet; cần `secrets/openrouter_api_key`), embedding `bge-m3` qua Ollama trên host, rerank qua llama-server cổng 8081.
 
 ```
 ollama pull bge-m3                       # 1024 chiều, giữ EMBED_DIM=1024
-# .env:  GW_MODELS_CONFIG=/app/packages/gateway/config/models.ollama.yaml
 docker compose up -d --build gateway docs-mcp
 ```
 
-Gateway trong container tới Ollama qua `host.docker.internal:11434` (`extra_hosts` trong compose). Ollama mặc định chỉ nghe `127.0.0.1`; nếu gateway không tới được, đó là quyết định mở `OLLAMA_HOST` của bạn, repo không tự đổi. Sau khi đổi model, chạy lại ingest **không cần `--force`**: `index_sig` và `index_meta.embed_model` dùng id model thật (header `x-acme-model` gateway trả về), nên tài liệu tự nạp lại. Trên GTX 1650 4 GB, lô 32 chunk mất hàng chục giây; `timeout_s` và `max_attempts: 1` nằm trong `models.ollama.yaml`, phía docs-mcp là `DOCS_EMBED_TIMEOUT_S`.
+Chạy từng service ngoài Docker (`uv run`): `Settings` có `extra="ignore"` và giá trị mặc định, nên không cần liệt kê hết biến; secret đặt qua `<BIẾN>_FILE` trỏ tới `./secrets/<tên>`. Test và CI dùng cấu hình mock riêng `packages/gateway/tests/models.test.yaml` (chat giả, embedding `mock_hash`), không phụ thuộc OpenRouter hay Ollama; muốn dựng stack mock thì đặt `GW_PROVIDER_OVERRIDE=mock` và `GW_MODELS_CONFIG=/app/packages/gateway/tests/models.test.yaml`.
+
+Gateway trong container tới Ollama qua `host.docker.internal:11434` (`extra_hosts` trong compose). Ollama mặc định chỉ nghe `127.0.0.1`; nếu gateway không tới được, đó là quyết định mở `OLLAMA_HOST` của bạn, repo không tự đổi. Sau khi đổi model, chạy lại ingest **không cần `--force`**: `index_sig` và `index_meta.embed_model` dùng id model thật (header `x-acme-model` gateway trả về), nên tài liệu tự nạp lại. Trên GTX 1650 4 GB, lô 32 chunk mất hàng chục giây; `timeout_s` và `max_attempts: 1` nằm trong `models.yaml`, phía docs-mcp là `DOCS_EMBED_TIMEOUT_S`.
 
 ## Tải corpus luật
 
